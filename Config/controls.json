@@ -3456,7 +3456,7 @@
     {
       "ControlId": "AAD-9.1",
       "Title": "Authenticator Number Matching Enabled",
-      "Description": "Microsoft Authenticator number matching is explicitly enabled to prevent MFA fatigue attacks.",
+      "Description": "Microsoft Authenticator number matching protects against MFA fatigue attacks. Microsoft enforces it for every Authenticator push notification (since May 2023) and users cannot opt out, so there is no tenant setting to read or score; this control is recorded as enforced by the platform.",
       "BusinessRisk": "Without number matching, attackers can spam MFA push requests until a user accidentally approves. MFA fatigue is a documented breach technique.",
       "Severity": "High",
       "Workload": "AAD",
@@ -3464,7 +3464,7 @@
       "Automated": true,
       "CollectorDependency": "AAD-AuthPolicies",
       "EvaluatorFunction": "Test-TPControlAADAuthenticatorNumberMatch",
-      "Remediation": "Entra ID > Security > Authentication methods > Microsoft Authenticator > Configure > Require number matching = Enabled.",
+      "Remediation": "No action: enforced by Microsoft. To add context beyond the number (application name and location), set Entra ID > Authentication methods > Microsoft Authenticator > Configure > Show application name in push and passwordless notifications and Show geographic location to Enabled.",
       "References": {
         "CISControls": [
           "6.3"

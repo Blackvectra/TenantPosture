@@ -212,12 +212,18 @@ Describe 'Identity controls report what the tenant is configured to do' {
     }
 
     Context 'authentication methods' {
-        It 'AAD-9.1 reads the feature setting''s state; AAD-9.2 counts Authenticator phone sign-in' {
-            $src = Get-Content -Raw (Join-Path $script:RepoRoot 'Collectors/AAD/Invoke-TPCollectAADAuthPolicies.ps1')
-            $src | Should -Match "featureSettings\.numberMatchingRequiredState\.state"
-            Clear-TPState
-            Set-TPRawData -Key 'AAD-AuthPolicies' -Data (Bag @{ AuthMethodsPolicy = @{ AuthenticationMethodConfigs = @(@{ Id = 'Fido2'; State = 'disabled' }, @{ Id = 'MicrosoftAuthenticator'; State = 'enabled'; AuthenticationModes = @('any') }) }; SectionStatus = @{ AuthMethodsPolicy = 'Collected' } })
-            (V 'Test-TPControlAADPasswordless' 'AAD-9.2').State | Should -Be 'Satisfied'
+        It 'AAD-9.1 is enforced by the platform and never scored, whatever the retired property says; AAD-9.2 counts Authenticator phone sign-in' {
+            # Graph v1.0 no longer defines numberMatchingRequiredState, so the read is always empty; the
+            # old evaluator mapped empty to "default" and scored Satisfied from nothing on every tenant.
+            foreach ($state in @('', 'enabled', 'disabled')) {
+                Clear-TPState
+                Set-TPRawData -Key 'AAD-AuthPolicies' -Data (Bag @{ AuthMethodsPolicy = @{ AuthenticationMethodConfigs = @(@{ Id = 'Fido2'; State = 'disabled' }, @{ Id = 'MicrosoftAuthenticator'; State = 'enabled'; AuthenticationModes = @('any'); FeatureSettings = @{ NumberMatchingRequiredState = $state; AdditionalContextFeatureState = '' } }) }; SectionStatus = @{ AuthMethodsPolicy = 'Collected' } })
+                $f = V 'Test-TPControlAADAuthenticatorNumberMatch' 'AAD-9.1'
+                $f.State  | Should -Be 'NotApplicable' -Because "state '$state' is not a tenant setting"
+                $f.Detail | Should -Match 'Enforced by the platform'
+                @($f.FrameworkIds).Count | Should -BeGreaterThan 0
+                (V 'Test-TPControlAADPasswordless' 'AAD-9.2').State | Should -Be 'Satisfied'
+            }
         }
     }
 

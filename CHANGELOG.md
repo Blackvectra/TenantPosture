@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **[Fix] AAD-9.1 no longer passes every tenant from a property that no longer exists.** The collector read
+  `featureSettings.numberMatchingRequiredState` from Graph v1.0; the `microsoftAuthenticatorFeatureSettings`
+  resource now defines only `displayAppInformationRequiredState` and `displayLocationInformationRequiredState`,
+  so the read always came back empty, the evaluator mapped empty to "default", and "default" was Satisfied:
+  an unearned pass in every score, with a remediation naming a setting that no longer exists. Microsoft has
+  required number matching for every Authenticator push notification since May 2023 and users cannot opt out,
+  so there is no tenant setting to read or score. The control is now recorded as enforced by the platform
+  (NotApplicable with its citations, the TMS-2.5 pattern, listed in `coverage-exceptions.psd1`), the control
+  text says so, the remediation points at the additional-context settings that remain configurable, and the
+  SCuBA alignment note records that MS.AAD.3.3v2's login-context requirement is collected and not scored.
+  Found by the 2026-10-15 currency review.
 - **[Fix] A Purview control that was not assessed says why.** On the 2026-10-14 live run PVW-2.6 read
   "AutoLabelPolicies was not collected; not assessed." while the Exceptions array said that
   `Get-AutoSensitivityLabelPolicy` was not available to the signed-in account (a missing Purview role), so the

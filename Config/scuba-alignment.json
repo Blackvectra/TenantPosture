@@ -286,7 +286,7 @@
       "Current": "MS.AAD.3.3v2",
       "Relation": "Partial",
       "RequirementStrength": "SHALL",
-      "Note": "v2 requires login context information; NRG checks number matching."
+      "Note": "v2 requires login context information. NRG's control is number matching, which Microsoft enforces for every Authenticator push notification since May 2023; the control is recorded as enforced by the platform and not scored. The additional-context setting the v2 policy requires is collected (AdditionalContextFeatureState) and not scored."
     },
     {
       "Control": "AAD-9.2",
