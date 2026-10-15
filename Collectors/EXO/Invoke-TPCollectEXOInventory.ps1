@@ -176,7 +176,10 @@ function Invoke-TPCollectEXOInventory {
                 & $resolveRecipientFn -Lookup $Lookup -Command $getRecipientCmd
             } catch {
                 if ($registerExceptionFn) {
-                    & $registerExceptionFn -Source 'EXO-RecipientLookup' -Message "[$Lookup] $($_.Exception.Message)"
+                    # The error id carries the shape the module used (FailureCategory, request id),
+                    # which is what tells a REST-rendered error from an RPS one when a new wording appears.
+                    $fqid = [string](Get-TPObjectField -Item $_ -Key 'FullyQualifiedErrorId' -Default '')
+                    & $registerExceptionFn -Source 'EXO-RecipientLookup' -Message "[$Lookup] $($_.Exception.Message)$(if ($fqid) { " (error id: $fqid)" })"
                 }
                 throw
             }

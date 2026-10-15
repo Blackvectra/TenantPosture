@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **[Fix] EXO-7.2 recognizes Exchange's not-found answer when the module renders it without the exception
+  type.** The REST-backed cmdlets of ExchangeOnlineManagement 3.x render a server error as `||Message` with
+  the type blank, so `Get-Recipient`'s "The operation couldn't be performed because object '<legacy DN>'
+  couldn't be found on '<server>'" carried no `ManagementObjectNotFoundException` anywhere and the resolver
+  filed it as "could not ask". On the 2026-10-15 live run two inbox rules forwarding to deleted or
+  unmigrated identities therefore kept EXO-7.2 "not assessed", the same symptom #154 fixed for the RPS
+  shape. `Test-TPExoNotFoundError` now also recognizes Exchange's own not-found sentence (ASCII or
+  typographic apostrophe), so those rules file as Orphaned and the control is a Medium Gap naming them. The
+  `EXO-RecipientLookup` exception now records the error id beside the message, so the next unfamiliar shape
+  is diagnosable from the results file.
 - **[Detection] INT-1.1 reads each compliance policy's non-compliance actions and can be satisfied.** The control
   required "an assigned compliance policy per enrolled platform, each with a non-compliance action" but the collector
   never read the actions, so every tenant with full platform coverage, the first live run included, read "not
