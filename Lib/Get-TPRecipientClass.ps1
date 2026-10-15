@@ -4,8 +4,8 @@
 # TenantPosture
 # Author: Matthew Levorson
 #
-# Classifies a mail recipient string as External / Internal / Unresolved
-# against the tenant's accepted-domain set.
+# Classifies a mail recipient string as External / Internal / Orphaned /
+# Unresolved against the tenant's accepted-domain set.
 #
 # Sets:     nothing (pure function)
 # Consumes: nothing (callers pass the accepted-domain list)
@@ -36,6 +36,21 @@
 # which. 'Unresolved' keeps that distinction so the evaluator can report
 # NotApplicable instead of a clean bill of health — the same rule SectionStatus
 # applies to an empty list.
+#
+# ORPHANED IS NOT UNRESOLVED
+# --------------------------
+# 'Unresolved' used to cover two different facts: the directory could not be
+# asked, and the directory was asked and holds no such object. The second is
+# an answer. A legacy DN that no object carries (as LegacyExchangeDN or as an
+# X500 proxy address, the two attributes Exchange routes it by) is a former
+# employee or a pre-migration identity: mail the rule forwards to it is not
+# delivered, so it is not an external forward, and it is not a blind spot
+# either. Filing it as Unresolved made EXO-7.2 "not assessed" on every run of
+# a tenant with one deleted mailbox in an old rule, for months. 'Orphaned' is
+# that answer, and it is given ONLY for the legacy-DN form and ONLY when the
+# resolver returned $null (its contract: the directory answered). A resolver
+# that threw, or a bare display name the directory did not know (a name is
+# not an identifier), stays Unresolved.
 
 function Get-TPRecipientClass {
     [CmdletBinding()]
@@ -57,9 +72,11 @@ function Get-TPRecipientClass {
         [hashtable] $Cache,
 
         # Resolver for legacy DNs and unparseable names. Takes the lookup
-        # string, returns an object with ExternalEmailAddress /
-        # PrimarySmtpAddress, or $null. Injected so this is testable without a
-        # live Exchange session.
+        # string and returns an object with ExternalEmailAddress /
+        # PrimarySmtpAddress; returns $null ONLY when the directory answered
+        # that no object carries the identifier (Resolve-TPExoRecipient's
+        # contract); THROWS when the directory could not be asked. Injected so
+        # this is testable without a live Exchange session.
         [scriptblock] $Resolver
     )
 
@@ -82,8 +99,11 @@ function Get-TPRecipientClass {
         return ($domains -notcontains $domain)
     }
 
-    $raw     = $Recipient.Trim()
-    $verdict = $null
+    $raw        = $Recipient.Trim()
+    $verdict    = $null
+    $orphaned   = $false
+    $isLegacyDn = ($raw -match '\[EX:([^\]]+)\]')
+    $legacyDn   = if ($isLegacyDn) { $Matches[1] } else { '' }
 
     if ($raw -match '\[SMTP:([^\]]+)\]') {
         # Bracketed form — the authoritative address is inside the brackets,
@@ -94,7 +114,7 @@ function Get-TPRecipientClass {
     }
 
     if ($null -eq $verdict -and $Resolver) {
-        $lookup = if ($raw -match '\[EX:([^\]]+)\]') { $Matches[1] } else { $raw.Trim('"', ' ') }
+        $lookup = if ($isLegacyDn) { $legacyDn } else { $raw.Trim('"', ' ') }
         if (-not [string]::IsNullOrWhiteSpace($lookup)) {
             try {
                 $rcpt = & $Resolver $lookup
@@ -108,14 +128,23 @@ function Get-TPRecipientClass {
                         $target = [string](Get-TPObjectField -Item $rcpt -Key 'PrimarySmtpAddress' -Default '')
                     }
                     $verdict = & $addressIsExternal $target
+                } elseif ($isLegacyDn) {
+                    # The directory answered: no object carries this DN. Only
+                    # the legacy-DN form earns this; a display name the
+                    # directory does not know proves nothing about delivery.
+                    $orphaned = $true
                 }
             } catch {
-                $verdict = $null
+                # Could not ask. Not an answer, so not Orphaned.
+                $verdict  = $null
+                $orphaned = $false
             }
         }
     }
 
-    $label = if ($null -eq $verdict) { 'Unresolved' } elseif ($verdict) { 'External' } else { 'Internal' }
+    $label = if ($null -ne $verdict) { if ($verdict) { 'External' } else { 'Internal' } }
+             elseif ($orphaned) { 'Orphaned' }
+             else { 'Unresolved' }
     if ($Cache) { $Cache[$Recipient] = $label }
     return $label
 }

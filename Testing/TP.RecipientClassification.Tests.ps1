@@ -99,14 +99,38 @@ Describe 'Get-TPRecipientClass — legacy DN requires resolution' {
             -AcceptedDomains $script:Accepted | Should -Be 'Unresolved'
     }
 
-    It 'returns Unresolved when the resolver finds nothing' {
+    It 'returns Orphaned for a legacy DN the directory holds no object for (the resolver answered $null)' {
+        # The resolver's contract: $null means the directory was asked and
+        # holds nothing under that DN, by LegacyExchangeDN and by X500 proxy
+        # address. Mail to it is not delivered. Filing this as Unresolved
+        # left EXO-7.2 "not assessed" on every run of a tenant with one
+        # deleted mailbox in an old rule.
         Invoke-Classify '"Jane Smith" [EX:/o=ExchangeLabs/ou=x/cn=jsmith]' { param($l) $null } |
+            Should -Be 'Orphaned'
+    }
+
+    It 'returns Unresolved when the resolver throws: a failed lookup is not an absent object' {
+        Invoke-Classify '"Jane Smith" [EX:/o=ExchangeLabs/ou=x/cn=jsmith]' { param($l) throw 'no session' } |
             Should -Be 'Unresolved'
     }
 
-    It 'returns Unresolved when the resolver throws' {
-        Invoke-Classify '"Jane Smith" [EX:/o=ExchangeLabs/ou=x/cn=jsmith]' { param($l) throw 'no session' } |
-            Should -Be 'Unresolved'
+    It 'returns Unresolved, not Orphaned, when the object is found but carries no address' {
+        # Found means not orphaned; no address means not classifiable.
+        Invoke-Classify '"Group" [EX:/o=ExchangeLabs/ou=x/cn=grp]' {
+            param($l) [pscustomobject]@{ Name = 'Group'; PrimarySmtpAddress = '' }
+        } | Should -Be 'Unresolved'
+    }
+
+    It 'caches Orphaned like any other label and does not re-ask the directory' {
+        $cache = @{}
+        $script:orphanCalls = 0
+        $resolver = { param($l) $script:orphanCalls++; $null }
+        1..3 | ForEach-Object {
+            Get-TPRecipientClass -Recipient '"Gone" [EX:/o=x/cn=gone]' -AcceptedDomains $script:Accepted `
+                -Cache $cache -Resolver $resolver | Out-Null
+        }
+        $script:orphanCalls | Should -Be 1
+        $cache['"Gone" [EX:/o=x/cn=gone]'] | Should -Be 'Orphaned'
     }
 
     It 'resolves a legacy DN that is an internal user' {
@@ -156,9 +180,16 @@ Describe 'Get-TPRecipientClass — display names with no address' {
             param($l) [pscustomobject]@{ PrimarySmtpAddress = 'sales@nrgtechservices.com' }
         } | Should -Be 'Internal'
     }
+
+    It 'never returns Orphaned for a bare display name the directory did not know' {
+        # A display name is not an identifier. The directory not finding
+        # "Sales Team" by name proves nothing about where a message goes,
+        # so this stays Unresolved; only a legacy DN can be Orphaned.
+        Invoke-Classify 'Sales Team' { param($l) $null } | Should -Be 'Unresolved'
+    }
 }
 
-Describe 'Get-TPRecipientClass — the tri-state contract' {
+Describe 'Get-TPRecipientClass — the label contract' {
 
     It 'never returns a truthy string for Unresolved in a boolean filter' {
         # Guards a specific trap: a classifier that returns the STRING
@@ -168,18 +199,25 @@ Describe 'Get-TPRecipientClass — the tri-state contract' {
         # from both booleans so a careless caller fails loudly.
         $u = Get-TPRecipientClass -Recipient 'Nobody' -AcceptedDomains $script:Accepted
         $u | Should -Be 'Unresolved'
-        @('External', 'Internal', 'Unresolved') | Should -Contain $u
+        @('External', 'Internal', 'Orphaned', 'Unresolved') | Should -Contain $u
     }
 
-    It 'only ever returns one of the three labels' {
+    It 'only ever returns one of the four labels' {
         $inputs = @(
             '', '   ', 'x@evil.tld', 'smtp:x@evil.tld', '"a" [SMTP:b@evil.tld]',
             '"a" [EX:/o=x/cn=y]', 'Display Only', '@', 'no-at-sign', 'a@b@c.tld'
         )
         foreach ($i in $inputs) {
             Get-TPRecipientClass -Recipient $i -AcceptedDomains $script:Accepted |
-                Should -BeIn @('External', 'Internal', 'Unresolved')
+                Should -BeIn @('External', 'Internal', 'Orphaned', 'Unresolved')
+            Get-TPRecipientClass -Recipient $i -AcceptedDomains $script:Accepted -Resolver { param($l) $null } |
+                Should -BeIn @('External', 'Internal', 'Orphaned', 'Unresolved')
         }
+    }
+
+    It 'never returns Orphaned without a resolver: absence of a lookup is not an absent object' {
+        Get-TPRecipientClass -Recipient '"a" [EX:/o=x/cn=y]' -AcceptedDomains $script:Accepted |
+            Should -Be 'Unresolved'
     }
 
     It 'does not classify a malformed multi-at string as internal' {

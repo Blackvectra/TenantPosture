@@ -469,3 +469,249 @@ Describe 'Shared mailbox sign-in: a failed section is never a clean list (live r
         $src | Should -Not -Match '\$mbx\.SkuAssigned'
     }
 }
+
+# ── EXO-7.2: a recipient the directory no longer holds is an answer, not a blind spot ──
+# A legacy DN in an inbox rule that no object carries (by LegacyExchangeDN and by X500
+# proxy address) is a former employee or a pre-migration identity: mail to it is not
+# delivered. The classifier filed it as Unresolved, and one such recipient left the
+# control "not assessed" on every run of the tenant, for months. The collector cases
+# below drive the real collector with Get-Recipient stand-ins that answer the way the
+# Exchange Online module does, so the field that changes the verdict (IsOrphaned) is
+# produced by the real code path, never by a fixture.
+Describe 'EXO-7.2 reaches a verdict when the only unresolvable recipients are gone from the directory' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
+        $script:Mod = Get-Module 'TenantPosture'
+
+        function script:Raw { param([hashtable] $Data, [bool] $Success = $true) [ordered]@{ CollectorId = 'x'; CollectedAt = '2026-09-01T00:00:00Z'; Success = $Success; Data = $Data } }
+        function script:Verdict { param([string] $Fn, [string] $Cid) & $Fn | Out-Null; @(Get-TPFindings | Where-Object { $_.ControlId -eq $Cid })[0] }
+        function script:Inject { param([string] $Name, [string] $Body)
+            & $script:Mod { param($n, $b) Set-Item -Path "function:script:$n" -Value ([scriptblock]::Create($b)) } $Name $Body }
+        function script:Remove { param([string] $Name)
+            & $script:Mod { param($n) Remove-Item -Path "function:script:$n" -ErrorAction SilentlyContinue } $Name }
+
+        # The not-found error exactly as the Exchange Online module renders a server error: |Type|Message.
+        $script:NotFoundMessage = "|Microsoft.Exchange.Configuration.Tasks.ManagementObjectNotFoundException|The operation couldn't be performed because object '/o=x' couldn't be found on 'DM6PR01A008DC01.PROD.OUTLOOK.COM'."
+        $script:GoneDn   = '/o=ExchangeLabs/ou=Exchange Administrative Group (FYDIBOHF23SPDLT)/cn=Recipients/cn=f2bb7dfe65834a758b4fde49a010aab7-mexample'
+        $script:GoneRcpt = ('"Mike Example" [EX:{0}]' -f $script:GoneDn)
+    }
+    AfterAll { Clear-TPState; Remove-Module 'TenantPosture' -Force -ErrorAction SilentlyContinue }
+    BeforeEach { Clear-TPState }
+
+    Context 'Test-TPExoNotFoundError recognizes only the Exchange not-found error' {
+        It 'recognizes the Exchange Online module shape (|Type|Message) in the message' {
+            $rec = [System.Management.Automation.ErrorRecord]::new([System.Exception]::new($script:NotFoundMessage), 'Write-ErrorMessage', 'NotSpecified', $null)
+            & $script:Mod { param($r) Test-TPExoNotFoundError -ErrorRecord $r } $rec | Should -BeTrue
+        }
+        It 'recognizes the FailureCategory form in the fully qualified error id' {
+            $rec = [System.Management.Automation.ErrorRecord]::new([System.Exception]::new('The operation could not be performed.'),
+                '[Server=X,RequestId=Y,TimeStamp=Z] [FailureCategory=Cmdlet-ManagementObjectNotFoundException] Write-ErrorMessage', 'ObjectNotFound', $null)
+            & $script:Mod { param($r) Test-TPExoNotFoundError -ErrorRecord $r } $rec | Should -BeTrue
+        }
+        It 'does not read the ObjectNotFound CATEGORY as a missing recipient: a missing command reports it too' {
+            $ex  = [System.Management.Automation.CommandNotFoundException]::new("The term 'Get-Recipient' is not recognized")
+            $rec = [System.Management.Automation.ErrorRecord]::new($ex, 'CommandNotFoundException', 'ObjectNotFound', $null)
+            & $script:Mod { param($r) Test-TPExoNotFoundError -ErrorRecord $r } $rec | Should -BeFalse
+        }
+        It 'does not recognize throttling or a dropped session' {
+            foreach ($m in 'The request was throttled. Try again later.', 'The remote server returned an error: (401) Unauthorized.', 'Object reference not set to an instance of an object.') {
+                $rec = [System.Management.Automation.ErrorRecord]::new([System.Exception]::new($m), 'x', 'NotSpecified', $null)
+                & $script:Mod { param($r) Test-TPExoNotFoundError -ErrorRecord $r } $rec | Should -BeFalse -Because $m
+            }
+        }
+    }
+
+    Context 'Resolve-TPExoRecipient: three answers' {
+        BeforeAll {
+            # A Get-Recipient stand-in that records every call and answers by $script:RcptMode:
+            #   NotFound  Identity throws the not-found error; Filter returns nothing
+            #   X500      Identity throws the not-found error; Filter returns a mail contact
+            #   Throttled Identity throws a throttling error; Filter returns nothing
+            #   Found     Identity returns a mailbox
+            Inject 'Get-Recipient' @'
+[CmdletBinding()] param([string] $Identity, [string] $Filter, [object] $ResultSize)
+$script:RcptCalls.Add([ordered]@{ Identity = $Identity; Filter = $Filter })
+if ($PSBoundParameters.ContainsKey('Identity')) {
+    switch ($script:RcptMode) {
+        'Found'     { return [pscustomobject]@{ PrimarySmtpAddress = 'mike@contoso.com' } }
+        'Throttled' { throw [System.Exception]::new('The request was throttled. Try again later.') }
+        default     { throw [System.Exception]::new($script:NotFoundMessage) }
+    }
+}
+if ($script:RcptMode -eq 'X500') { return [pscustomobject]@{ ExternalEmailAddress = 'SMTP:mike@evil.tld' } }
+return
+'@
+            & $script:Mod { param($m) $script:NotFoundMessage = $m } $script:NotFoundMessage
+            $script:GetRcpt = & $script:Mod { Get-Command Get-Recipient }
+            function script:Resolve { param([string] $Lookup, [string] $Mode)
+                & $script:Mod { param($l, $m, $c) $script:RcptMode = $m; $script:RcptCalls = [System.Collections.Generic.List[object]]::new(); Resolve-TPExoRecipient -Lookup $l -Command $c } $Lookup $Mode $script:GetRcpt }
+            # Callers wrap this in @(): a one-element list unrolls to its hashtable, whose .Count is its key count.
+            function script:Calls { & $script:Mod { @($script:RcptCalls) } }
+        }
+        AfterAll { Remove 'Get-Recipient' }
+
+        It 'answers $null for a legacy DN only after both the Identity and the X500 lookup found nothing' {
+            Resolve $script:GoneDn 'NotFound' | Should -BeNullOrEmpty
+            $calls = @(Calls)
+            $calls.Count | Should -Be 2
+            $calls[0].Identity | Should -Be $script:GoneDn
+            $calls[1].Filter   | Should -Be ("EmailAddresses -eq 'X500:{0}'" -f $script:GoneDn)
+        }
+        It 'returns the object an X500 proxy address routes the DN to (a migrated contact, possibly external)' {
+            $hit = Resolve $script:GoneDn 'X500'
+            [string](Get-TPObjectField -Item $hit -Key 'ExternalEmailAddress') | Should -Be 'SMTP:mike@evil.tld'
+        }
+        It 'returns the object the Identity lookup found without asking twice' {
+            $hit = Resolve $script:GoneDn 'Found'
+            [string](Get-TPObjectField -Item $hit -Key 'PrimarySmtpAddress') | Should -Be 'mike@contoso.com'
+            @(Calls).Count | Should -Be 1
+        }
+        It 'throws when the Identity lookup failed for any reason but not-found and the X500 lookup found nothing' {
+            { Resolve $script:GoneDn 'Throttled' } | Should -Throw -ExpectedMessage '*throttled*'
+        }
+        It 'throws with no Exchange Online session instead of answering $null' {
+            { & $script:Mod { Resolve-TPExoRecipient -Lookup '/o=x/cn=y' -Command $null } } | Should -Throw -ExpectedMessage '*no Exchange Online session*'
+        }
+        It 'doubles an apostrophe in the DN inside the OPATH filter and refuses a control character' {
+            Resolve "/o=ExchangeLabs/ou=x/cn=Recipients/cn=o'brien" 'NotFound' | Should -BeNullOrEmpty
+            @(Calls)[1].Filter | Should -Be "EmailAddresses -eq 'X500:/o=ExchangeLabs/ou=x/cn=Recipients/cn=o''brien'"
+            { Resolve "/o=x/cn=y$([char]0x202E)" 'NotFound' } | Should -Throw -ExpectedMessage '*control or format character*'
+            @(Calls).Count | Should -Be 0 -Because 'a refused identifier never reaches the directory'
+        }
+        It 'does not ask the X500 lookup for a display name, and answers $null when the name is unknown' {
+            Resolve 'Sales Team' 'NotFound' | Should -BeNullOrEmpty
+            @(Calls).Count | Should -Be 1
+        }
+    }
+
+    Context 'Collector: the real sweep produces IsOrphaned from Get-Recipient''s answers' {
+        BeforeAll {
+            Inject 'Get-AcceptedDomain' '[pscustomobject]@{ DomainName = "contoso.com" }'
+            Inject 'Get-OrganizationConfig' '[pscustomobject]@{ InPlaceHolds = @() }'
+            Inject 'Get-Mailbox' '[CmdletBinding()] param([string] $Filter, [object] $ResultSize) if ($PSBoundParameters.ContainsKey("Filter")) { return } [pscustomobject]@{ UserPrincipalName = "cathy@contoso.com"; DisplayName = "Cathy"; RecipientTypeDetails = "UserMailbox"; LitigationHoldEnabled = $false; InPlaceHolds = @(); RetentionPolicy = "Default MRM Policy"; RetainDeletedItemsFor = "14.00:00:00" }'
+            Inject 'Get-InboxRule' '[CmdletBinding()] param([string] $Mailbox) [pscustomobject]@{ Name = "Tribune feed"; Enabled = $true; Priority = 1; ForwardTo = @($script:PatRcpt, $script:GoneRcpt); ForwardAsAttachmentTo = $null; RedirectTo = $null }'
+            Inject 'Get-Recipient' @'
+[CmdletBinding()] param([string] $Identity, [string] $Filter, [object] $ResultSize)
+if ($PSBoundParameters.ContainsKey('Identity')) {
+    if ($script:RcptMode -eq 'Throttled') { throw [System.Exception]::new('The request was throttled. Try again later.') }
+    throw [System.Exception]::new($script:NotFoundMessage)
+}
+if ($script:RcptMode -eq 'X500') { return [pscustomobject]@{ ExternalEmailAddress = 'SMTP:mike@evil.tld' } }
+return
+'@
+            & $script:Mod { param($m, $g, $p) $script:NotFoundMessage = $m; $script:GoneRcpt = $g; $script:PatRcpt = $p } $script:NotFoundMessage $script:GoneRcpt '"Pat Internal" [SMTP:pat@contoso.com]'
+            $script:GetRcpt = & $script:Mod { Get-Command Get-Recipient }
+            function script:Sweep { param([string] $Mode, [switch] $NoSession)
+                $cmd = if ($NoSession) { $null } else { $script:GetRcpt }
+                Mock -ModuleName 'TenantPosture' Get-TPExoCommand -MockWith { [pscustomobject]@{ Command = $null; Source = 'ExchangeOnline' } }
+                Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-Recipient' } -MockWith { [pscustomobject]@{ Command = $cmd; Source = 'ExchangeOnline' } }.GetNewClosure()
+                & $script:Mod { param($m) $script:RcptMode = $m } $Mode
+                $r = Invoke-TPCollectEXOInventory
+                $r.Data.SectionStatus.InboxRulesForwarding | Should -Be 'Collected'
+                # Clear-TPState wipes the exceptions the sweep registered; keep them for the assertions.
+                $script:SweepExceptions = @(Get-TPExceptions | Where-Object { $_.Source -eq 'EXO-RecipientLookup' })
+                Clear-TPState
+                Set-TPRawData -Key 'EXO-Inventory' -Data $r
+                $r }
+        }
+        AfterAll { foreach ($n in 'Get-AcceptedDomain', 'Get-OrganizationConfig', 'Get-Mailbox', 'Get-InboxRule', 'Get-Recipient') { Remove $n } }
+
+        It 'files a DN the directory holds nothing for as Orphaned, and EXO-7.2 is a Gap that names the rule (was: not assessed)' {
+            $r = Sweep 'NotFound'
+            $rule = @($r.Data.InboxRulesForwarding)[0]
+            $rule.IsOrphaned | Should -BeTrue
+            $rule.IsUnresolved | Should -BeFalse
+            $rule.IsExternal | Should -BeFalse
+            @($rule.OrphanedRecipients) | Should -Be @($script:GoneRcpt)
+            @($rule.UnresolvedRecipients).Count | Should -Be 0
+            @($script:SweepExceptions).Count | Should -Be 0 -Because 'the directory answered; nothing failed'
+            $f = Verdict 'Test-TPControlEXOInboxRulesForwarding' 'EXO-7.2'
+            $f.State    | Should -Be 'Gap'
+            $f.Severity | Should -Be 'Medium'
+            $f.Detail   | Should -Match "cathy@contoso\.com rule 'Tribune feed' forwards to Mike Example"
+            $f.Detail   | Should -Match 'not delivered'
+            $f.Detail   | Should -Not -Match 'EX:/o='
+            $f.Detail   | Should -Not -Match '(?i)not assessed'
+            @($f.AffectedObjects).Count | Should -Be 1
+        }
+        It 'classifies a DN an X500 proxy address still routes by the object it reaches: external here, never Orphaned' {
+            $r = Sweep 'X500'
+            $rule = @($r.Data.InboxRulesForwarding)[0]
+            $rule.IsExternal | Should -BeTrue
+            $rule.IsOrphaned | Should -BeFalse
+            @($rule.ExternalRecipients) | Should -Be @($script:GoneRcpt)
+            (Verdict 'Test-TPControlEXOInboxRulesForwarding' 'EXO-7.2').CurrentValue | Should -Be '1 inbox rule(s) forwarding externally'
+        }
+        It 'keeps a lookup that failed as Unresolved, records why, and leaves the control not assessed' {
+            $r = Sweep 'Throttled'
+            $rule = @($r.Data.InboxRulesForwarding)[0]
+            $rule.IsUnresolved | Should -BeTrue
+            $rule.IsOrphaned | Should -BeFalse
+            $why = @($script:SweepExceptions)
+            $why.Count | Should -Be 1
+            $why[0].Message | Should -Match 'throttled'
+            (Verdict 'Test-TPControlEXOInboxRulesForwarding' 'EXO-7.2').State | Should -Be 'NotApplicable'
+        }
+        It 'with no Exchange Online session the recipient is Unresolved and the reason is recorded' {
+            $r = Sweep 'NotFound' -NoSession
+            @($r.Data.InboxRulesForwarding)[0].IsUnresolved | Should -BeTrue
+            @($script:SweepExceptions)[0].Message | Should -Match 'no Exchange Online session'
+        }
+    }
+
+    Context 'Evaluator: orphaned rules beside external, unresolved and disabled ones' {
+        BeforeAll {
+            function script:Rule { param([string] $Mbx, [string] $Name, [string[]] $External = @(), [string[]] $Unresolved = @(), [string[]] $Orphaned = @(), [bool] $Enabled = $true)
+                @{ Mailbox = $Mbx; RuleName = $Name; Enabled = $Enabled
+                   ExternalRecipients = $External; UnresolvedRecipients = $Unresolved; OrphanedRecipients = $Orphaned
+                   IsExternal = ($External.Count -gt 0); IsUnresolved = ($Unresolved.Count -gt 0); IsOrphaned = ($Orphaned.Count -gt 0) } }
+            function script:Inv { param([object[]] $Rules, [hashtable] $Stats = @{ MailboxesScanned = 10 })
+                Set-TPRawData -Key 'EXO-Inventory' -Data (Raw @{ UnparseableRules = @(); Stats = $Stats; InboxRulesForwarding = @($Rules); SectionStatus = @{ InboxRulesForwarding = 'Collected' } }) }
+        }
+
+        It 'orphaned beside unresolved stays not assessed, and still names the orphaned rule' {
+            Inv @((Rule 'a@contoso.com' 'Old feed' -Orphaned @('"Gone" [EX:/o=x/cn=gone]')), (Rule 'b@contoso.com' 'Legacy' -Unresolved @('"Who" [EX:/o=x/cn=who]')))
+            $f = Verdict 'Test-TPControlEXOInboxRulesForwarding' 'EXO-7.2'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match "b@contoso\.com rule 'Legacy' forwards to Who"
+            $f.Detail | Should -Match "a@contoso\.com rule 'Old feed' forwards to Gone"
+            @($f.AffectedObjects).Count | Should -Be 2
+        }
+        It 'a rule with both an orphaned and an unresolved recipient is a blind spot, not an orphaned rule' {
+            Inv @((Rule 'a@contoso.com' 'Mixed' -Orphaned @('"Gone" [EX:/o=x/cn=gone]') -Unresolved @('"Who" [EX:/o=x/cn=who]')))
+            (Verdict 'Test-TPControlEXOInboxRulesForwarding' 'EXO-7.2').State | Should -Be 'NotApplicable'
+        }
+        It 'external rules are counted and the orphaned rule is named beside them, not counted' {
+            Inv @((Rule 'a@contoso.com' 'Exfil' -External @('"x" [SMTP:x@evil.tld]')), (Rule 'b@contoso.com' 'Old feed' -Orphaned @('"Gone" [EX:/o=x/cn=gone]')))
+            $f = Verdict 'Test-TPControlEXOInboxRulesForwarding' 'EXO-7.2'
+            $f.State        | Should -Be 'Gap'
+            $f.Severity     | Should -Be 'High'
+            $f.CurrentValue | Should -Be '1 inbox rule(s) forwarding externally'
+            $f.Detail       | Should -Match "1 further rule\(s\) forward to a recipient the directory no longer holds.*b@contoso\.com rule 'Old feed' forwards to Gone"
+            @($f.AffectedObjects).Count | Should -Be 2
+            @($f.AffectedObjects)[1].Recipients | Should -Match 'no longer in the directory'
+        }
+        It 'a disabled orphaned rule is still named, as disabled' {
+            Inv @((Rule 'a@contoso.com' 'Old feed' -Orphaned @('"Gone" [EX:/o=x/cn=gone]') -Enabled $false))
+            $f = Verdict 'Test-TPControlEXOInboxRulesForwarding' 'EXO-7.2'
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match '\(0 enabled\)'
+            $f.Detail | Should -Match "'Old feed' \(disabled\) forwards to Gone"
+        }
+        It 'an orphaned rule found under a capped sweep is still a Gap, with the sweep limit stated' {
+            Inv @((Rule 'a@contoso.com' 'Old feed' -Orphaned @('"Gone" [EX:/o=x/cn=gone]'))) -Stats @{ MailboxesScanned = 2000; ScanLimitReached = $true; MailboxesRuleScanFailed = 0 }
+            $f = Verdict 'Test-TPControlEXOInboxRulesForwarding' 'EXO-7.2'
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'first 2000 mailboxes'
+        }
+        It 'result JSON written before IsOrphaned existed replays as before' {
+            Inv @(@{ Mailbox = 'a@contoso.com'; RuleName = 'Legacy'; Enabled = $true; IsExternal = $false; IsUnresolved = $true; ExternalRecipients = @(); UnresolvedRecipients = @('"X" [EX:/o=x/cn=y]') })
+            (Verdict 'Test-TPControlEXOInboxRulesForwarding' 'EXO-7.2').State | Should -Be 'NotApplicable'
+            Clear-TPState
+            Inv @(@{ Mailbox = 'a@contoso.com'; RuleName = 'Old'; Enabled = $true; IsExternal = $false; ExternalRecipients = @() })
+            (Verdict 'Test-TPControlEXOInboxRulesForwarding' 'EXO-7.2').State | Should -Be 'Satisfied'
+        }
+    }
+}
