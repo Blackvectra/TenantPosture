@@ -305,7 +305,7 @@ Renew TLS certs at least 30 days before expiry. Automate renewal via ACME (Let's
 **License required:** Included (M365 Business Standard+)
 
 **Description:**
-All certs issued for the domain (visible in CT logs per RFC 6962) originate from CAs on the org-approved allowlist.
+Every certificate still valid for the domain (visible in CT logs per RFC 6962) originates from a CA on the org-approved allowlist. CT logs keep every certificate ever issued, so issuers seen only on expired certificates are reported as history and not judged.
 
 **Business risk:**
 A cert issued by an unapproved CA in CT logs may indicate domain takeover, social-engineered cert approval, or use of an unsanctioned third-party service that proxies the domain.

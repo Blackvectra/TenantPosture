@@ -43,6 +43,19 @@ function Get-TPTeamsFederationMode {
     return 'Open'
 }
 
+# Teams live events were retired on June 30, 2026, but Microsoft supports events
+# scheduled before that date through February 28, 2027. A date given without a
+# time zone is honored everywhere on Earth: the window ends at the start of
+# March 1, 2027 in the last time zone (UTC-12), which is 2027-03-01T12:00Z, so an
+# assessment run anywhere on February 28 still judges the setting. A pure
+# function so the boundary is testable; $Now is UTC.
+function Test-TPLiveEventsSupported {
+    [CmdletBinding()]
+    param([datetime] $Now = [datetime]::UtcNow)
+    $supportEnds = [datetime]::new(2027, 3, 1, 12, 0, 0, [System.DateTimeKind]::Utc)
+    return [bool]($Now.ToUniversalTime() -lt $supportEnds)
+}
+
 # Third-party storage connectors in the Teams client (TMS-2.3, SPO-2.5).
 # Egnyte is reported only by newer MicrosoftTeams modules; when absent it is
 # named as unchecked rather than assumed off.
@@ -530,7 +543,7 @@ function Test-TPControlTeamsFederationAllowlist {
     }
 }
 
-# ── TMS-4.4 Public events (town halls, webinars, legacy live events) ─────────
+# ── TMS-4.4 Public events (town halls, webinars; live events until 2027-02-28) ─
 # Microsoft retired Teams live events on June 30, 2026 (events scheduled
 # before then run until February 28, 2027); town halls and webinars replace
 # them, and both attendee settings default to Everyone — public and anonymous.
@@ -551,9 +564,16 @@ function Test-TPControlTeamsLiveEvents {
     $th = [string](Get-TPObjectField -Item $ev -Key 'AllowTownhalls' -Default '')
     $thAccess = [string](Get-TPObjectField -Item $ev -Key 'TownhallEventAttendeeAccess' -Default '')
     if ($th -eq 'Disabled') { $closed += 'town halls (off)' } elseif ($thAccess -eq 'Everyone') { $open += 'town halls (TownhallEventAttendeeAccess = Everyone)' } elseif ($thAccess) { $closed += "town halls ($thAccess)" }
-    $bc = Get-TPTeamsSection -Teams $tms -Name 'BroadcastPolicy'
-    if ($bc -and (Get-TPObjectField -Item $bc -Key 'AllowBroadcastScheduling' -Default $false) -eq $true -and [string](Get-TPObjectField -Item $bc -Key 'BroadcastAttendeeVisibilityMode' -Default '') -eq 'Everyone') {
-        $open += 'legacy live events already scheduled (BroadcastAttendeeVisibilityMode = Everyone)'
+    # Live events scheduled before the June 30, 2026 retirement stay attendable
+    # through February 28, 2027 (Test-TPLiveEventsSupported), and the broadcast
+    # policy's attendee setting still decides who can join one. The tool does not
+    # read the schedule, so through that date a public setting is reported as the
+    # exposure it may still be; after it the setting governs nothing and is not judged.
+    if (Test-TPLiveEventsSupported) {
+        $bc = Get-TPTeamsSection -Teams $tms -Name 'BroadcastPolicy'
+        if ($bc -and (Get-TPObjectField -Item $bc -Key 'AllowBroadcastScheduling' -Default $false) -eq $true -and [string](Get-TPObjectField -Item $bc -Key 'BroadcastAttendeeVisibilityMode' -Default '') -eq 'Everyone') {
+            $open += 'live events scheduled before the June 30, 2026 retirement, which Microsoft supports through February 28, 2027 (BroadcastAttendeeVisibilityMode = Everyone)'
+        }
     }
     if (($open.Count + $closed.Count) -eq 0) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'The events policy returned neither webinar nor town hall attendee settings; not assessed.'

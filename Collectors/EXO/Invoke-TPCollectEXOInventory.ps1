@@ -707,15 +707,40 @@ function Invoke-TPCollectEXOInventory {
                         try {
                             $modeArg = @{ $mode = $true }
                             $items = @(& $tablCmd -ListType $t @modeArg -ErrorAction Stop)
-                            foreach ($i in $items) { $tabl += @{
-                                ListType   = $t
-                                Action     = $mode
-                                Value      = [string](Get-TPObjectField -Item $i -Key 'Value')
-                                ExpirationDate = [string](Get-TPObjectField -Item $i -Key 'ExpirationDate')
-                                # A never-expiring ALLOW is the durable one.
-                                NoExpiration   = [bool](Get-TPObjectField -Item $i -Key 'NoExpiration' -Default $false)
-                                Notes      = [string](Get-TPObjectField -Item $i -Key 'Notes')
-                            } }
+                            # Which allow entries never expire is asked of the cmdlet itself
+                            # (-NoExpiration "filters the results by entries that are set to
+                            # never expire"). An entry with no ExpirationDate is normally one
+                            # that expires 45 days after it was last used, Microsoft's default
+                            # for allows, so an empty date was never evidence of "permanent";
+                            # reading it that way scored every default allow as a Gap. When the
+                            # filter cannot be read the entries carry ExpiryRead = $false and
+                            # DEF-5.1 does not judge them.
+                            $neverValues = $null
+                            if ($allow -and $items.Count -gt 0) {
+                                try { $neverValues = @(@(& $tablCmd -ListType $t -Allow -NoExpiration -ErrorAction Stop) | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Value') }) }
+                                catch {
+                                    $neverValues = $null
+                                    if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                                        Register-TPException -Source 'EXO-TenantAllowBlockList' -Message "[$t/Allow -NoExpiration] $($_.Exception.Message)"
+                                    }
+                                }
+                            }
+                            foreach ($i in $items) {
+                                $val = [string](Get-TPObjectField -Item $i -Key 'Value')
+                                $tabl += @{
+                                    ListType       = $t
+                                    Action         = $mode
+                                    Value          = $val
+                                    ExpirationDate = [string](Get-TPObjectField -Item $i -Key 'ExpirationDate')
+                                    RemoveAfter    = [string](Get-TPObjectField -Item $i -Key 'RemoveAfter' -Default '')
+                                    LastUsedDate   = [string](Get-TPObjectField -Item $i -Key 'LastUsedDate' -Default '')
+                                    # Allow entries: $true only when the cmdlet lists the entry as never
+                                    # expiring; ExpiryRead says whether that filter answered at all.
+                                    ExpiryRead     = [bool]((-not $allow) -or ($null -ne $neverValues))
+                                    NoExpiration   = [bool]($(if ($allow) { ($null -ne $neverValues) -and ($neverValues -contains $val) } else { Get-TPObjectField -Item $i -Key 'NoExpiration' -Default $false }))
+                                    Notes          = [string](Get-TPObjectField -Item $i -Key 'Notes')
+                                }
+                            }
                         } catch {
                             # One list type unavailable (license/role) must not
                             # lose the others; the section only fails if the
@@ -740,7 +765,8 @@ function Invoke-TPCollectEXOInventory {
                                 Action         = $act
                                 Value          = "$([string](Get-TPObjectField -Item $i -Key 'SpoofedUser' -Default '')) via $([string](Get-TPObjectField -Item $i -Key 'SendingInfrastructure' -Default ''))"
                                 ExpirationDate = ''
-                                NoExpiration   = $true
+                                NoExpiration   = $true    # by design: Microsoft says allow entries for spoofed senders never expire
+                                ExpiryRead     = $true
                                 Notes          = [string](Get-TPObjectField -Item $i -Key 'SpoofType' -Default '')
                             }
                         }

@@ -1101,11 +1101,15 @@ function Test-TPControlAADGuestPermissions {
     if ($guestRoleId -eq '2af84b1e-32c8-42b7-82bc-daa82404023b') {
         Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Guests have the Restricted Guest User role: they can read only their own directory objects.'
     } elseif ($guestRoleId -eq '10dae51f-b6af-4016-8d66-8c2a99b929b3') {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Guests have the default Guest User role (limited access): they can still read the membership of groups they belong to. The Restricted Guest User role limits them to their own objects.' -CurrentValue 'Guest User (limited access, default)' -RequiredValue 'Restricted Guest User role' -Remediation $ctrl.Remediation
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Guests have the same access as members (guestUserRoleId 10dae51f-b6af-4016-8d66-8c2a99b929b3), the most permissive setting: a guest can enumerate every user, group and membership in the directory. Set guest user access to Restricted (2af84b1e-32c8-42b7-82bc-daa82404023b).' -CurrentValue "RoleId: $guestRoleId (same as members)" -RequiredValue 'Restricted Guest User role' -Remediation $ctrl.Remediation
+    } elseif ($guestRoleId -eq 'a0b1b346-4d3e-4e8b-98f8-753987be4970') {
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Guests have the default Guest User role (guestUserRoleId a0b1b346-4d3e-4e8b-98f8-753987be4970, limited access): a guest can read the properties and memberships of the users and groups it can see. Microsoft documents this as the default; the baseline wants Restricted (2af84b1e-32c8-42b7-82bc-daa82404023b), which limits a guest to its own objects.' -CurrentValue "RoleId: $guestRoleId (limited access, the default)" -RequiredValue 'Restricted Guest User role' -Remediation $ctrl.Remediation
     } elseif ([string]::IsNullOrEmpty($guestRoleId)) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Guest role ID not available in collected data'
     } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Guest users may have excessive default permissions. Set to Restricted Guest User.' -CurrentValue "RoleId: $guestRoleId" -RequiredValue 'Restricted Guest User role' -Remediation $ctrl.Remediation
+        # Only the three ids Microsoft documents are judged; a fourth is not read as
+        # permissive or restrictive.
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "Guest user access is set to role id $guestRoleId, which is not one of the three roles Microsoft documents (restricted, limited, same as members); not assessed." -CurrentValue "RoleId: $guestRoleId"
     }
 }
 
