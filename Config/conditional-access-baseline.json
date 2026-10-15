@@ -39,7 +39,7 @@
       "Category": "Secure foundation",
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-old-require-mfa-azure-mgmt",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
-      "Summary": "Requires multifactor authentication to reach the Azure portal, the Microsoft Entra admin center, Azure PowerShell or the Azure CLI (grouped by Microsoft under the Windows Azure Service Management API resource)."
+      "Summary": "Requires multifactor authentication to reach the Azure portal, the Microsoft Entra admin center, Azure PowerShell or the Azure CLI (grouped by Microsoft under the Windows Azure Service Management API resource). Microsoft now enforces MFA on these sign-ins itself: the Azure portal, Entra and Intune admin centers since October 2024, and Azure CLI, PowerShell, mobile app and REST create, update and delete operations from October 2025 (postponable to July 2026), so a missing policy no longer means these sign-ins go unprompted; the tenant policy remains the template Microsoft recommends and covers read operations too."
     },
     {
       "Id": "block-device-code",

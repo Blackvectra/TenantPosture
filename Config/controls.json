@@ -2849,7 +2849,7 @@
     {
       "ControlId": "TMS-2.2",
       "Title": "Unverified App Publisher Blocked",
-      "Description": "Teams app permission policy restricts installation to Microsoft and verified third-party publishers only.",
+      "Description": "Third-party Teams apps are limited to reviewed apps from verified publishers through the org-wide app settings and each app's availability (app centric management, which replaced Teams app permission policies in the 2025 migration).",
       "BusinessRisk": "Apps from unverified publishers have not been vetted. Malicious Teams apps can access meeting transcripts, chat, and files.",
       "Severity": "Medium",
       "Workload": "TMS",
@@ -2857,7 +2857,7 @@
       "Automated": true,
       "CollectorDependency": "Teams",
       "EvaluatorFunction": "Test-TPControlTeamsUnverifiedApps",
-      "Remediation": "Teams Admin Center > Teams apps > Permission policies > Block all apps from unknown publishers.",
+      "Remediation": "Teams admin center > Teams apps > Manage apps > Org-wide app settings: turn off letting users install third-party apps by default and block new third-party apps until reviewed; then set each approved app's availability (Available to) per app. App permission policies no longer apply after the migration to app centric management.",
       "References": {
         "CISControls": [
           "2.5"
@@ -4193,7 +4193,7 @@
       "Automated": true,
       "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-TPControlPurviewComplianceScore",
-      "Remediation": "compliance.microsoft.com > Compliance Manager > Improvement actions > Assign to owners and set target dates.",
+      "Remediation": "Microsoft Purview portal (purview.microsoft.com) > Compliance Manager > Improvement actions > Assign to owners and set target dates.",
       "References": {
         "CISControls": [],
         "CIS": "3.5.2",
