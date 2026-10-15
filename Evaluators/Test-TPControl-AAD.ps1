@@ -344,7 +344,7 @@ function Test-TPControlAADLegacyAuth {
     if ($cov.Kind -ne 'None') {
         $cv = Get-TPCACoverageVerdict -Coverage $cov -What 'Legacy authentication (Other clients) is blocked'
         Add-TPExpectedStateFinding -ControlId $controlId -Control $control -FrameworkIds $citations `
-            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished `
+            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished -AffectedObjects $cv.AffectedObjects `
             -CurrentValue "Legacy block: $($cov.Kind) coverage by $($cov.Names -join ', ')" `
             -RequiredValue 'CA policy blocking Other clients for all users on all applications, or Security Defaults'
     } elseif ($scoped.Count -gt 0 -or $audit.Count -gt 0) {
@@ -461,7 +461,7 @@ function Test-TPControlAADPhishResistantMFA {
             $cv.NotEstablished = @($cv.NotEstablished) + "whether $($roleUnverified -join ', ') covers every privileged role, because this tenant's role catalog was not read."
         }
         Add-TPExpectedStateFinding -ControlId $controlId -Control $control -FrameworkIds $citations `
-            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished `
+            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished -AffectedObjects $cv.AffectedObjects `
             -CurrentValue "Phishing-resistant MFA for admins: $($cov.Kind) coverage" `
             -RequiredValue 'CA policy with a phishing-resistant authentication strength covering every privileged role'
     } elseif ($unknownStrengthPolicies.Count -gt 0) {
@@ -536,7 +536,7 @@ function Test-TPControlAADSignInRisk {
     if ($riskPolicies.Count -gt 0 -and @($perLevel.Keys | Where-Object { @($perLevel[$_].Selecting).Count -gt 0 }).Count -gt 0) {
         $cv = Get-TPRiskCoverageVerdict -PerLevel $perLevel -Noun 'sign-in risk' -Consequence 'is let through without a challenge'
         Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
-            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished `
+            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished -AffectedObjects $cv.AffectedObjects `
             -CurrentValue "signInRiskLevels = $($levels -join ', '); all-user coverage: $(($perLevel.Keys | ForEach-Object { "$_ $($perLevel[$_].Kind)" }) -join ', ')" `
             -RequiredValue 'CA policy in force for all users on all applications: signInRiskLevels = high/medium + require MFA'
     } elseif ($riskPolicies.Count -eq 0 -and @($ro14.Qualifying).Count -gt 0) {
@@ -633,7 +633,7 @@ function Get-TPRiskCoverageVerdict {
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)] $PerLevel, [Parameter(Mandatory)] [string] $Noun, [Parameter(Mandatory)] [string] $Consequence)
-    $v = @(); $s = @(); $u = @()
+    $v = @(); $s = @(); $u = @(); $ao = @(); $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($lvl in @($PerLevel.Keys)) {
         $cov = $PerLevel[$lvl]
         if (@($cov.Selecting).Count -eq 0) {
@@ -642,8 +642,11 @@ function Get-TPRiskCoverageVerdict {
         }
         $cv = Get-TPCACoverageVerdict -Coverage $cov -What "A responding policy applies to $lvl $Noun"
         $v += @($cv.Verified); $s += @($cv.Shortfalls); $u += @($cv.NotEstablished)
+        # One structured entry per excluded principal per level sentence, so every
+        # exclusion sentence a level produced stays matched to its principals.
+        foreach ($o in @($cv.AffectedObjects)) { if ($seen.Add("$([string]$o.Principal)|$([string]$o.Sentence)")) { $ao += $o } }
     }
-    return [ordered]@{ Verified = $v; Shortfalls = $s; NotEstablished = $u }
+    return [ordered]@{ Verified = $v; Shortfalls = $s; NotEstablished = $u; AffectedObjects = $ao }
 }
 
 # ── AAD-1.5 User Risk CA Policy ───────────────────────────────────────────────
@@ -687,7 +690,7 @@ function Test-TPControlAADUserRisk {
     if (@($perLevel['high'].Selecting).Count -gt 0) {
         $cv = Get-TPRiskCoverageVerdict -PerLevel $perLevel -Noun 'user risk' -Consequence 'is not forced to change its password or blocked'
         Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
-            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished `
+            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished -AffectedObjects $cv.AffectedObjects `
             -CurrentValue "userRiskLevels = $($levels -join ', '); all-user coverage for high: $($perLevel['high'].Kind)" `
             -RequiredValue 'CA policy in force for all users on all applications: userRiskLevels = high + require password change or risk remediation'
     } elseif ($riskPolicies.Count -eq 0 -and @($ro15.Qualifying).Count -gt 0) {
@@ -1764,7 +1767,7 @@ function Test-TPControlAADDeviceCode {
     if ($cov.Kind -ne 'None' -or @($cov.Narrowed).Count -gt 0) {
         $cv = Get-TPCACoverageVerdict -Coverage $cov -What 'The device code authentication flow is blocked'
         Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
-            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished `
+            -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished -AffectedObjects $cv.AffectedObjects `
             -CurrentValue "Device code flow block: $($cov.Kind) coverage$(if ($cov.Names.Count) { ' by ' + ($cov.Names -join ', ') })" `
             -RequiredValue 'CA policy blocking the device code flow for all users on all applications (or Security Defaults)'
     } else {

@@ -30,4 +30,29 @@
             # ExpiryDate        = '2027-09-01'
         }
     )
+
+    # Emergency-access (break-glass) accounts a Conditional Access policy may
+    # exclude. A Conditional Access control that finds the same principal(s)
+    # excluded from every qualifying policy reports a shortfall (Partial);
+    # when every such principal is on this record, current and approved, the
+    # finding becomes "Satisfied with approved emergency-access exceptions"
+    # and names them. The record is the approval: an account's name alone
+    # establishes nothing. ObjectId is the Entra object id the exclusion
+    # carries. Kind is User (default) or Group; a group approval attests that
+    # the group holds only emergency-access accounts, because the assessment
+    # does not resolve membership, and the finding says so. A role is never
+    # emergency access. ReviewDate and ExpiryDate follow the same rules as an
+    # exception above.
+    EmergencyAccess = @(
+        @{
+            ObjectId          = '00000000-0000-0000-0000-000000000001'
+            Kind              = 'User'
+            UserPrincipalName = 'breakglass1@contoso.onmicrosoft.com'
+            Reason            = 'Emergency access account per Microsoft guidance; excluded from every Conditional Access policy, monitored by alert.'
+            Approver          = 'jane.doe@nrgtechservices.com'
+            ApprovedDate      = '2026-09-01'
+            ReviewDate        = '2027-03-01'
+            # ExpiryDate      = '2027-09-01'
+        }
+    )
 }

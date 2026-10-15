@@ -94,7 +94,19 @@ function Add-TPExpectedStateFinding {
     if ($CurrentValue)  { $p.CurrentValue  = $CurrentValue }
     if ($RequiredValue) { $p.RequiredValue = $RequiredValue }
     if ($Instance)      { $p.Instance = $Instance }
-    if ($AffectedObjects -and @($AffectedObjects).Count) { $p.AffectedObjects = @($AffectedObjects) }
+    $ao = @($AffectedObjects | Where-Object { $null -ne $_ })
+    # When the objects are shared Conditional Access exclusions (each carrying the
+    # shortfall sentence it produced), every OTHER shortfall is recorded beside them
+    # as a structured entry, so the emergency-access approval pass can see that an
+    # approved exclusion is not the only reason the control is Partial.
+    $exclusionSentences = @($ao | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Sentence' -Default '') } | Where-Object { $_ })
+    if ($exclusionSentences.Count -gt 0) {
+        foreach ($x in $s) { if ($x -notin $exclusionSentences) { $ao += [ordered]@{ Shortfall = [string]$x } } }
+        # A component that could not be established is a blocker too: an approval
+        # must never turn an incomplete assessment into a pass.
+        foreach ($x in $n) { $ao += [ordered]@{ NotEstablished = [string]$x } }
+    }
+    if ($ao.Count) { $p.AffectedObjects = @($ao) }
     # Literal -State values on purpose: Get-TPControlAutomationAudit derives what a verdict
     # helper can emit from its own Add-TPFinding calls.
     if ($s.Count) {

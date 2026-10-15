@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **[New] Approved emergency-access exclusions.** A Conditional Access control judged on combined coverage
+  reported a Partial whenever every qualifying policy excluded the same principals, which is exactly how
+  Microsoft says emergency-access accounts are configured. The owner's rule (2026-10-15): judge whether an
+  exclusion is appropriate, not whether one exists, and an account's name alone proves nothing. The
+  per-tenant exceptions file (`Config/baseline-exceptions/<tenant>.psd1`) gains an `EmergencyAccess` block
+  naming each approved principal by Entra object id with approver, approval date and review date (a group
+  may be approved; the finding then says its membership was not resolved; a role never is), read by
+  `Get-TPBaselineExceptions` under the same date rules as an exception. Every coverage finding now carries
+  its shared exclusions as structured `AffectedObjects`, and `Set-TPEmergencyAccessApproval` (run after
+  evaluation and on `-FromResults`, before license gating) rewrites a Partial whose only shortfall is such
+  an exclusion to Satisfied, prefixed `Approved emergency-access exceptions:`, naming the principals and
+  keeping the original result; a principal not on the record, or lapsed, keeps the finding Partial with the
+  record's answer appended. An exclusion is approved only when it is the finding's only shortfall and every
+  component was established (every other shortfall and unestablished component is recorded beside it), a republish restores the pre-approval result (a license-gated wrapper
+  included) and judges it against the current record, exclusions the policies do not share stay a blocker, and the
+  exception cmdlets write the block back as read. Applies to AAD-1.1, AAD-1.2,
+  AAD-1.3, AAD-1.4, AAD-1.5, AAD-11.1, AAD-2.3 and INT-1.2.
 - **[Fix] Five verdicts corrected from the 2026-10-15 live run.** DEF-5.1 scored a High Gap for spoofed-sender
   allow entries, which Microsoft says never expire and cannot be time-boxed, so every tenant with a
   phishing-simulation or relay spoof allow failed a control it could not act on; the collector now asks the

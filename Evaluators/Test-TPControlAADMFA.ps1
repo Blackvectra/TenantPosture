@@ -247,6 +247,6 @@ function Test-TPControlAADMFA {
     if ($unregisteredCnt -eq 0) { $verified += "All $totalEnabled enabled member account(s) have registered an MFA method.$syncNote" }
     else { $short += "$unregisteredCnt of $totalEnabled enabled member(s) have not registered a method. They will be asked to register at their next sign-in, so whoever holds their password can enroll the second factor - or they are excluded from the policy. Sample: $sample.$syncNote" }
     Add-TPExpectedStateFinding -ControlId 'AAD-1.2' -Control ([pscustomobject]@{ Category = 'Identity'; Title = 'MFA Required for All Users'; Severity = 'Critical'; Remediation = 'Require MFA (or an authentication strength) for All users on All cloud apps, excluding only emergency access accounts, and run an MFA registration campaign so every enabled user registers.' }) `
-        -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown -AffectedObjects $cv.AffectedObjects `
         -CurrentValue "MFA enforcement: $($cov.Kind); $registeredPct% registered ($($totalEnabled - $unregisteredCnt)/$totalEnabled)" -RequiredValue $req
 }

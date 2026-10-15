@@ -40,7 +40,7 @@ function Get-TPExclusionCoverage {
     param([AllowNull()] [AllowEmptyCollection()] [object[]] $Candidates)
 
     $c = @($Candidates | Where-Object { $null -ne $_ })
-    $r = [ordered]@{ Kind = 'None'; Names = @(); FullNames = @(); Exceptions = @(); ExcludedBy = [ordered]@{} }
+    $r = [ordered]@{ Kind = 'None'; Names = @(); FullNames = @(); Exceptions = @(); ExcludedBy = [ordered]@{}; Differing = [ordered]@{} }
     if ($c.Count -eq 0) { return $r }
     $r.Names = @($c | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '') })
     $sets = @(); $full = @()
@@ -54,7 +54,17 @@ function Get-TPExclusionCoverage {
     if ($full.Count -gt 0) { $r.Kind = 'Full'; $r.FullNames = $full; return $r }
     $inter = @($sets[0])
     foreach ($s in $sets) { $inter = @($inter | Where-Object { $_ -in $s }) }
-    if ($inter.Count -gt 0) { $r.Kind = 'Exceptions'; $r.Exceptions = $inter } else { $r.Kind = 'Unproven' }
+    if ($inter.Count -gt 0) {
+        $r.Kind = 'Exceptions'; $r.Exceptions = $inter
+        # Exclusions outside the shared set are not covered by the shared verdict: a
+        # principal in each policy's own exclusions could still be excluded from
+        # every policy, and group membership is not resolved. Kept per policy so a
+        # consumer can say so (and an approval of the shared set cannot pass over it).
+        foreach ($n in @($r.ExcludedBy.Keys)) {
+            $own = @($r.ExcludedBy[$n] | Where-Object { $_ -notin $inter })
+            if ($own.Count -gt 0) { $r.Differing[$n] = $own }
+        }
+    } else { $r.Kind = 'Unproven' }
     return $r
 }
 
@@ -198,7 +208,7 @@ function Get-TPCACoverageVerdict {
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)] $Coverage, [Parameter(Mandatory)] [string] $What)
-    $v = @(); $s = @(); $u = @()
+    $v = @(); $s = @(); $u = @(); $ao = @()
     $names = $Coverage.Names -join ', '
     switch ($Coverage.Kind) {
         'Full' {
@@ -206,7 +216,19 @@ function Get-TPCACoverageVerdict {
         }
         'Exceptions' {
             $v += "$What by: $names."
-            $s += "every qualifying policy excludes the same principal(s), so they are not covered: $((@($Coverage.Exceptions) | ForEach-Object { Get-TPCAPrincipalLabel -Principal $_ }) -join ', '). If these are emergency-access accounts, record them as an approved exception."
+            $sentence = "every qualifying policy excludes the same principal(s), so they are not covered: $((@($Coverage.Exceptions) | ForEach-Object { Get-TPCAPrincipalLabel -Principal $_ }) -join ', '). If these are emergency-access accounts, record them as an approved exception (the tenant's EmergencyAccess record in Config/baseline-exceptions), which reports the exclusion as approved and keeps it named."
+            $s += $sentence
+            # The excluded principals as structured data, each carrying the shortfall
+            # sentence it produced, so the approval pass (Set-TPEmergencyAccessApproval)
+            # judges ids, never prose, and Add-TPExpectedStateFinding can tell this
+            # shortfall from any other the control also reports.
+            $ao = @(@($Coverage.Exceptions) | ForEach-Object { [ordered]@{ Principal = [string]$_; Exclusion = 'SharedByEveryQualifyingPolicy'; Sentence = $sentence } })
+            # Exclusions the policies do NOT share stay unproven: whoever sits in every
+            # policy's own exclusions is outside them all, and membership is not resolved.
+            $differing = Get-TPObjectField -Item $Coverage -Key 'Differing' -Default $null
+            if ($differing -and @($differing.Keys).Count -gt 0) {
+                $u += "whether any further user is excluded from every one of these policies through the exclusions they do not share; each excludes different users or groups beyond the shared set and group membership was not resolved ($((@($differing.Keys) | ForEach-Object { "$_ also excludes $(@($differing[$_]).Count)" }) -join '; '))."
+            }
         }
         'Unproven' {
             $v += "$What by: $names."
@@ -219,7 +241,7 @@ function Get-TPCACoverageVerdict {
         elseif ($Coverage.Kind -eq 'Full' -or [string]$n.Why -eq 'applies to no application') { $v += $(if ([string]$n.Why -eq 'applies to no application') { "'$($n.Name)' is enabled but applies to no application, so it provides no protection and is not counted." } else { $note }) }
         else { $u += "what the narrower policy adds: $note" }
     }
-    return [ordered]@{ Verified = $v; Shortfalls = $s; NotEstablished = $u }
+    return [ordered]@{ Verified = $v; Shortfalls = $s; NotEstablished = $u; AffectedObjects = $ao }
 }
 
 function Get-TPCADeviceComplianceCoverage {
@@ -302,7 +324,7 @@ function Add-TPCADeviceComplianceFinding {
         if ($stagedNote)   { if ($cov.Kind -eq 'Full') { $v += $stagedNote }   else { $s += $stagedNote } }
         if ($cov.Kind -eq 'None') { $s += $Consequence }
         Add-TPExpectedStateFinding -ControlId $ControlId -Control $Control -FrameworkIds $FrameworkIds `
-            -Verified $v -Shortfalls $s -NotEstablished $u `
+            -Verified $v -Shortfalls $s -NotEstablished $u -AffectedObjects $cv.AffectedObjects `
             -CurrentValue "Device requirement: $($cov.Kind) coverage$(if (@($cov.Names).Count) { ' by ' + (@($cov.Names) -join ', ') })" `
             -RequiredValue $RequiredValue
         return
