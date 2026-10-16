@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **[Fix] Three controls cited 800-53 AC-2(9), the restriction on shared and group accounts, for
+  checks it does not describe.** AAD-8.2 (a recurring access review of privileged directory roles)
+  and SPO-3.1 (site collection administrators reviewed) now cite AC-6(7), Review of User Privileges:
+  the periodic review of the privileges assigned to a role to validate the need for them. AAD-12.3
+  (licensed member accounts with no sign-in for 90 days) now cites AC-2(3), Disable Accounts, which
+  names an account inactive for a defined period and is what its sibling AAD-12.2 already cites.
+  `Config/nist-800-53-catalog.json` gains AC-6(7) and drops AC-2(9), which nothing cites now, the
+  baseline documents carry the same rows, and `TP.FrameworkAccuracy.Tests.ps1` pins the three. Raised
+  on 2026-10-16, before it reached a client report.
 - **[Tests] The DNS suites no longer reach crt.sh.** `TP.DnsCollector`, `TP.DkimRotation` and
   `TP.DnsCollectorShape` stubbed `Invoke-WebRequest`, which the collector stopped using when the
   crt.sh and MTA-STS reads moved to the bounded HttpClient reader (`Get-TPBoundedHttpText`, 30 s and

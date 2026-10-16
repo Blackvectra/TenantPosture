@@ -94,6 +94,22 @@ Describe 'Framework crosswalk accuracy' {
             }
             $bad -join "`n" | Should -BeNullOrEmpty -Because 'every NIST token must be a well-formed 800-53r5 control ID'
         }
+
+        It 'the access-review and inactive-account controls cite the requirement that describes the check, not AC-2(9)' {
+            # AC-2(9) restricts the use of shared and group accounts. Three controls
+            # cited it and none looks at a shared account (raised 2026-10-16): a
+            # recurring review of the privileges assigned to a role is AC-6(7),
+            # Review of User Privileges, and an account inactive for a defined
+            # period is AC-2(3), Disable Accounts, which its sibling AAD-12.2 cites.
+            $expected = @{ 'AAD-8.2' = 'AC-6(7)'; 'SPO-3.1' = 'AC-6(7)'; 'AAD-12.3' = 'AC-2(3)' }
+            $bad = [System.Collections.Generic.List[string]]::new()
+            foreach ($id in @($expected.Keys | Sort-Object)) {
+                $c = @($script:Controls | Where-Object { $_.ControlId -eq $id })
+                $nist = if ($c.Count -and $c[0].References) { [string]$c[0].References.NIST } else { '' }
+                if ($nist -ne $expected[$id]) { $bad.Add("$id -> '$nist' (expected $($expected[$id]))") }
+            }
+            $bad -join "`n" | Should -BeNullOrEmpty -Because 'a citation that does not describe the check is the first thing a reader who knows 800-53 notices'
+        }
     }
 
     Context 'MITRE ATT&CK references are well-formed Enterprise technique IDs' {

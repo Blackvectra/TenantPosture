@@ -442,7 +442,7 @@ Review site admins: Get-SPOSite -Limit ALL | ForEach-Object { Get-SPOUser -Site 
 
 | Framework | Reference |
 |---|---|
-| NIST SP 800-53 Rev 5 | AC-2(9) |
+| NIST SP 800-53 Rev 5 | AC-6(7) |
 | CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.1.1 |
 | CIS Controls v8.1 | 5.4, 6.8 |
 | CMMC 2.0 | AC.L1-3.1.2 |
