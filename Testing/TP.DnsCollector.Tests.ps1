@@ -78,6 +78,10 @@ Describe 'Invoke-TPCollectDNSEmailRecords — what the collector does with the r
             }
 '@
         & $script:Inject 'Test-TPSafeProbeTarget' 'param([string] $HostName) return @{ Refused = $true; Reason = "probe disabled in test" }'
+        # The crt.sh and MTA-STS reads go through Get-TPBoundedHttpText (HttpClient, 30 s and
+        # 10 s timeouts), not Invoke-WebRequest: with only the cmdlet stubbed, every collector run
+        # in this suite reached crt.sh for real, and the suite took as long as crt.sh took.
+        & $script:Inject 'Get-TPBoundedHttpText' 'param([string] $Uri, [int] $TimeoutSeconds, [int] $MaxBytes, [System.Net.IPAddress] $Address) throw "no network in test"'
         & $script:Inject 'Invoke-WebRequest' 'throw "no network in test"'
 
         function script:Run {

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **[Tests] The DNS suites no longer reach crt.sh.** `TP.DnsCollector`, `TP.DkimRotation` and
+  `TP.DnsCollectorShape` stubbed `Invoke-WebRequest`, which the collector stopped using when the
+  crt.sh and MTA-STS reads moved to the bounded HttpClient reader (`Get-TPBoundedHttpText`, 30 s and
+  10 s timeouts), so every collector run in those suites fetched crt.sh for real and the suites took
+  as long as crt.sh took: 53 s, 14 s and 4.5 s locally (now 7.5 s, 1.4 s and 1.0 s), and the Pester job
+  on main ran past its 30-minute ceiling on 2026-10-15 while the same tree had passed in 19 minutes.
+  The three suites now inject a `Get-TPBoundedHttpText` that throws, and the MTA-STS context answers
+  only its own URL.
 - **[Fix] DNS-1.4 reads the MTA-STS policy when only the workstation's resolver cannot find the policy
   host.** `Test-TPSafeProbeTarget` resolved `mta-sts.<domain>` (and the MX and autodiscover hosts it
   guards the certificate probes with) through the operating system's resolver only. On the 2026-10-15

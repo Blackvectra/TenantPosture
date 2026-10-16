@@ -34,6 +34,11 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
             Set-Item -Path 'function:script:Test-TPSafeProbeTarget' -Value { param([string] $HostName)
                 $why = if ($script:T_ProbeReason) { $script:T_ProbeReason } else { 'no network in tests' }
                 @{ Refused = $true; Reason = $why } }
+            # The crt.sh and MTA-STS reads go through Get-TPBoundedHttpText (HttpClient), not
+            # Invoke-WebRequest: with only the cmdlet stubbed, every Collect reached crt.sh for real.
+            Set-Item -Path 'function:script:Get-TPBoundedHttpText' -Value {
+                param([string] $Uri, [int] $TimeoutSeconds, [int] $MaxBytes, [System.Net.IPAddress] $Address)
+                throw 'no network in tests' }
             Set-Item -Path 'function:script:Invoke-WebRequest' -Value { throw 'no network in tests' }
         }
 
@@ -187,7 +192,9 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
         AfterAll {
             & $script:Mod { param($o)
                 Set-Item -Path 'function:script:Test-TPSafeProbeTarget' -Value { param([string] $HostName) @{ Refused = $true; Reason = 'no network in tests' } }
-                Set-Item -Path 'function:script:Get-TPBoundedHttpText' -Value $o.Fetch
+                Set-Item -Path 'function:script:Get-TPBoundedHttpText' -Value {
+                    param([string] $Uri, [int] $TimeoutSeconds, [int] $MaxBytes, [System.Net.IPAddress] $Address)
+                    throw 'no network in tests' }
                 Set-Item -Path 'function:script:Resolve-TPWorkstationHostAddresses' -Value $o.Workstation
                 $script:T_WsAnswer = $null
             } $script:Orig
