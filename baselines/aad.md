@@ -823,7 +823,7 @@ PIM > Microsoft Entra roles > Access reviews > Create recurring quarterly review
 
 | Framework | Reference |
 |---|---|
-| NIST SP 800-53 Rev 5 | AC-2(9) |
+| NIST SP 800-53 Rev 5 | AC-6(7) |
 | CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.4.1 |
 | CIS Controls v8.1 | 6.8 |
 | CMMC 2.0 | AC.L1-3.1.2 |
@@ -1385,7 +1385,7 @@ Verify each account represents an active user. Disable accounts for departed emp
 
 | Framework | Reference |
 |---|---|
-| NIST SP 800-53 Rev 5 | AC-2(9) |
+| NIST SP 800-53 Rev 5 | AC-2(3) |
 | CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.6.1 |
 | CIS Controls v8.1 | 5.3 |
 | CMMC 2.0 | AC.L1-3.1.2 |

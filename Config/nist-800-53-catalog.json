@@ -30,11 +30,11 @@
   "controls": {
     "AC-2": "Account Management",
     "AC-2(3)": "Account Management | Disable Accounts",
-    "AC-2(9)": "Account Management | Restrictions on Use of Shared and Group Accounts",
     "AC-3": "Access Enforcement",
     "AC-4": "Information Flow Enforcement",
     "AC-6": "Least Privilege",
     "AC-6(5)": "Least Privilege | Privileged Accounts",
+    "AC-6(7)": "Least Privilege | Review of User Privileges",
     "AC-6(9)": "Least Privilege | Log Use of Privileged Functions",
     "AC-7": "Unsuccessful Logon Attempts",
     "AC-8": "System Use Notification",
