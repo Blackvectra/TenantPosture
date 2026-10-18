@@ -164,7 +164,7 @@ Each row below names the workflow file that implements it, so this list can be v
 **On every push and pull request to `main`** — note: the `ci.yml`, `codeql.yml`, `secret-scan.yml` and `dependency-review.yml` triggers are temporarily commented out pending a GitHub Actions billing reset, and those four run on manual dispatch only. Each workflow file carries a restore note in its header.
 
 
-1. **PSScriptAnalyzer** (`ci.yml`) — static analysis; Error severity fails the build. Findings upload to Code Scanning as SARIF.
+1. **PSScriptAnalyzer** (`ci.yml`) — static analysis; Error severity fails the build. Findings upload to Code Scanning as SARIF. A separate **PowerShell Security Analysis** job (`tools/Invoke-TPSecurityAnalysis.ps1`, rules in `PSScriptAnalyzerSecurity.psd1`) runs the analyzer's security rules (Invoke-Expression, plain-text and wrongly typed credentials, unencrypted authentication, broken hash algorithms, hard-coded computer names) at every severity; any finding fails the build, and an in-source `[SuppressMessage()]` counts as a finding. CI installs PSScriptAnalyzer, Pester and Pode by exact version and SHA-256 (`tools/pinned-modules.psd1`, `tools/Install-TPPinnedModule.ps1`): a gallery package whose hash differs is refused before it is read.
 2. **Pester** (`ci.yml`) — OWASP/ASVS security invariants (static + runtime).
 3. **CodeQL** (`codeql.yml`) — scans the GitHub Actions workflow YAML for supply-chain weaknesses; `security-extended` + `security-and-quality` query packs.
 4. **Gitleaks** (`secret-scan.yml`) — fast regex/entropy secret detection across full git history.

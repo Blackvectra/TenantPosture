@@ -708,7 +708,7 @@ Six GitHub Actions workflows cover the repository. All run automatically on push
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (118 suites) · PSScriptAnalyzer with SARIF upload · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (118 suites) · PSScriptAnalyzer with SARIF upload · PowerShell security rules (any finding fails) · CI modules installed by exact version and SHA-256 · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |

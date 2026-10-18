@@ -30,7 +30,7 @@ This matches the structure CISA expects in the [Secure Software Development Atte
 
 | Task | Evidence |
 |---|---|
-| PO.3.1 — Specify which tools or tool types must / should / shall not be used | `Install-TPPrerequisites.ps1` pins module versions; `PSScriptAnalyzerSettings.psd1` defines linting policy; `.github/dependabot.yml` automates updates |
+| PO.3.1 — Specify which tools or tool types must / should / shall not be used | `Install-TPPrerequisites.ps1` pins module versions; CI's PowerShell modules are pinned by version and SHA-256 (`tools/pinned-modules.psd1`); `PSScriptAnalyzerSettings.psd1` defines linting policy; `.github/dependabot.yml` automates updates |
 | PO.3.2 — Follow recommended security practices for each tool | All third-party GitHub Actions are SHA-pinned; PSResourceGet used over `Install-Module` for supply-chain verification |
 | PO.3.3 — Configure tools to generate artifacts of their support | PSScriptAnalyzer emits SARIF; Pester emits NUnit XML; both upload as workflow artifacts |
 
@@ -107,7 +107,7 @@ This matches the structure CISA expects in the [Secure Software Development Atte
 | Task | Evidence |
 |---|---|
 | PW.6.1 — Use compiler / interpreter / build tools with security in mind | `#Requires -Version 7.0` blocks PS 5.1 MSHTML injection (CVE-2025-54100); CI runs on `ubuntu-latest` + `windows-latest` with pinned PowerShell |
-| PW.6.2 — Determine which compiler, interpreter, and build-tool features should be used | PSScriptAnalyzer in Error mode; SARIF upload to Code Scanning; CodeQL on workflows |
+| PW.6.2 — Determine which compiler, interpreter, and build-tool features should be used | PSScriptAnalyzer in Error mode, and its security rules at every severity with no allowance (`tools/Invoke-TPSecurityAnalysis.ps1`); SARIF upload to Code Scanning; CodeQL on workflows |
 
 ### PW.7 — Review and / or Analyze Human-Readable Code to Identify Vulnerabilities
 

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **[CI] PSScriptAnalyzer's security rules block a merge, and CI's modules are installed by hash.**
+  The rules that catch `Invoke-Expression`, plain-text and wrongly typed credentials, unencrypted
+  authentication, MD5 and SHA-1, and hard-coded computer names are Warning severity, and the
+  PSScriptAnalyzer job fails on Error only, so they were reported and never stopped a merge. A new
+  **PowerShell Security Analysis** job runs them through `tools/Invoke-TPSecurityAnalysis.ps1`
+  (rules in `PSScriptAnalyzerSecurity.psd1`) at every severity: any finding fails, an in-source
+  `[SuppressMessage()]` included, and the SARIF goes to Code Scanning on every run so a fixed alert
+  closes. Nothing in the tree trips them today. CI also installed PSScriptAnalyzer, Pester and Pode
+  by version range with no hash check; `tools/Install-TPPinnedModule.ps1` now installs each by exact
+  version and the SHA-256 of its gallery package (`tools/pinned-modules.psd1`: PSScriptAnalyzer
+  1.25.0, Pester 5.8.0, Pode 2.14.1), refuses a package whose hash differs before reading it,
+  refuses an entry that would land outside the module folder, and every job imports the pinned
+  version explicitly. `TP.SecurityAnalysis.Tests.ps1` drives the installer with good, tampered and
+  path-escaping packages, drives the gate's decision and SARIF, and fails a workflow that installs a
+  module any other way.
 - **[Fix] Three controls cited 800-53 AC-2(9), the restriction on shared and group accounts, for
   checks it does not describe.** AAD-8.2 (a recurring access review of privileged directory roles)
   and SPO-3.1 (site collection administrators reviewed) now cite AC-6(7), Review of User Privileges:
