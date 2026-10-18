@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **[Fix] The three controls of the AC-2(9) correction, and AAD-12.2 beside them, cited CMMC
+  AC.L1-3.1.2, the types of transactions and functions a user may execute, for checks it does not
+  describe.** AAD-8.2 and SPO-3.1 (a review of privileged access) now cite AC.L2-3.1.5, least privilege
+  including privileged accounts, whose objective [b] is access to privileged accounts authorized in
+  accordance with least privilege; AAD-3.5, AAD-3.6 and AAD-15.1 already cite it. AAD-12.3 and its
+  sibling AAD-12.2 (licensed member and guest accounts with no sign-in for 90 days) now cite
+  AC.L1-3.1.1, limit system access to authorized users, whose objective [d] is exactly what an account
+  nobody uses fails. The baseline documents carry the same rows and `TP.FrameworkAccuracy.Tests.ps1`
+  pins the four. The SSP joins each control to its 800-171 requirement through this column, so the
+  four move with it; 3.1.1, 3.1.2 and 3.1.5 each keep automated evidence and the 41-of-110 count does
+  not change. Raised on 2026-10-18.
 - **[Fix] Three controls cited 800-53 AC-2(9), the restriction on shared and group accounts, for
   checks it does not describe.** AAD-8.2 (a recurring access review of privileged directory roles)
   and SPO-3.1 (site collection administrators reviewed) now cite AC-6(7), Review of User Privileges:

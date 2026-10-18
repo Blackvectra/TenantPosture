@@ -193,6 +193,23 @@ Describe 'Framework crosswalk accuracy' {
             }
             $bad -join "`n" | Should -BeNullOrEmpty -Because 'CMMC domain must match the 800-171 family and level must match the FAR-17 L1 subset'
         }
+
+        It 'the access-review and inactive-account controls cite the 800-171 requirement that describes the check, not 3.1.2' {
+            # 3.1.2 limits the types of transactions and functions a user may
+            # execute. A review of privileged access is 3.1.5 (access to privileged
+            # accounts authorized in accordance with least privilege) and an account
+            # left enabled with nobody using it is 3.1.1 (system access limited to
+            # authorized users). The SSP joins through this column, so a wrong id
+            # files the evidence under the wrong requirement (raised 2026-10-18).
+            $expected = @{ 'AAD-8.2' = 'AC.L2-3.1.5'; 'SPO-3.1' = 'AC.L2-3.1.5'; 'AAD-12.2' = 'AC.L1-3.1.1'; 'AAD-12.3' = 'AC.L1-3.1.1' }
+            $bad = [System.Collections.Generic.List[string]]::new()
+            foreach ($id in @($expected.Keys | Sort-Object)) {
+                $c = @($script:Controls | Where-Object { $_.ControlId -eq $id })
+                $cmmc = if ($c.Count -and $c[0].References) { [string]$c[0].References.CMMC } else { '' }
+                if ($cmmc -ne $expected[$id]) { $bad.Add("$id -> '$cmmc' (expected $($expected[$id]))") }
+            }
+            $bad -join "`n" | Should -BeNullOrEmpty -Because 'a citation that does not describe the check puts the evidence under the wrong 800-171 requirement in the SSP'
+        }
     }
 
     Context 'ISO/IEC 27001:2022 references — valid Annex A control numbers' {
