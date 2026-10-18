@@ -14,7 +14,10 @@
   permission says why it is needed, and Dependabot waits seven days after a release before
   proposing it. `TP.WorkflowSecurity.Tests.ps1` pins the gate, the hash-locked install, a reason on
   any suppression, SHA-pinned actions, `persist-credentials: false`, a concurrency group and no
-  workflow-level write access. yamllint, which the docs-lint job installed unpinned, is now hash-locked the same way
+  workflow-level write access. The online audit also found three pin comments naming a major tag
+  that has since moved (`# v6` beside the SHA of checkout v7.0.1, `# v4` for CodeQL v4.38.3,
+  `# v7` for upload-artifact v7.0.2); every pin comment now names the exact release, and the test
+  requires `# vX.Y.Z`. yamllint, which the docs-lint job installed unpinned, is now hash-locked the same way
   (`.github/yamllint-requirements.txt`, every wheel of each release). SECURITY.md also no longer says four workflows' triggers are
   commented out; they run on every pull request.
 - **[Fix] Three controls cited 800-53 AC-2(9), the restriction on shared and group accounts, for

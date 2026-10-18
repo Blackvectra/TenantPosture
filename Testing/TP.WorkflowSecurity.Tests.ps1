@@ -105,6 +105,16 @@ Describe 'Workflow security' {
             }
         }
 
+        It '<Name>: names the exact release each pinned SHA is, not a moving major tag' -ForEach $workflowCases {
+            # zizmor's online ref-version-mismatch audit caught "# v6" beside the
+            # SHA of checkout v7.0.1; a major tag moves, so the comment must be
+            # the full version the SHA was released as.
+            $text = Get-Content -LiteralPath $FullName -Raw
+            foreach ($m in [regex]::Matches($text, '(?m)^\s*(?:-\s*)?uses:\s*\S+@[0-9a-f]{40}(?<rest>[^\r\n]*)')) {
+                $m.Groups['rest'].Value | Should -Match '\A\s+#\s+v\d+\.\d+\.\d+\s*\z' -Because "'$($m.Value.Trim())' needs '# vX.Y.Z'"
+            }
+        }
+
         It '<Name>: never leaves the checkout token on disk' -ForEach $workflowCases {
             $lines = Get-Content -LiteralPath $FullName
             for ($i = 0; $i -lt $lines.Count; $i++) {
