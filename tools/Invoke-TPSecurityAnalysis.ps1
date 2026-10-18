@@ -16,7 +16,7 @@
     named as suppressed.
 
     InjectionHunter (Microsoft's PSScriptAnalyzer rules for code injection:
-    Invoke-Expression, Add-Type, ScriptBlock.Create and the other dangerous
+    string evaluation, Add-Type, ScriptBlock.Create and the other dangerous
     methods, cmd/powershell with an expandable string, dynamic member and
     method names, hand-rolled quote escaping) runs as a second pass, pinned
     and hash-verified like the analyzer. Its rules are deliberately broad, so
