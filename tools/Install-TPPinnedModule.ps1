@@ -5,8 +5,8 @@
     SHA-256 matches tools/pinned-modules.psd1.
 
 .DESCRIPTION
-    Install-Module and Install-PSResource take whatever the gallery serves for a
-    version range and check no hash, so a republished or substituted package
+    The gallery install cmdlets take whatever the gallery serves for a version
+    range and check no hash, so a republished or substituted package
     would run in CI with the job's token. This script downloads the .nupkg for
     the pinned version, compares its SHA-256 with the pin (ordinal, before
     anything is extracted), and extracts it to <Destination>/<Name>/<Version>,
@@ -102,8 +102,9 @@ function Expand-TPModulePackage {
             if (-not $dest.StartsWith($root, [System.StringComparison]::Ordinal)) {
                 throw "Package entry '$rel' resolves outside $root; the package was refused."
             }
-            if ($rel.EndsWith('/')) { $null = New-Item -ItemType Directory -Path $dest -Force; continue }
-            $null = New-Item -ItemType Directory -Path ([System.IO.Path]::GetDirectoryName($dest)) -Force
+            # Directory.CreateDirectory takes the path literally (no wildcards).
+            if ($rel.EndsWith('/')) { $null = [System.IO.Directory]::CreateDirectory($dest); continue }
+            $null = [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($dest))
             [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dest, $true)
         }
     } finally {
@@ -156,7 +157,7 @@ if ($DefinitionsOnly) { return }
 $ErrorActionPreference = 'Stop'
 if (-not $Name) { throw 'Name one or more modules from the pin file.' }
 if ($PackagePath -and $Name.Count -ne 1) { throw '-PackagePath takes exactly one -Name.' }
-$null = New-Item -ItemType Directory -Path $Destination -Force
+$null = [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetFullPath($Destination))
 foreach ($n in $Name) {
     $pin = Get-TPModulePin -Name $n -PinFile $PinFile
     $installed = Install-TPModulePackage -Pin $pin -Destination $Destination -PackagePath $PackagePath
