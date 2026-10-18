@@ -32,6 +32,12 @@ env:
   SHIP_DIRS: 'Apply Build Collectors Config Device Email-IR Evaluators Lib Onboard Publishers Web baselines docs sample-headers sample-report tools'
   SHIP_ROOT_EXTENSIONS: '.ps1 .psm1 .psd1 .md .txt'
 
+# One run per workflow and ref at a time; a release or scorecard run in
+# progress is never cancelled by a newer one, which waits instead.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   sbom:
     name: CycloneDX SBOM
@@ -39,7 +45,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -55,7 +61,7 @@ jobs:
           Write-Host ('SBOM OK: {0} components, format {1}' -f @($sbom.components).Count, $sbom.bomFormat)
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-cyclonedx
           path: sbom/tp-assessment.cdx.json
@@ -72,14 +78,12 @@ jobs:
     # repository settings and no release asset is published without a person.
     environment: release
     permissions:
-      # Needed to create/update the GitHub Release and upload assets.
-      contents: write
-      # Needed by attest-build-provenance.
-      id-token: write
-      attestations: write
+      contents: write  # create or update the GitHub Release and upload assets
+      id-token: write  # sign the provenance attestation (OIDC)
+      attestations: write  # store the build provenance attestation
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -222,7 +226,7 @@ jobs:
       catalog: ${{ steps.cat.outputs.catalog }}
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 

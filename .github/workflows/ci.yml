@@ -10,6 +10,13 @@ on:
 permissions:
   contents: read
 
+# One run per workflow and pull request (or branch). A newer push to the same
+# pull request cancels the older run; runs on main and scheduled runs are
+# never cancelled, so every commit on main keeps a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   pester:
     name: Pester Tests
@@ -20,7 +27,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -104,7 +111,7 @@ jobs:
 
       - name: Upload Pester results
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pester-results
           path: pester-results.xml
@@ -121,7 +128,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -170,7 +177,7 @@ jobs:
 
       - name: Upload results
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pester-web-windows
           path: pester-web-windows.xml
@@ -185,10 +192,10 @@ jobs:
       # security-events: write is required for the upload-sarif step at the
       # bottom of this job. Without it, the SARIF upload silently no-ops and
       # PowerShell findings never reach the Code Scanning UI.
-      security-events: write
+      security-events: write  # upload the PSScriptAnalyzer SARIF to Code Scanning
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -333,7 +340,7 @@ jobs:
         # Run even if the analyzer step failed, so Error-severity findings
         # still surface in the Code Scanning UI for triage.
         if: always() && hashFiles('psscriptanalyzer.sarif') != ''
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: psscriptanalyzer.sarif
           # `category` namespaces results so PSScriptAnalyzer findings don't
@@ -346,14 +353,17 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Lint YAML (workflows and config)
         run: |
-          pip install --quiet yamllint
-          yamllint -c .yamllint.yml .github Config
+          # Exact releases by SHA-256, wheels only (.github/yamllint-requirements.txt).
+          python3 -m venv "$RUNNER_TEMP/yamllint"
+          "$RUNNER_TEMP/yamllint/bin/pip" install --quiet --disable-pip-version-check \
+            --require-hashes --only-binary=:all: -r .github/yamllint-requirements.txt
+          "$RUNNER_TEMP/yamllint/bin/yamllint" -c .yamllint.yml .github Config
 
       - name: Check Markdown (code fences and relative links)
         run: python3 tools/Test-MarkdownDocs.py
@@ -364,7 +374,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -379,7 +389,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
