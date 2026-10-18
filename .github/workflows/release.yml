@@ -32,6 +32,12 @@ env:
   SHIP_DIRS: 'Apply Build Collectors Config Device Email-IR Evaluators Lib Onboard Publishers Web baselines docs sample-headers sample-report tools'
   SHIP_ROOT_EXTENSIONS: '.ps1 .psm1 .psd1 .md .txt'
 
+# One run per workflow and ref at a time; a release or scorecard run in
+# progress is never cancelled by a newer one, which waits instead.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   sbom:
     name: CycloneDX SBOM
@@ -72,11 +78,9 @@ jobs:
     # repository settings and no release asset is published without a person.
     environment: release
     permissions:
-      # Needed to create/update the GitHub Release and upload assets.
-      contents: write
-      # Needed by attest-build-provenance.
-      id-token: write
-      attestations: write
+      contents: write  # create or update the GitHub Release and upload assets
+      id-token: write  # sign the provenance attestation (OIDC)
+      attestations: write  # store the build provenance attestation
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6

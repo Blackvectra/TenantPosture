@@ -30,6 +30,13 @@ on:
 permissions:
   contents: read
 
+# One run per workflow and pull request (or branch). A newer push to the same
+# pull request cancels the older run; runs on main and scheduled runs are
+# never cancelled, so every commit on main keeps a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
@@ -43,13 +50,10 @@ jobs:
     # runs via PSScriptAnalyzer in ci.yml regardless of repo visibility.)
     if: github.event.repository.private == false
     permissions:
-      # required to publish results to Code Scanning
-      security-events: write
-      # required to fetch internal or private CodeQL packs
-      packages: read
-      # required for reading the repo
-      actions: read
-      contents: read
+      security-events: write  # publish results to Code Scanning
+      packages: read  # fetch internal or private CodeQL packs
+      actions: read  # read workflow run metadata for the analysis
+      contents: read  # read the repository
 
     strategy:
       fail-fast: false

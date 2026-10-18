@@ -704,7 +704,7 @@ GDAP relationships must be active in Partner Center before the batch runner can 
 
 ## CI/CD
 
-Six GitHub Actions workflows cover the repository. All run automatically on push and pull request to `main` (plus the scheduled sweeps noted below), and each also accepts a manual `workflow_dispatch`. Every job carries a `timeout-minutes` bound so a hung job cannot run to the six-hour default and burn a month of Actions minutes:
+Seven GitHub Actions workflows cover the repository. All run automatically on push and pull request to `main` (plus the scheduled sweeps noted below), and each also accepts a manual `workflow_dispatch`. Every job carries a `timeout-minutes` bound so a hung job cannot run to the six-hour default and burn a month of Actions minutes:
 
 | Workflow | What it does |
 |---|---|
@@ -713,6 +713,7 @@ Six GitHub Actions workflows cover the repository. All run automatically on push
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
 | **Scorecard** | OpenSSF Scorecard supply-chain posture, weekly |
+| **zizmor** | Static security analysis of the workflows themselves at the strictest persona; any finding fails; hash-locked install; weekly sweep |
 | **Release** | On `v*` tags: CycloneDX SBOM generation + Authenticode signature/integrity verification |
 
 The framework-accuracy suite validates every SCuBA citation against the bundled ScubaGear v2.0.0 policy list, every CIS Controls citation against the v8.1 safeguard list, CMMC domain/level correctness, and ISO 27001:2022 Annex-A ranges — a wrong citation fails the PR, not the client report.

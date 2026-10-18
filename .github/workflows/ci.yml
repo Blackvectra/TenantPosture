@@ -10,6 +10,13 @@ on:
 permissions:
   contents: read
 
+# One run per workflow and pull request (or branch). A newer push to the same
+# pull request cancels the older run; runs on main and scheduled runs are
+# never cancelled, so every commit on main keeps a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   pester:
     name: Pester Tests
@@ -185,7 +192,7 @@ jobs:
       # security-events: write is required for the upload-sarif step at the
       # bottom of this job. Without it, the SARIF upload silently no-ops and
       # PowerShell findings never reach the Code Scanning UI.
-      security-events: write
+      security-events: write  # upload the PSScriptAnalyzer SARIF to Code Scanning
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
@@ -352,8 +359,11 @@ jobs:
 
       - name: Lint YAML (workflows and config)
         run: |
-          pip install --quiet yamllint
-          yamllint -c .yamllint.yml .github Config
+          # Exact releases by SHA-256, wheels only (.github/yamllint-requirements.txt).
+          python3 -m venv "$RUNNER_TEMP/yamllint"
+          "$RUNNER_TEMP/yamllint/bin/pip" install --quiet --disable-pip-version-check \
+            --require-hashes --only-binary=:all: -r .github/yamllint-requirements.txt
+          "$RUNNER_TEMP/yamllint/bin/yamllint" -c .yamllint.yml .github Config
 
       - name: Check Markdown (code fences and relative links)
         run: python3 tools/Test-MarkdownDocs.py

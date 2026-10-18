@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **[CI] The workflows are audited for security on every pull request (zizmor).** The workflows are
+  the supply chain of the tool: the release job publishes the archive and signs its provenance.
+  `.github/workflows/zizmor.yml` runs zizmor at its strictest persona (`auditor`), every severity
+  and confidence, with the online audits (impostor commits, known-vulnerable actions) on the job's
+  read-only token; any finding fails the job and the SARIF goes to Code Scanning. zizmor is
+  installed by exact version and SHA-256, wheel only (`.github/zizmor-requirements.txt`), and
+  Dependabot keeps it current. Its first run found 22 items, all fixed here: every workflow now has
+  a concurrency group (pull-request runs cancel their superseded run; main, schedule and release
+  runs are never cancelled), Scorecard no longer grants `read-all` at the workflow level, each
+  permission says why it is needed, and Dependabot waits seven days after a release before
+  proposing it. `TP.WorkflowSecurity.Tests.ps1` pins the gate, the hash-locked install, a reason on
+  any suppression, SHA-pinned actions, `persist-credentials: false`, a concurrency group and no
+  workflow-level write access. yamllint, which the docs-lint job installed unpinned, is now hash-locked the same way
+  (`.github/yamllint-requirements.txt`, every wheel of each release). SECURITY.md also no longer says four workflows' triggers are
+  commented out; they run on every pull request.
 - **[Fix] Three controls cited 800-53 AC-2(9), the restriction on shared and group accounts, for
   checks it does not describe.** AAD-8.2 (a recurring access review of privileged directory roles)
   and SPO-3.1 (site collection administrators reviewed) now cite AC-6(7), Review of User Privileges:

@@ -22,6 +22,10 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    # Wait a week after a release before proposing it: most malicious or
+    # broken action releases are found and pulled within days.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "ci(deps)"
     groups:
@@ -31,3 +35,15 @@ updates:
       actions:
         patterns:
           - "*"
+
+  # The pinned, hash-locked Python tools CI installs: zizmor (zizmor.yml) and
+  # yamllint (ci.yml). Dependabot rewrites each version and its hashes together.
+  - package-ecosystem: "pip"
+    directory: "/.github"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "ci(deps)"

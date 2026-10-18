@@ -16,7 +16,14 @@ on:
   push:
     branches: [ main ]
 
-permissions: read-all
+# Nothing at the workflow level; the one job declares exactly what it uses.
+permissions: {}
+
+# One run per workflow and ref at a time; a release or scorecard run in
+# progress is never cancelled by a newer one, which waits instead.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   analysis:
@@ -32,12 +39,10 @@ jobs:
     # is ever made public. No red X, no lost coverage.
     if: ${{ github.event.repository.private == false }}
     permissions:
-      # Needed to upload the SARIF results to Code Scanning
-      security-events: write
-      # Needed to publish results and get a badge
-      id-token: write
-      contents: read
-      actions: read
+      security-events: write  # upload the SARIF results to Code Scanning
+      id-token: write  # publish results and get a badge (OIDC)
+      contents: read  # read the repository
+      actions: read  # read workflow runs for the token-permissions and CI checks
 
     steps:
       - name: Checkout
