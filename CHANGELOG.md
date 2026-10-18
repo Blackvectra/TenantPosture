@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **[Fix] SPO-1.4 and SPO-3.4 (guest access expiration) cite CMMC AC.L1-3.1.1, not AC.L1-3.1.2.** Both
+  evaluators read the SharePoint shell's `ExternalUserExpirationRequired` and `ExternalUserExpireInDays`
+  and pass only when guest access lapses after a finite number of days: who keeps access, which is
+  3.1.1 (objective [d], system access limited to authorized users), not the types of transactions and
+  functions a user may execute (3.1.2). Follows the AC.L1-3.1.2 correction of AAD-8.2, SPO-3.1,
+  AAD-12.2 and AAD-12.3; the baseline document and the `TP.FrameworkAccuracy.Tests.ps1` pin follow.
 - **[Fix] The three controls of the AC-2(9) correction, and AAD-12.2 beside them, cited CMMC
   AC.L1-3.1.2, the types of transactions and functions a user may execute, for checks it does not
   describe.** AAD-8.2 and SPO-3.1 (a review of privileged access) now cite AC.L2-3.1.5, least privilege
