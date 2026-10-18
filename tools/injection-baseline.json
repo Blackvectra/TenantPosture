@@ -1,0 +1,364 @@
+{
+  "description": "InjectionHunter findings reviewed and accepted, each with the reason it is not an injection. Read by tools/Invoke-TPSecurityAnalysis.ps1: a finding not listed here fails the build, and an entry nothing matches fails as stale. Matched by path, rule and the first line of the flagged code (whitespace collapsed), with a count. Add an entry only after reviewing the code; fixing the code is better.",
+  "tool": "InjectionHunter 1.0.0",
+  "reviewed": "2026-10-18",
+  "entries": [
+    {
+      "Path": "Apply-TPBaseline.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$exoActive[0].$p",
+      "Count": 1,
+      "Reason": "Instance property read on the Exchange connection object; $p iterates the literal list 'TenantId','TenantID','TenantGuid' and is checked with PSObject.Properties.Match first. No input chooses the name."
+    },
+    {
+      "Path": "Collectors/PowerPlatform/Invoke-TPCollectPowerPlatform.ps1",
+      "Rule": "InjectionRisk.AddType",
+      "Text": "Add-Type -LiteralPath $dll -ErrorAction Stop",
+      "Count": 1,
+      "Reason": "Loads the two MSAL assemblies shipped in the installed Microsoft.Graph.Authentication module's Dependencies folder (fixed file names joined to the module's own ModuleBase). No source code is compiled; whoever can write that module folder already runs code as the operator."
+    },
+    {
+      "Path": "Device/Invoke-TPDeviceCompliance.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$item.$Name",
+      "Count": 1,
+      "Reason": "Reads one registry value by name from Get-ItemProperty's own result; $Name is the value name the calling check passes as a literal. No input chooses the name."
+    },
+    {
+      "Path": "Email-IR/Collectors/Invoke-TPEmailCollectUserSecurity.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$m.$fld",
+      "Count": 1,
+      "Reason": "Instance property read on an authentication-method object; $fld iterates the literal list 'displayName','phoneNumber','emailAddress' and is checked against PSObject.Properties first."
+    },
+    {
+      "Path": "Email-IR/Publishers/Publish-TPEmailIncidentReport.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$byState.$section",
+      "Count": 1,
+      "Reason": "Reads one group of findings from the publisher's own grouping; $section iterates the literal list 'Critical','High','Notes','Satisfied'."
+    },
+    {
+      "Path": "Email-IR/Publishers/Publish-TPEmailIncidentReport.ps1",
+      "Rule": "InjectionRisk.UnsafeEscaping",
+      "Text": "([string]$s.Body) -replace '<br>',\"`n\" -replace '<[^>]+>',''",
+      "Count": 1,
+      "Reason": "Turns HTML line breaks into newlines and strips tags for Markdown text; nothing is quoted for a parser, and the result is escaped by the Markdown publisher before output."
+    },
+    {
+      "Path": "Email-IR/Publishers/Publish-TPSignInTriageReport.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$byState.$section",
+      "Count": 1,
+      "Reason": "Reads one group of findings from the publisher's own grouping; $section iterates the literal list 'Critical','High','Notes','Satisfied'."
+    },
+    {
+      "Path": "Evaluators/Test-TPControl-AAD.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$obj.$prop",
+      "Count": 1,
+      "Reason": "Get-SafeProp, an instance property read inside try/catch; every caller passes the property name as a literal string. No tenant data chooses the name, and no static member is reachable through it."
+    },
+    {
+      "Path": "Evaluators/Test-TPControlDNS.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$tls.$role",
+      "Count": 1,
+      "Reason": "Reads one certificate record by key from the collector's own TLS map; $role iterates that map's own keys (the probe roles the collector wrote)."
+    },
+    {
+      "Path": "Invoke-TPBatchAssessment.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$c.$declName",
+      "Count": 1,
+      "Reason": "Reads a clients.json record field; $declName iterates the literal list 'ThirdPartyEDR','ThirdPartyAwareness' and is checked with PSObject.Properties first."
+    },
+    {
+      "Path": "Invoke-TPBatchAssessment.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$o.$n",
+      "Count": 1,
+      "Reason": "The banner's record-field reader; every caller passes the field name as a literal ('Profile','ThirdPartyEDR','ThirdPartyAwareness') and it is checked with PSObject.Properties first."
+    },
+    {
+      "Path": "Lib/ConvertTo-TPPsLiteral.ps1",
+      "Rule": "InjectionRisk.UnsafeEscaping",
+      "Text": "$v -replace \"'\", \"''\"",
+      "Count": 1,
+      "Reason": "The repository's one quoting rule for generated PowerShell: the value has already been refused if it holds U+2018..U+201B, a line break or separator, NUL, or a control or format character, so doubling the ASCII apostrophe is complete. TP.PsLiteral.Tests.ps1 parses the emitted script to prove it."
+    },
+    {
+      "Path": "Lib/Get-TPBreakGlassExclusions.ps1",
+      "Rule": "InjectionRisk.UnsafeEscaping",
+      "Text": "$pat -replace \"'\", \"''\"",
+      "Count": 1,
+      "Reason": "OData string escaping for a Graph $filter (the OData rule is doubling the apostrophe); $pat iterates the literal list 'Break Glass','BreakGlass','Emergency Access','EmergencyAccess'. No input reaches it."
+    },
+    {
+      "Path": "Lib/Get-TPControlDefinitions.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$ctrl.$field",
+      "Count": 1,
+      "Reason": "Validates controls.json rows; $field iterates the literal list of required field names and is checked with PSObject.Properties first."
+    },
+    {
+      "Path": "Lib/New-TPDistributionListRemediation.ps1",
+      "Rule": "InjectionRisk.UnsafeEscaping",
+      "Text": "$v -replace \"'\", \"''\"",
+      "Count": 1,
+      "Reason": "Quotes a value for a printed administrator command after refusing U+2018..U+201B, U+0085/2028/2029, line breaks and every control or format character, so doubling the ASCII apostrophe is complete; TP.DistributionListRemediation.Tests.ps1 pins the command grammar."
+    },
+    {
+      "Path": "Lib/New-TPProfile.ps1",
+      "Rule": "InjectionRisk.UnsafeEscaping",
+      "Text": "$wrote.Substring(1, $wrote.Length - 2) -replace \"''\", \"'\"",
+      "Count": 1,
+      "Reason": "Undoes the data-file quoting to compare the round-tripped CompanyName with what was written; the result is only compared, never parsed or executed."
+    },
+    {
+      "Path": "Lib/Resolve-TPExoRecipient.ps1",
+      "Rule": "InjectionRisk.UnsafeEscaping",
+      "Text": "$id -replace \"'\", \"''\"",
+      "Count": 1,
+      "Reason": "Quotes the legacy DN for Get-Recipient -Filter by doubling the ASCII apostrophe; the identifier is refused first if it holds U+2018..U+201B or any control, format or line-separator character, so no other quote character can end the value (TP.ExchangeTruth.Tests.ps1)."
+    },
+    {
+      "Path": "Onboard/Register-TPTenantApp.ps1",
+      "Rule": "InjectionRisk.UnsafeEscaping",
+      "Text": "$DisplayName -replace \"'\", \"''\"",
+      "Count": 1,
+      "Reason": "OData string escaping for the duplicate-app check's Graph $filter (the OData rule is doubling the apostrophe); $DisplayName is the operator's own parameter, and the query is read-only."
+    },
+    {
+      "Path": "Publishers/Publish-TPAssessmentHTML.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$Connections.$svc",
+      "Count": 1,
+      "Reason": "Reads one connection flag; $svc iterates the literal list 'Graph','EXO','IPPSSession','Teams','SharePoint'."
+    },
+    {
+      "Path": "Testing/TP.AccessReviews.Tests.ps1",
+      "Rule": "InjectionRisk.Create",
+      "Text": "[scriptblock]::Create($b)",
+      "Count": 1,
+      "Reason": "Test harness: the script block is built from code written in the test or from this repository's own parsed source, to stand in for a command or bind a parameter; no tenant or external input reaches it."
+    },
+    {
+      "Path": "Testing/TP.AppPermissions.Tests.ps1",
+      "Rule": "InjectionRisk.Create",
+      "Text": "[scriptblock]::Create($b)",
+      "Count": 1,
+      "Reason": "Test harness: the script block is built from code written in the test or from this repository's own parsed source, to stand in for a command or bind a parameter; no tenant or external input reaches it."
+    },
+    {
+      "Path": "Testing/TP.AppPermissions.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$script:Cat.$tier",
+      "Count": 1,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.ComplianceMatrix.Tests.ps1",
+      "Rule": "InjectionRisk.ForeachObjectInjection",
+      "Text": "& { foreach ($py in 'python3','python') { try { $null = & $py -c 'import openpyxl' 2>&1; if ($LASTEXITCODE -eq 0) { return $true } } catch { } } return $false }",
+      "Count": 1,
+      "Reason": "Test probe for an optional Python library: the only variable is the interpreter name, taken from the literal list 'python3','python'; no input chooses a command or a member."
+    },
+    {
+      "Path": "Testing/TP.ComponentVerdicts.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$scope.$b",
+      "Count": 1,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.DeviceBaseline.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$i.$f",
+      "Count": 1,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.DeviceCompliance.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$d.$f",
+      "Count": 1,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.DistributionListCatalog.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$k.T.$f",
+      "Count": 2,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.DistributionListCatalog.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$r.$f",
+      "Count": 1,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.DistributionListCatalog.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$script:Std.$k",
+      "Count": 1,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.DistributionListRemediation.Tests.ps1",
+      "Rule": "InjectionRisk.Create",
+      "Text": "[scriptblock]::Create($Expr)",
+      "Count": 1,
+      "Reason": "Runs a read-only Compare expression that the module under test generated from the test's own fixtures, against stubbed Get-* commands, to prove it answers True or False; running it is the test's purpose, and no tenant input reaches it."
+    },
+    {
+      "Path": "Testing/TP.DistributionLists.Tests.ps1",
+      "Rule": "InjectionRisk.Create",
+      "Text": "[scriptblock]::Create($b)",
+      "Count": 1,
+      "Reason": "Test harness: the script block is built from code written in the test or from this repository's own parsed source, to stand in for a command or bind a parameter; no tenant or external input reaches it."
+    },
+    {
+      "Path": "Testing/TP.DkimRotation.Tests.ps1",
+      "Rule": "InjectionRisk.Create",
+      "Text": "[scriptblock]::Create($b)",
+      "Count": 1,
+      "Reason": "Test harness: the script block is built from code written in the test or from this repository's own parsed source, to stand in for a command or bind a parameter; no tenant or external input reaches it."
+    },
+    {
+      "Path": "Testing/TP.DnsCollector.Tests.ps1",
+      "Rule": "InjectionRisk.Create",
+      "Text": "[scriptblock]::Create($b)",
+      "Count": 1,
+      "Reason": "Test harness: the script block is built from code written in the test or from this repository's own parsed source, to stand in for a command or bind a parameter; no tenant or external input reaches it."
+    },
+    {
+      "Path": "Testing/TP.ExchangeTruth.Tests.ps1",
+      "Rule": "InjectionRisk.Create",
+      "Text": "[scriptblock]::Create($b)",
+      "Count": 2,
+      "Reason": "Test harness: the script block is built from code written in the test or from this repository's own parsed source, to stand in for a command or bind a parameter; no tenant or external input reaches it."
+    },
+    {
+      "Path": "Testing/TP.FrameworkAccuracy.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$c.$fld",
+      "Count": 1,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.FrameworkDefault.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$_.References.$fw",
+      "Count": 1,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.IdentityTruth.Tests.ps1",
+      "Rule": "InjectionRisk.ForeachObjectInjection",
+      "Text": "& { foreach ($py in 'python3','python') { try { $null = & $py -c 'import openpyxl' 2>&1; if ($LASTEXITCODE -eq 0) { return $true } } catch { } } return $false }",
+      "Count": 1,
+      "Reason": "Test probe for an optional Python library: the only variable is the interpreter name, taken from the literal list 'python3','python'; no input chooses a command or a member."
+    },
+    {
+      "Path": "Testing/TP.ManualReviewQuestionnaire.Tests.ps1",
+      "Rule": "InjectionRisk.ForeachObjectInjection",
+      "Text": "& { foreach ($py in 'python3', 'python') { try { $null = & $py -c 'import reportlab' 2>&1; if ($LASTEXITCODE -eq 0) { return $true } } catch { } }; return $false }",
+      "Count": 1,
+      "Reason": "Test probe for an optional Python library: the only variable is the interpreter name, taken from the literal list 'python3','python'; no input chooses a command or a member."
+    },
+    {
+      "Path": "Testing/TP.ManualReviewQuestionnaire.Tests.ps1",
+      "Rule": "InjectionRisk.ForeachObjectInjection",
+      "Text": "& { foreach ($py in 'python3', 'python') { try { $null = & $py -c 'import reportlab, pypdf' 2>&1; if ($LASTEXITCODE -eq 0) { return $true } } catch { } }; return $false }",
+      "Count": 1,
+      "Reason": "Test probe for an optional Python library: the only variable is the interpreter name, taken from the literal list 'python3','python'; no input chooses a command or a member."
+    },
+    {
+      "Path": "Testing/TP.NISTMatrix.Tests.ps1",
+      "Rule": "InjectionRisk.ForeachObjectInjection",
+      "Text": "& { foreach ($py in 'python3','python') { try { $null = & $py -c 'import openpyxl' 2>&1; if ($LASTEXITCODE -eq 0) { return $true } } catch { } } return $false }",
+      "Count": 1,
+      "Reason": "Test probe for an optional Python library: the only variable is the interpreter name, taken from the literal list 'python3','python'; no input chooses a command or a member."
+    },
+    {
+      "Path": "Testing/TP.NISTMatrix.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$_.References.$fw",
+      "Count": 1,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.OutputFolderProbe.Tests.ps1",
+      "Rule": "InjectionRisk.Create",
+      "Text": "[scriptblock]::Create(\"param(`$Path) '$fmt'\")",
+      "Count": 1,
+      "Reason": "Test harness: the script block is built from code written in the test or from this repository's own parsed source, to stand in for a command or bind a parameter; no tenant or external input reaches it."
+    },
+    {
+      "Path": "Testing/TP.PIMPolicies.Tests.ps1",
+      "Rule": "InjectionRisk.Create",
+      "Text": "[scriptblock]::Create($b)",
+      "Count": 1,
+      "Reason": "Test harness: the script block is built from code written in the test or from this repository's own parsed source, to stand in for a command or bind a parameter; no tenant or external input reaches it."
+    },
+    {
+      "Path": "Testing/TP.ReportSite.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$f.$field",
+      "Count": 1,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.SSP.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$p.Value.$f",
+      "Count": 1,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.SSP.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$script:Impact.$section",
+      "Count": 2,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.SSPQuestionnaire.Tests.ps1",
+      "Rule": "InjectionRisk.ForeachObjectInjection",
+      "Text": "& { foreach ($py in 'python3', 'python') { try { $null = & $py -c 'import reportlab' 2>&1; if ($LASTEXITCODE -eq 0) { return $true } } catch { } }; return $false }",
+      "Count": 1,
+      "Reason": "Test probe for an optional Python library: the only variable is the interpreter name, taken from the literal list 'python3','python'; no input chooses a command or a member."
+    },
+    {
+      "Path": "Testing/TP.SSPQuestionnaire.Tests.ps1",
+      "Rule": "InjectionRisk.ForeachObjectInjection",
+      "Text": "& { foreach ($py in 'python3', 'python') { try { $null = & $py -c 'import reportlab, pypdf' 2>&1; if ($LASTEXITCODE -eq 0) { return $true } } catch { } }; return $false }",
+      "Count": 1,
+      "Reason": "Test probe for an optional Python library: the only variable is the interpreter name, taken from the literal list 'python3','python'; no input chooses a command or a member."
+    },
+    {
+      "Path": "Testing/TP.Security.Tests.ps1",
+      "Rule": "InjectionRisk.StaticPropertyInjection",
+      "Text": "$ctrl.$field",
+      "Count": 1,
+      "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
+    },
+    {
+      "Path": "Testing/TP.TeamsTruth.Tests.ps1",
+      "Rule": "InjectionRisk.Create",
+      "Text": "[scriptblock]::Create(\"param(`$Identity) `$script:TeamsObj['$n']\")",
+      "Count": 1,
+      "Reason": "Test harness: the script block is built from code written in the test or from this repository's own parsed source, to stand in for a command or bind a parameter; no tenant or external input reaches it."
+    },
+    {
+      "Path": "Testing/TP.WebServer.Tests.ps1",
+      "Rule": "InjectionRisk.Create",
+      "Text": "[scriptblock]::Create(\"param($($attr.Extent.Text) [string] `$D) 'bound'\")",
+      "Count": 1,
+      "Reason": "Test harness: the script block is built from code written in the test or from this repository's own parsed source, to stand in for a command or bind a parameter; no tenant or external input reaches it."
+    }
+  ]
+}

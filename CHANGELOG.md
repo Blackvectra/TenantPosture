@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **[CI] Microsoft's InjectionHunter rules gate every pull request.** CodeQL does not analyze
+  PowerShell, so nothing looked for code-injection patterns in the tool's own language.
+  `tools/Invoke-TPSecurityAnalysis.ps1` now runs InjectionHunter 1.0.0 (pinned and hash-verified like
+  the analyzer) after the security rules: `Invoke-Expression`, `Add-Type`, `ScriptBlock.Create`
+  and the other dangerous methods, `cmd`/`powershell` given an expandable string, dynamic member and
+  method names, and hand-rolled quote escaping. Its rules are deliberately broad, so a finding passes
+  only when it is reviewed into `tools/injection-baseline.json` with the reason it is not an
+  injection (matched by file, rule and code text, with a count, so a second copy of a reviewed line
+  is new; an entry nothing matches fails as stale), or when it is a `-replace` whose every
+  replacement is the empty string, which the gate proves from the AST because the rule cannot tell
+  a removal from an escape. The first run found 97: 43 removals, 54 reviewed (19 in shipped code,
+  each with its own reason; the rest in tests). Review found one gap: the Exchange recipient
+  resolver quoted an inbox rule's legacy DN into a `Get-Recipient -Filter` by doubling the ASCII
+  apostrophe but did not refuse U+2018..U+201B, which PowerShell syntax also reads as quotes, so a
+  crafted DN could have widened the filter to another recipient and classified the rule by the
+  wrong object. It is now refused before any lookup (not asked, never answered), pinned in
+  `TP.ExchangeTruth.Tests.ps1`.
 - **[CI] PSScriptAnalyzer's security rules block a merge, and CI's modules are installed by hash.**
   The rules that catch `Invoke-Expression`, plain-text and wrongly typed credentials, unencrypted
   authentication, MD5 and SHA-1, and hard-coded computer names are Warning severity, and the
