@@ -13,7 +13,7 @@
 
 # The base image by digest (7.5-ubuntu-24.04 as of 2026-10-19): a tag can be
 # re-pointed at a different image; a digest cannot.
-FROM mcr.microsoft.com/powershell:7.5-ubuntu-24.04@sha256:370134f0be3867fadc2e5845c39ed59120fbd4d19ca5136f40831a96f0404cf1
+FROM mcr.microsoft.com/powershell:7.5-ubuntu-24.04@sha256:042240d57ec9e47e511033b92625a8d95875ee5860af3015992c248b58a8be81
 
 ENV DEBIAN_FRONTEND=noninteractive \
     POWERSHELL_TELEMETRY_OPTOUT=1 \
