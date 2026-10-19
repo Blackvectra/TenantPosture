@@ -1,0 +1,127 @@
+# OSS Scanner image — builds .oss-scanner/Dockerfile so a broken pin or a
+# module that no longer imports shows as a red check on the pull request,
+# not as a failed scanner submission.
+#
+# The build installs every pinned dependency (base image by digest, Ubuntu's
+# security updates, Python packages by SHA-256, PowerShell modules through
+# tools/Install-TPPinnedModule.ps1), validates the export lists, imports the
+# module and runs the full suite through the test gate. A failing test does not
+# stop the image build (the scanner must still be able to run), so this job
+# reads the gate's recorded exit code out of the image and fails on anything
+# but 0, publishing the log and NUnit results as an artifact. The image is then
+# started with no network to prove it runs offline, as the scanner runs it.
+# Nothing is pushed to a registry.
+#
+# The weekly run also checks that every pinned PowerShell module is on the
+# newest release of its major version (tools/Test-TPPinnedModuleFreshness.ps1),
+# since Dependabot cannot read the PowerShell Gallery.
+
+name: OSS Scanner image
+
+on:
+  # Manual runs stay available alongside the automatic triggers.
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.oss-scanner/**'
+      - '.dockerignore'
+      - 'tools/pinned-modules.psd1'
+      - 'tools/Install-TPPinnedModule.ps1'
+      - 'tools/Sync-ExportedFunctions.ps1'
+      - 'TenantPosture.psd1'
+      - 'TenantPosture.psm1'
+      - '.github/workflows/oss-scanner-image.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.oss-scanner/**'
+      - '.dockerignore'
+      - 'tools/pinned-modules.psd1'
+      - 'tools/Install-TPPinnedModule.ps1'
+      - 'tools/Sync-ExportedFunctions.ps1'
+      - 'TenantPosture.psd1'
+      - 'TenantPosture.psm1'
+      - '.github/workflows/oss-scanner-image.yml'
+  schedule:
+    # Weekly, so an image that stopped building (a pulled package, a base
+    # image digest gone from the registry) is found before a submission.
+    - cron: '37 5 * * 4'
+permissions:
+  contents: read
+
+# One run per workflow and pull request (or branch). A newer push to the same
+# pull request cancels the older run; runs on main and scheduled runs are
+# never cancelled, so every commit on main keeps a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build the OSS Scanner image
+    runs-on: ubuntu-latest
+    # The image runs the full Pester suite while it builds (about 15 minutes
+    # in CI); the ceiling leaves room for the dependency installs.
+    timeout-minutes: 45
+    permissions:
+      contents: read  # read the repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build
+        run: docker build --pull --progress=plain -f .oss-scanner/Dockerfile -t tenantposture:ci .
+
+      - name: Test results recorded in the image
+        run: |
+          docker create --name oss-test tenantposture:ci
+          docker cp oss-test:/oss-test ./oss-test
+          docker rm oss-test
+          code="$(cat ./oss-test/exit-code)"
+          echo "Test gate exit code inside the image: ${code}"
+          if [ "${code}" != "0" ]; then
+            # The log carries color codes, so match the failure marker anywhere on the line.
+            grep -aF -- '[-]' ./oss-test/test.log | head -n 50 || true
+            tail -n 40 ./oss-test/test.log
+            echo "::error title=Tests failed inside the OSS Scanner image::The test gate exited ${code}. The log and NUnit results are in the oss-scanner-test-results artifact."
+            exit 1
+          fi
+
+      - name: Upload the test log and results
+        if: always() && hashFiles('oss-test/exit-code') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: oss-scanner-test-results
+          path: oss-test/
+          if-no-files-found: warn
+
+      - name: Run offline
+        run: |
+          docker run --rm --network none tenantposture:ci pwsh -NoProfile -Command '
+            $ErrorActionPreference = "Stop"
+            Import-Module ./TenantPosture.psm1 -Force
+            $n = @(Get-Command -Module TenantPosture).Count
+            if ($n -lt 1) { throw "The module exported no functions." }
+            "TenantPosture {0}: {1} functions, imported with no network" -f $TPAssessmentVersion, $n'
+
+  pinned-module-freshness:
+    name: Pinned PowerShell modules are current
+    # Weekly and on demand only: a module released upstream must not turn an
+    # unrelated pull request red.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read  # read the repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compare the pins with the PowerShell Gallery
+        shell: pwsh
+        run: ./tools/Test-TPPinnedModuleFreshness.ps1

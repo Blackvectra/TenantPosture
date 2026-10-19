@@ -246,6 +246,64 @@ Describe 'PowerShell security analysis and pinned CI modules' {
         }
     }
 
+    Context 'Pinned-module freshness and the OSS Scanner image' {
+
+        BeforeAll {
+            . (Join-Path $script:RepoRoot 'tools/Test-TPPinnedModuleFreshness.ps1') -DefinitionsOnly
+            $script:Now = [datetime]::new(2026, 10, 19, 0, 0, 0, [DateTimeKind]::Utc)
+            function New-Release { param([string] $V, [int] $DaysAgo) [pscustomobject]@{ Version = [version]$V; Published = $script:Now.AddDays(-$DaysAgo) } }
+            # A feed entry as Invoke-RestMethod returns it from the gallery's v2 OData feed.
+            function New-Entry { param([string] $Title, [string] $V, [string] $Pre = 'false', [string] $Pub = '2026-08-11T18:25:36.24')
+                [xml]$x = "<entry xmlns:d='d' xmlns:m='m'><title>$Title</title><m:properties><d:Version>$V</d:Version><d:IsPrerelease>$Pre</d:IsPrerelease><d:Published>$Pub</d:Published></m:properties></entry>"
+                [pscustomobject]@{ title = $Title; properties = [pscustomobject]@{ Version = $V; IsPrerelease = $Pre; Published = $Pub } }
+            }
+            $script:Image = Get-Content -LiteralPath (Join-Path $script:RepoRoot '.github/workflows/oss-scanner-image.yml') -Raw
+            $script:Docker = Get-Content -LiteralPath (Join-Path $script:RepoRoot '.oss-scanner/Dockerfile') -Raw
+        }
+
+        It 'reads only the module''s own stable releases from the feed' {
+            $entries = @((New-Entry 'Pode' '2.14.1'), (New-Entry 'Pode.Kestrel' '9.9.9'), (New-Entry 'Pode' '3.0.0' 'true'), (New-Entry 'Pode' 'not-a-version'), (New-Entry 'Pode' '2.13.0' 'false' 'garbage'))
+            $r = @(Get-TPGalleryReleases -Name 'Pode' -Entries $entries)
+            $r.Count | Should -Be 1
+            [string]$r[0].Version | Should -Be '2.14.1'
+        }
+
+        It 'fails on a newer release of the pinned major that is past the cooldown' {
+            $v = Get-TPPinFreshness -Name 'Pester' -Pinned '5.8.0' -Releases @((New-Release '5.9.1' 60), (New-Release '6.2.0' 40)) -Now $script:Now -CooldownDays 7
+            $v.Status | Should -Be 'Newer'
+            $v.LatestSameMajor | Should -Be '5.9.1'
+            $v.LatestOverall | Should -Be '6.2.0'
+        }
+
+        It 'reports a new major version without failing, and ignores a release still in its cooldown' {
+            (Get-TPPinFreshness -Name 'Pester' -Pinned '5.9.1' -Releases @((New-Release '5.9.1' 60), (New-Release '6.2.0' 40)) -Now $script:Now -CooldownDays 7).Status | Should -Be 'NewMajor'
+            (Get-TPPinFreshness -Name 'X' -Pinned '1.0.0' -Releases @((New-Release '1.0.0' 90), (New-Release '1.0.1' 2)) -Now $script:Now -CooldownDays 7).Status | Should -Be 'Current'
+        }
+
+        It 'says Unknown, never Current, when no release was read' {
+            (Get-TPPinFreshness -Name 'X' -Pinned '1.0.0' -Releases @() -Now $script:Now -CooldownDays 7).Status | Should -Be 'Unknown'
+            (Get-TPPinFreshness -Name 'X' -Pinned '1.0.0' -Releases $null -Now $script:Now -CooldownDays 7).Status | Should -Be 'Unknown'
+        }
+
+        It 'runs the freshness check weekly and on demand only, never on a pull request' {
+            $script:Image | Should -Match '(?m)^  pinned-module-freshness:'
+            $script:Image | Should -Match "if: github\.event_name == 'schedule' \|\| github\.event_name == 'workflow_dispatch'"
+            $script:Image | Should -Match 'Test-TPPinnedModuleFreshness\.ps1'
+        }
+
+        It 'runs the image''s tests through the gate and fails the build job on its exit code' {
+            $script:Docker | Should -Match 'tools/Invoke-TPTestGate\.ps1 -ResultPath /oss-test/pester-results\.xml'
+            $script:Docker | Should -Match 'echo \$\? > /oss-test/exit-code'
+            $script:Docker | Should -Not -Match 'Invoke-Pester|FailedCount' -Because 'the gate, never a FailedCount check, judges the suite'
+            $script:Image | Should -Match 'docker cp oss-test:/oss-test'
+            $script:Image | Should -Match 'if \[ "\$\{code\}" != "0" \]; then'
+        }
+
+        It 'takes the base image''s security updates when it builds' {
+            $script:Docker | Should -Match 'apt-get upgrade -y'
+        }
+    }
+
     Context 'CI wiring' {
 
         It 'has a security-analysis job that installs the pinned analyzer and runs the gate' {

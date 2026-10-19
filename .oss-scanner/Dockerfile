@@ -9,7 +9,7 @@
 #
 # Local check:  docker build -f .oss-scanner/Dockerfile -t tenantposture .
 #               docker run --rm --network none tenantposture \
-#                 pwsh -NoProfile -Command 'Invoke-Pester -Path ./Testing, ./Email-IR/Testing'
+#                 pwsh -NoProfile -File ./tools/Invoke-TPTestGate.ps1
 
 # The base image by digest (7.5-ubuntu-24.04 as of 2026-10-19): a tag can be
 # re-pointed at a different image; a digest cannot.
@@ -23,9 +23,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # git: the Markdown check lists tracked files. python3 + openpyxl: the XLSX
 # publishers (compliance matrix, NIST matrix, SSP); without openpyxl those
 # tests skip. yamllint: the workflow and config lint. Both by exact version and
-# SHA-256 (.oss-scanner/requirements.txt), wheels only.
+# SHA-256 (.oss-scanner/requirements.txt), wheels only. The base image's own
+# packages are upgraded first: the digest pins what the image starts from, and
+# the upgrade brings in Ubuntu's security fixes published since, so a scan
+# never runs on a system with known unpatched packages.
 COPY .oss-scanner/requirements.txt /tmp/oss-requirements.txt
 RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
  && apt-get install -y --no-install-recommends git ca-certificates python3 python3-pip \
  && rm -rf /var/lib/apt/lists/* \
  && pip3 install --no-cache-dir --break-system-packages --require-hashes --only-binary=:all: -r /tmp/oss-requirements.txt
@@ -48,18 +52,17 @@ RUN pwsh -NoProfile -File ./tools/Sync-ExportedFunctions.ps1 -Validate \
       Import-Module ./TenantPosture.psm1 -Force; \
       "TenantPosture {0}: {1} functions exported" -f $TPAssessmentVersion, (Get-Command -Module TenantPosture).Count'
 
-# Tests, as CI runs them: Testing/ and Email-IR/Testing together. The real web
-# server context needs Pode and is skipped here, as on the Ubuntu CI job; it runs
-# on the Windows CI job. A failing test is reported and the image is kept, so a
-# regression in a test does not stop the scan.
-RUN pwsh -NoProfile -Command ' \
-      $c = New-PesterConfiguration; \
-      $c.Run.Path = @("./Testing", "./Email-IR/Testing"); \
-      $c.Run.PassThru = $true; \
-      $c.Output.Verbosity = "Normal"; \
-      $r = Invoke-Pester -Configuration $c; \
-      "Pester: {0} passed, {1} failed, {2} skipped" -f $r.PassedCount, $r.FailedCount, $r.SkippedCount; \
-      if ($r.FailedCount -gt 0) { Write-Warning "Tests failed; the image is kept so the scan can proceed." }' \
- || echo "WARNING: the test step errored; the image is kept so the scan can proceed."
+# Tests, through the same gate CI uses (tools/Invoke-TPTestGate.ps1: every
+# test file must parse, tests must run, nothing may fail). The real web server
+# context needs Pode and is skipped here, as on the Ubuntu CI job; it runs on
+# the Windows CI job. A failing test does not stop the build, so the scanner can
+# still run against a tree with a regression; instead the gate's exit code, its
+# log and the NUnit results are kept in /oss-test, and the image-build workflow
+# (.github/workflows/oss-scanner-image.yml) fails the check on anything but 0.
+RUN mkdir -p /oss-test \
+ && pwsh -NoProfile -File ./tools/Invoke-TPTestGate.ps1 -ResultPath /oss-test/pester-results.xml > /oss-test/test.log 2>&1; \
+    echo $? > /oss-test/exit-code; \
+    tail -n 40 /oss-test/test.log; \
+    echo "Test gate exit code: $(cat /oss-test/exit-code)"
 
 CMD ["pwsh", "-NoProfile"]
