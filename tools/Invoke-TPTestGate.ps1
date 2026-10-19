@@ -175,7 +175,7 @@ function Get-TPPesterRunProblem {
         return $problems.ToArray()
     }
 
-    # FailedCount is the one count every Pester 5 release reports; its absence
+    # FailedCount is the one count every Pester 5 and 6 release reports; its absence
     # means this object is not a run result and nothing can be concluded.
     $failedValue = Get-TPResultField -InputObject $Result -Name 'FailedCount'
     $failed = 0
@@ -282,8 +282,26 @@ if ($unparsable.Count -gt 0) {
 }
 Write-Host '  every test file parses.' -ForegroundColor Green
 
-Import-Module Pester -MinimumVersion 5.5.0 -Force -ErrorAction Stop
+# The pinned version (tools/pinned-modules.psd1) is the one CI runs. A Pester
+# already loaded is kept, never re-imported: Pester 6 loads a compiled
+# assembly, and a second import into the same session fails ("Assembly with
+# same name is already loaded") and leaves Should without its operators. A
+# loaded version other than the pin is refused rather than replaced, for the
+# same reason, so a local run never passes under a Pester CI does not use.
+$pinnedPester = [string](Import-PowerShellDataFile -LiteralPath (Join-Path $PSScriptRoot 'pinned-modules.psd1')).Pester.Version
 $pester = Get-Module Pester
+if (-not $pester) {
+    try {
+        Import-Module Pester -RequiredVersion $pinnedPester -ErrorAction Stop
+    } catch {
+        Write-Host ("FAILED: Pester $pinnedPester (the version in tools/pinned-modules.psd1) is not installed. Install it with ./tools/Install-TPPinnedModule.ps1 -Name Pester and put the destination on PSModulePath.") -ForegroundColor Red
+        exit 1
+    }
+    $pester = Get-Module Pester
+} elseif ([string]$pester.Version -ne $pinnedPester) {
+    Write-Host ("FAILED: Pester {0} is loaded in this session; the suite runs under the pinned {1}. Start a new PowerShell session and import {1}." -f $pester.Version, $pinnedPester) -ForegroundColor Red
+    exit 1
+}
 Write-Host ('  Pester {0}' -f $pester.Version)
 
 $config = New-PesterConfiguration

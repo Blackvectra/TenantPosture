@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[CI] The suite runs under Pester 6.2.0.** `tools/pinned-modules.psd1` moves Pester from 5.9.1 to
+  6.2.0 (released 2026-09-09, gallery SHA-256 pinned as before), so CI, the Windows job and the OSS
+  Scanner image all run it. Two changes were needed. The test gate imported Pester with
+  `-MinimumVersion 5.5.0 -Force` on top of the copy each job had already imported; Pester 6 loads a
+  compiled assembly that cannot be loaded twice into one session, so the second import failed and
+  left `Should` with no operators. The gate now keeps a Pester already loaded, imports the pinned
+  version when none is, and refuses (with the remedy) a loaded version that is not the pin, so a
+  local run cannot pass under a Pester CI does not use; `TP.TestGate.Tests.ps1` pins that. And
+  Pester 6 throws on a call that no `-ParameterFilter` mock matches where Pester 5 fell through to
+  the real command; the one test that relied on that (the web link guard hiding `LinkTarget`) now
+  forwards every other field to the real function through a default mock. Every other test file
+  passed unchanged: 3,543 passed, 22 skipped, before the fix.
 - **[CI] GitHub builds the OSS Scanner image.** `.github/workflows/oss-scanner-image.yml` builds
   `.oss-scanner/Dockerfile` on every pull request and push to main that changes its inputs (the
   Dockerfile and its requirements, `.dockerignore`, the pinned-module installer and pins, the
