@@ -34,6 +34,24 @@
   version explicitly. `TP.SecurityAnalysis.Tests.ps1` drives the installer with good, tampered and
   path-escaping packages, drives the gate's decision and SARIF, and fails a workflow that installs a
   module any other way.
+- **[CI] The workflows are audited for security on every pull request (zizmor).** The workflows are
+  the supply chain of the tool: the release job publishes the archive and signs its provenance.
+  `.github/workflows/zizmor.yml` runs zizmor at its strictest persona (`auditor`), every severity
+  and confidence, with the online audits (impostor commits, known-vulnerable actions) on the job's
+  read-only token; any finding fails the job and the SARIF goes to Code Scanning. zizmor is
+  installed by exact version and SHA-256, wheel only (`.github/zizmor-requirements.txt`), and
+  Dependabot keeps it current. Its first run found 22 items, all fixed here: every workflow now has
+  a concurrency group (pull-request runs cancel their superseded run; main, schedule and release
+  runs are never cancelled), Scorecard no longer grants `read-all` at the workflow level, each
+  permission says why it is needed, and Dependabot waits seven days after a release before
+  proposing it. `TP.WorkflowSecurity.Tests.ps1` pins the gate, the hash-locked install, a reason on
+  any suppression, SHA-pinned actions, `persist-credentials: false`, a concurrency group and no
+  workflow-level write access. The online audit also found three pin comments naming a major tag
+  that has since moved (`# v6` beside the SHA of checkout v7.0.1, `# v4` for CodeQL v4.38.3,
+  `# v7` for upload-artifact v7.0.2); every pin comment now names the exact release, and the test
+  requires `# vX.Y.Z`. yamllint, which the docs-lint job installed unpinned, is now hash-locked the same way
+  (`.github/yamllint-requirements.txt`, every wheel of each release). SECURITY.md also no longer says four workflows' triggers are
+  commented out; they run on every pull request.
 - **[Fix] Three controls cited 800-53 AC-2(9), the restriction on shared and group accounts, for
   checks it does not describe.** AAD-8.2 (a recurring access review of privileged directory roles)
   and SPO-3.1 (site collection administrators reviewed) now cite AC-6(7), Review of User Privileges:

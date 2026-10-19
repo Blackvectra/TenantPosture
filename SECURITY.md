@@ -161,7 +161,7 @@ The JSON control definition file is validated at load time before any evaluator 
 
 Each row below names the workflow file that implements it, so this list can be verified against `.github/workflows/` at any time.
 
-**On every push and pull request to `main`** — note: the `ci.yml`, `codeql.yml`, `secret-scan.yml` and `dependency-review.yml` triggers are temporarily commented out pending a GitHub Actions billing reset, and those four run on manual dispatch only. Each workflow file carries a restore note in its header.
+**On every push and pull request to `main`** (Dependency Review on pull requests only):
 
 
 1. **PSScriptAnalyzer** (`ci.yml`) — static analysis; Error severity fails the build. Findings upload to Code Scanning as SARIF. A separate **PowerShell Security Analysis** job (`tools/Invoke-TPSecurityAnalysis.ps1`, rules in `PSScriptAnalyzerSecurity.psd1`) runs the analyzer's security rules (Invoke-Expression, plain-text and wrongly typed credentials, unencrypted authentication, broken hash algorithms, hard-coded computer names) at every severity; any finding fails the build, and an in-source `[SuppressMessage()]` counts as a finding. The same job runs Microsoft's **InjectionHunter** rules (code-injection patterns, which CodeQL does not analyze in PowerShell); a finding passes only when reviewed into `tools/injection-baseline.json` with its reason, or when it is a `-replace` proven by the AST to replace only with the empty string, and a baseline entry nothing matches fails as stale. CI installs PSScriptAnalyzer, Pester and Pode by exact version and SHA-256 (`tools/pinned-modules.psd1`, `tools/Install-TPPinnedModule.ps1`): a gallery package whose hash differs is refused before it is read.
@@ -170,16 +170,17 @@ Each row below names the workflow file that implements it, so this list can be v
 4. **Gitleaks** (`secret-scan.yml`) — fast regex/entropy secret detection across full git history.
 5. **TruffleHog** (`secret-scan.yml`) — verified secret scan; confirms candidates against live services to suppress false positives.
 6. **Dependency Review** (`dependency-review.yml`) — blocks PRs that introduce moderate-or-higher severity vulnerable dependencies.
+7. **zizmor** (`zizmor.yml`) — static security analysis of the workflows themselves (template injection, token permissions, persisted credentials, cache poisoning, impostor commits, known-vulnerable actions, Dependabot cooldown) at its strictest persona; any finding fails the build, and a deliberate exception is suppressed in place with a stated reason. Installed by exact version and SHA-256; also weekly. `TP.WorkflowSecurity.Tests.ps1` pins the gate, SHA-pinned actions, `persist-credentials: false`, a concurrency group and no workflow-level write access.
 
 **On a weekly schedule:**
 
-7. **OSSF Scorecard** (`scorecard.yml`) — repository security-health metric (branch protection, pinned deps, token permissions, etc.); results upload to Code Scanning.
-8. **Gitleaks / TruffleHog full-history sweep** (`secret-scan.yml`) — catches secrets introduced via force-push or a branch that bypassed PR review.
+8. **OSSF Scorecard** (`scorecard.yml`) — repository security-health metric (branch protection, pinned deps, token permissions, etc.); results upload to Code Scanning.
+9. **Gitleaks / TruffleHog full-history sweep** (`secret-scan.yml`) — catches secrets introduced via force-push or a branch that bypassed PR review.
 
 **On version tags (`v*`):**
 
-9. **CycloneDX SBOM** (`release.yml`) — software bill of materials generated from `tools/Generate-SBOM.ps1` and attached to the workflow run.
-10. **Authenticode + integrity check** (`release.yml`, windows-latest) — verifies the integrity manifest and Authenticode signature status. Fails on tamper (HashMismatch / Expired / UntrustedRoot); tolerates unsigned in-house builds (operator signs locally via `Build/Sign-Release.ps1`).
+10. **CycloneDX SBOM** (`release.yml`) — software bill of materials generated from `tools/Generate-SBOM.ps1` and attached to the workflow run.
+11. **Authenticode + integrity check** (`release.yml`, windows-latest) — verifies the integrity manifest and Authenticode signature status. Fails on tamper (HashMismatch / Expired / UntrustedRoot); tolerates unsigned in-house builds (operator signs locally via `Build/Sign-Release.ps1`).
 
 **Dependency hygiene:** Dependabot (`dependabot.yml`) opens weekly PRs for GitHub Actions version bumps; every third-party action is SHA-pinned.
 
