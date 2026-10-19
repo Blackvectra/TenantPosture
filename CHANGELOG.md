@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- **[Supply chain] The runtime dependencies are pinned, and Dependabot or the weekly check keeps them current.**
+  The Microsoft modules the tool signs in with, ExchangeOnlineManagement 3.10.1, Microsoft.Graph.Authentication
+  2.41.1 and MicrosoftTeams 8.0.0, are now pinned in `tools/pinned-modules.psd1` by exact version and gallery
+  SHA-256, each verified against the gallery before it was recorded. The weekly freshness check reads that file,
+  so it reports a newer release once it has been public for seven days and fails when the same major version has
+  moved on. CI does not install these modules (about 500 MB), so the pin is the version the tool is validated
+  against, not something CI loads. The Python packages the tool uses at run time, openpyxl 3.1.5 and pypdf 6.20.1,
+  move to hash-locked requirements files that Dependabot's pip ecosystem for `/.github` already watches (weekly,
+  7-day cooldown), and **the recorded hashes now gate the install**. They did not at first: the installer read a
+  version out of the file and then ran `pip install openpyxl==3.1.5`, which verifies no hash, so a compromised
+  index, mirror or proxy could serve different content for the same version while the file's own header promised
+  `--require-hashes`. Every install now runs `--require-hashes --only-binary=:all: -r` against the file that pins
+  the package, so pip checks each wheel against a recorded SHA-256 before unpacking it and never builds an sdist,
+  which no wheel hash would cover. The packages live in two files, `.github/runtime-xlsx-requirements.txt`
+  (openpyxl, et-xmlfile) and `.github/runtime-pdf-requirements.txt` (pypdf, typing_extensions), each carrying its
+  own dependency closure: pip verifies a whole requirements file in hash mode and refuses a package named on the
+  command line for having no hash of its own, so a single file would have made the optional pypdf install
+  mandatory. The installer reads each version from the file that pins it instead of hard-coding it, and
+  `TP.RuntimePins.Tests.ps1` keeps the pins exact, keeps each file independently installable, fails any `pip
+  install` in the installer that drops `--require-hashes` or names a bare `package==version`, and keeps the files
+  in agreement with the SBOM and the docs. The PowerShell Gallery is not a Dependabot ecosystem, so the Microsoft
+  modules are covered by the freshness check rather than Dependabot.
+
 - **[CI] The suite runs under Pester 6.2.0.** `tools/pinned-modules.psd1` moves Pester from 5.9.1 to
   6.2.0 (released 2026-09-09, gallery SHA-256 pinned as before), so CI, the Windows job and the OSS
   Scanner image all run it. Two changes were needed. The test gate imported Pester with

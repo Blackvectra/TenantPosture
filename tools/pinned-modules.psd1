@@ -18,4 +18,10 @@
     Pester           = @{ Version = '6.2.0';  Sha256 = 'e6ac7418d4f12500269aaca58ae56cf1caafbbf1afa2cec334e289d1cf50a239' }
     InjectionHunter  = @{ Version = '1.0.0';  Sha256 = 'feb24c5c3e98f4741f3967a558983e5e23303e6fd9ed4f34e4b96cbe72a8f650' }
     Pode             = @{ Version = '2.14.1'; Sha256 = '38f7bedb4fd40a65d7518fc87de483450fafab22f5274ef82ebcfb0fca8ec6de' }
+    # The runtime modules the tool signs in with. CI does not install them (they are
+    # about 500 MB together); the pin is the version the tool is validated against,
+    # and the weekly freshness check reports and fails a pin that has fallen behind.
+    ExchangeOnlineManagement       = @{ Version = '3.10.1'; Sha256 = '545fb0fdf65b96abed37f4f5b5d7db661276ddc7de48a742bb6e7199ab9414a3' }
+    'Microsoft.Graph.Authentication' = @{ Version = '2.41.1'; Sha256 = 'b6fcb400d5f204f06301f8809c2dcd364e184d7a335673bf1272b1a793cfb8c7' }
+    MicrosoftTeams                 = @{ Version = '8.0.0';  Sha256 = '6aa426d37913dee78628ad36dfc26e40161702018479f110f396712e896f2882' }
 }

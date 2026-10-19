@@ -96,14 +96,18 @@ $optional = @(
     @{ Name = 'Microsoft.Online.SharePoint.PowerShell'; Version = '16.0.24720.12000'; Scope = 'optional' }
     # The -Web GUI (Lib/Start-TPWebServer.ps1) imports Pode and requires 2.10.0 or later.
     @{ Name = 'Pode';                                   Version = '2.10.0';         Scope = 'optional'; Semantics = 'declared minimum; imported by -Web on demand' }
-    # The XLSX publishers run openpyxl through Lib/Invoke-TPPython.ps1; Install-TPPrerequisites.ps1 pins this version.
-    @{ Name = 'openpyxl';                               Version = '3.1.5';          Scope = 'optional'; Semantics = 'pinned by the installer; used by the XLSX publishers on demand' }
+    # The XLSX publishers run openpyxl through Lib/Invoke-TPPython.ps1;
+    # .github/runtime-xlsx-requirements.txt pins this version by SHA-256 and the installer
+    # installs from that file with --require-hashes.
+    @{ Name = 'openpyxl';                               Version = '3.1.5';          Scope = 'optional'; Semantics = 'pinned by version and SHA-256 in .github/runtime-xlsx-requirements.txt; installed by hash; used by the XLSX publishers on demand' }
     # The questionnaire importers read AcroForm fields through pypdf (one bounded
     # reader, Lib/Read-TPQuestionnaireFields.ps1): the operator installs it, the
     # installer holds a present copy to this version, and the reader refuses one
-    # below 4.0.0. The questionnaire publishers render the PDF through reportlab,
-    # which is neither pinned nor installed, so no version is recorded for it.
-    @{ Name = 'pypdf';                                  Version = '6.20.1';         Scope = 'optional'; Semantics = 'installed by the operator (pip install pypdf); held to this version by the installer when present; the importer refuses below 4.0.0' }
+    # below 4.0.0. .github/runtime-pdf-requirements.txt pins it by SHA-256, kept in its
+    # own file so it can be installed by hash without openpyxl. The questionnaire
+    # publishers render the PDF through reportlab, which is neither pinned nor
+    # installed, so no version is recorded for it.
+    @{ Name = 'pypdf';                                  Version = '6.20.1';         Scope = 'optional'; Semantics = 'pinned by version and SHA-256 in .github/runtime-pdf-requirements.txt; installed by hash by the operator or by the installer when a different version is present; the importer refuses below 4.0.0' }
     @{ Name = 'reportlab';                              Version = '';               Scope = 'optional'; Semantics = 'not pinned; installed by the operator (pip install reportlab) for the questionnaire PDF output' }
 )
 $dependencies = @()
