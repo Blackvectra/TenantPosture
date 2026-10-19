@@ -31,63 +31,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Pester (>= 5.5.0)
+      - name: Install Pester (pinned, hash-verified)
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-
-          # Fast-path: if a satisfying Pester is already on the runner, skip the
-          # network call entirely. (Whether ubuntu-latest preinstalls Pester
-          # depends on the runner image version, so we don't claim it does —
-          # this is a no-op skip when no module is present.)
-          $have = Get-Module -ListAvailable Pester |
-                  Where-Object { $_.Version -ge [version]'5.5.0' } |
-                  Sort-Object Version -Descending |
-                  Select-Object -First 1
-          if ($have) {
-              Write-Host ('Pester {0} already installed at {1} — skipping install.' -f $have.Version, $have.ModuleBase)
-              return
-          }
-
-          # Slow path: retry the install up to 3x with exponential backoff to
-          # ride out brief PSGallery / PSResourceGet hiccups. The upper bound
-          # '[5.5.0,5.99.99]' prevents an unreleased breaking 6.x from being
-          # auto-adopted on the next CI run (CI green is a load-bearing signal;
-          # bumping the major needs to be a deliberate edit, not a surprise).
-          $delays = @(2, 4, 8)
-          $lastErr = $null
-          for ($i = 0; $i -lt $delays.Length; $i++) {
-              try {
-                  if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
-                      Install-PSResource -Name Pester -Version '[5.5.0,5.99.99]' -TrustRepository -Scope CurrentUser -ErrorAction Stop
-                  } else {
-                      if (Get-PSRepository PSGallery -ErrorAction SilentlyContinue) {
-                          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-                      }
-                      Install-Module -Name Pester -MinimumVersion 5.5.0 -MaximumVersion 5.99.99 -Force -Scope CurrentUser -SkipPublisherCheck -AllowClobber -ErrorAction Stop
-                  }
-                  $lastErr = $null
-                  break
-              } catch {
-                  $lastErr = $_
-                  Write-Host ('Install attempt failed: {0}' -f $_.Exception.Message) -ForegroundColor Yellow
-                  if ($i -lt $delays.Length - 1) {
-                      Write-Host ('Retrying in {0}s...' -f $delays[$i])
-                      Start-Sleep -Seconds $delays[$i]
-                  }
-              }
-          }
-          if ($lastErr) { throw $lastErr }
-
-          (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1).Version
-
-      - name: Diagnostics — pwsh + Pester
-        shell: pwsh
-        run: |
-          Write-Host ('pwsh version: {0}' -f $PSVersionTable.PSVersion)
-          Write-Host ('OS: {0}' -f $PSVersionTable.OS)
-          $p = (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1)
-          Write-Host ('Pester version: {0} at {1}' -f $p.Version, $p.ModuleBase)
+          # Exact version and SHA-256 from tools/pinned-modules.psd1; a package
+          # whose hash differs is refused before anything in it is read.
+          ./tools/Install-TPPinnedModule.ps1 -Name Pester -Destination "$env:RUNNER_TEMP/tp-modules" -ExportToGitHubEnv
+          Write-Host ('pwsh {0} on {1}' -f $PSVersionTable.PSVersion, $PSVersionTable.OS)
 
       - name: Run Pester
         shell: pwsh
@@ -107,6 +57,7 @@ jobs:
           # existed but never gated a merge — the 70-citation SCuBA mis-mapping
           # shipped precisely because they weren't enforced. Email-IR/Testing
           # too: it held 6 failing tests that no merge ever saw.
+          Import-Module Pester -RequiredVersion (Import-PowerShellDataFile ./tools/pinned-modules.psd1).Pester.Version -Force
           ./tools/Invoke-TPTestGate.ps1 -ResultPath pester-results.xml -Output Diagnostic
 
       - name: Upload Pester results
@@ -132,38 +83,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Pester (>= 5.5.0) and Pode (>= 2.10.0)
+      - name: Install Pester and Pode (pinned, hash-verified)
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          # The runner image ships Pester 3.4 for Windows PowerShell; the version
-          # is therefore asked for, and imported, explicitly. Retried 3x to ride
-          # out a brief PSGallery hiccup; upper bounds keep an unreleased major
-          # from being adopted by surprise.
-          $wanted = @(
-              @{ Name = 'Pester'; Min = '5.5.0'; Max = '5.99.99' },
-              @{ Name = 'Pode';   Min = '2.10.0'; Max = '2.99.99' }
-          )
-          foreach ($m in $wanted) {
-              $delays = @(2, 4, 8)
-              $lastErr = $null
-              for ($i = 0; $i -lt $delays.Length; $i++) {
-                  try {
-                      Install-Module -Name $m.Name -MinimumVersion $m.Min -MaximumVersion $m.Max -Force -Scope CurrentUser -SkipPublisherCheck -AllowClobber -ErrorAction Stop
-                      $lastErr = $null
-                      break
-                  } catch {
-                      $lastErr = $_
-                      Write-Host ('Install of {0} failed: {1}' -f $m.Name, $_.Exception.Message) -ForegroundColor Yellow
-                      if ($i -lt $delays.Length - 1) { Start-Sleep -Seconds $delays[$i] }
-                  }
-              }
-              if ($lastErr) { throw $lastErr }
-          }
-          Import-Module Pester -MinimumVersion 5.5.0 -Force
+          # The runner image ships Pester 3.4 for Windows PowerShell; the pinned
+          # version is installed and imported explicitly.
+          ./tools/Install-TPPinnedModule.ps1 -Name Pester, Pode -Destination "$env:RUNNER_TEMP/tp-modules" -ExportToGitHubEnv
           Write-Host ('pwsh {0} on {1}' -f $PSVersionTable.PSVersion, $PSVersionTable.OS)
-          Write-Host ('Pester {0}' -f (Get-Module Pester).Version)
-          Write-Host ('Pode   {0}' -f (Get-Module -ListAvailable Pode | Sort-Object Version -Descending | Select-Object -First 1).Version)
 
       - name: Run the web GUI, endpoint and sensitive-writer tests
         # The endpoint suite runs here as well: its owner and DACL checks are Windows
@@ -171,6 +97,7 @@ jobs:
         shell: pwsh
         run: |
           # Same gate as the Ubuntu job, four files instead of the tree.
+          Import-Module Pester -RequiredVersion (Import-PowerShellDataFile ./tools/pinned-modules.psd1).Pester.Version -Force
           ./tools/Invoke-TPTestGate.ps1 `
             -Path ./Testing/TP.WebServer.Tests.ps1, ./Testing/TP.DeviceCompliance.Tests.ps1, ./Testing/TP.SensitiveFileWriter.Tests.ps1, ./Testing/TP.OutputFolderProbe.Tests.ps1 `
             -ResultPath pester-web-windows.xml -Output Detailed
@@ -199,53 +126,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install PSScriptAnalyzer
+      - name: Install PSScriptAnalyzer (pinned, hash-verified)
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          # Fast-path: skip the gallery round-trip if a module is already
-          # present. (Whether ubuntu-latest preinstalls PSScriptAnalyzer
-          # depends on the runner image version.)
-          $have = Get-Module -ListAvailable PSScriptAnalyzer |
-                  Sort-Object Version -Descending |
-                  Select-Object -First 1
-          if ($have) {
-              Write-Host ('PSScriptAnalyzer {0} already installed at {1} — skipping install.' -f $have.Version, $have.ModuleBase)
-              return
-          }
-
-          # Slow path: retry 3x with exponential backoff to ride out brief
-          # PSGallery / PSResourceGet transient failures. Pinned <2.x to
-          # prevent a future breaking major from auto-adopting on every run.
-          $delays = @(2, 4, 8)
-          $lastErr = $null
-          for ($i = 0; $i -lt $delays.Length; $i++) {
-              try {
-                  if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
-                      Install-PSResource -Name PSScriptAnalyzer -Version '[1.21.0,1.99.99]' -TrustRepository -Scope CurrentUser -ErrorAction Stop
-                  } else {
-                      if (Get-PSRepository PSGallery -ErrorAction SilentlyContinue) {
-                          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-                      }
-                      Install-Module -Name PSScriptAnalyzer -MinimumVersion 1.21.0 -MaximumVersion 1.99.99 -Force -Scope CurrentUser -AllowClobber -ErrorAction Stop
-                  }
-                  $lastErr = $null
-                  break
-              } catch {
-                  $lastErr = $_
-                  Write-Host ('Install attempt failed: {0}' -f $_.Exception.Message) -ForegroundColor Yellow
-                  if ($i -lt $delays.Length - 1) {
-                      Write-Host ('Retrying in {0}s...' -f $delays[$i])
-                      Start-Sleep -Seconds $delays[$i]
-                  }
-              }
-          }
-          if ($lastErr) { throw $lastErr }
+        run: ./tools/Install-TPPinnedModule.ps1 -Name PSScriptAnalyzer -Destination "$env:RUNNER_TEMP/tp-modules" -ExportToGitHubEnv
 
       - name: Run analyzer
         shell: pwsh
         run: |
+          Import-Module PSScriptAnalyzer -RequiredVersion (Import-PowerShellDataFile ./tools/pinned-modules.psd1).PSScriptAnalyzer.Version -Force
           $settings = Resolve-Path ./PSScriptAnalyzerSettings.psd1
           # PSScriptAnalyzer occasionally dies inside its own rule engine with
           # "Object reference not set to an instance of an object" on a first
@@ -318,7 +206,7 @@ jobs:
                       tool = @{
                           driver = @{
                               name            = 'PSScriptAnalyzer'
-                              version         = ([string](Get-Module -ListAvailable PSScriptAnalyzer | Sort-Object Version -Descending | Select-Object -First 1).Version)
+                              version         = ([string](Get-Module PSScriptAnalyzer).Version)
                               informationUri  = 'https://github.com/PowerShell/PSScriptAnalyzer'
                           }
                       }
@@ -346,6 +234,35 @@ jobs:
           # `category` namespaces results so PSScriptAnalyzer findings don't
           # collide with CodeQL findings in the same repo.
           category: psscriptanalyzer
+
+  security-analysis:
+    name: PowerShell Security Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read  # read the repository
+      security-events: write  # upload the security-rule SARIF to Code Scanning
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install PSScriptAnalyzer (pinned, hash-verified)
+        shell: pwsh
+        run: ./tools/Install-TPPinnedModule.ps1 -Name PSScriptAnalyzer -Destination "$env:RUNNER_TEMP/tp-modules" -ExportToGitHubEnv
+
+      - name: Run the security rules (any finding fails)
+        shell: pwsh
+        run: ./tools/Invoke-TPSecurityAnalysis.ps1 -SarifPath ./psscriptanalyzer-security.sarif
+
+      - name: Upload security-rule results to Code Scanning
+        # Uploaded on every run, empty when clean, so a fixed alert closes.
+        if: always() && hashFiles('psscriptanalyzer-security.sarif') != ''
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: psscriptanalyzer-security.sarif
+          category: psscriptanalyzer-security
 
   docs-lint:
     name: YAML + Markdown Lint
