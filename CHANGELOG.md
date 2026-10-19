@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **[CI] GitHub builds the OSS Scanner image.** `.github/workflows/oss-scanner-image.yml` builds
+  `.oss-scanner/Dockerfile` on every pull request and push to main that changes its inputs (the
+  Dockerfile and its requirements, `.dockerignore`, the pinned-module installer and pins, the
+  manifest and loader) and weekly, then starts the image with `--network none` and imports the
+  module, as the scanner runs it. A broken pin, a base-image digest gone from the registry or a
+  module that no longer imports fails a check here instead of a scanner submission, and no
+  workstation needs Docker. Nothing is pushed to a registry; the job has read-only access.
 - **[CI] 580 stale Code Scanning alerts close, and the OSS Scanner image is pinned.** On 2026-05-28
   the PSScriptAnalyzer job uploaded every Warning to Code Scanning under the `psscriptanalyzer`
   category; days later it was changed to upload only when there were Error findings, so that

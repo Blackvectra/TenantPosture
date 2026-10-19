@@ -1,0 +1,80 @@
+# OSS Scanner image — builds .oss-scanner/Dockerfile so a broken pin or a
+# module that no longer imports shows as a red check on the pull request,
+# not as a failed scanner submission.
+#
+# The build itself is the test: it installs every pinned dependency (base
+# image by digest, Python packages by SHA-256, PowerShell modules through
+# tools/Install-TPPinnedModule.ps1), validates the export lists, imports the
+# module and runs the full Pester suite inside the image. A test failure in
+# that last step is reported in the log and keeps the image (the scanner must
+# still be able to run); the CI workflow is where test failures fail a merge.
+# The image is then started with no network to prove it runs offline, as the
+# scanner runs it. Nothing is pushed to a registry.
+
+name: OSS Scanner image
+
+on:
+  # Manual runs stay available alongside the automatic triggers.
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.oss-scanner/**'
+      - '.dockerignore'
+      - 'tools/pinned-modules.psd1'
+      - 'tools/Install-TPPinnedModule.ps1'
+      - 'tools/Sync-ExportedFunctions.ps1'
+      - 'TenantPosture.psd1'
+      - 'TenantPosture.psm1'
+      - '.github/workflows/oss-scanner-image.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.oss-scanner/**'
+      - '.dockerignore'
+      - 'tools/pinned-modules.psd1'
+      - 'tools/Install-TPPinnedModule.ps1'
+      - 'tools/Sync-ExportedFunctions.ps1'
+      - 'TenantPosture.psd1'
+      - 'TenantPosture.psm1'
+      - '.github/workflows/oss-scanner-image.yml'
+  schedule:
+    # Weekly, so an image that stopped building (a pulled package, a base
+    # image digest gone from the registry) is found before a submission.
+    - cron: '37 5 * * 4'
+permissions:
+  contents: read
+
+# One run per workflow and pull request (or branch). A newer push to the same
+# pull request cancels the older run; runs on main and scheduled runs are
+# never cancelled, so every commit on main keeps a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build the OSS Scanner image
+    runs-on: ubuntu-latest
+    # The image runs the full Pester suite while it builds (about 15 minutes
+    # in CI); the ceiling leaves room for the dependency installs.
+    timeout-minutes: 45
+    permissions:
+      contents: read  # read the repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build
+        run: docker build --pull --progress=plain -f .oss-scanner/Dockerfile -t tenantposture:ci .
+
+      - name: Run offline
+        run: |
+          docker run --rm --network none tenantposture:ci pwsh -NoProfile -Command '
+            $ErrorActionPreference = "Stop"
+            Import-Module ./TenantPosture.psm1 -Force
+            $n = @(Get-Command -Module TenantPosture).Count
+            if ($n -lt 1) { throw "The module exported no functions." }
+            "TenantPosture {0}: {1} functions, imported with no network" -f $TPAssessmentVersion, $n'
