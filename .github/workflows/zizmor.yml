@@ -1,0 +1,88 @@
+# zizmor — static security analysis of the GitHub Actions workflows.
+#
+# The workflows are the supply chain of this tool: the release job publishes
+# the archive and signs its provenance, so a template injection, a
+# credential left on disk by checkout, an over-broad token or an unpinned
+# action here is a way into every client's copy. CodeQL's `actions` language
+# covers part of that; zizmor covers more (template injection, excessive
+# permissions, persisted credentials, cache poisoning, impostor commits,
+# known-vulnerable actions, Dependabot cooldown).
+#
+# Gate: the strictest persona (`auditor`), every severity and confidence.
+# Any finding fails the job. A finding that is a deliberate exception is
+# suppressed in place with `# zizmor: ignore[<audit>] <reason>`, and
+# Testing/TP.WorkflowSecurity.Tests.ps1 fails an ignore with no reason.
+#
+# zizmor is installed from PyPI by exact version and SHA-256
+# (.github/zizmor-requirements.txt), wheel only, into a throwaway venv.
+# The online audits (impostor-commit, known-vulnerable-actions,
+# ref-confusion) use the job's read-only token.
+
+name: zizmor
+
+on:
+  # Manual runs stay available alongside the automatic triggers.
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so a newly published advisory against a pinned action is
+    # reported even when no workflow changed.
+    - cron: '29 7 * * 3'
+permissions:
+  contents: read
+
+# One run per workflow and pull request (or branch). A newer push to the same
+# pull request cancels the older run; runs on main and scheduled runs are
+# never cancelled, so every commit on main keeps a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  zizmor:
+    name: Workflow security (zizmor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read  # read the repository
+      security-events: write  # upload the zizmor SARIF to Code Scanning
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install zizmor (pinned, hash-verified)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/zizmor"
+          "$RUNNER_TEMP/zizmor/bin/pip" install --disable-pip-version-check --no-deps \
+            --require-hashes --only-binary=:all: -r .github/zizmor-requirements.txt
+          "$RUNNER_TEMP/zizmor/bin/zizmor" --version
+
+      - name: Audit workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          "$RUNNER_TEMP/zizmor/bin/zizmor" --persona=auditor --format=sarif .github/ > zizmor.sarif
+          sarif_rc=$?
+          "$RUNNER_TEMP/zizmor/bin/zizmor" --persona=auditor --format=plain .github/
+          rc=$?
+          set -e
+          # zizmor exits 0 with no findings and non-zero with any (or on its
+          # own failure); both runs must agree that the tree is clean.
+          if [ "$rc" -ne 0 ] || [ "$sarif_rc" -ne 0 ]; then
+            echo "::error::zizmor reported findings (exit $rc / $sarif_rc). Fix them, or suppress a deliberate exception with '# zizmor: ignore[<audit>] <reason>'."
+            exit 1
+          fi
+
+      - name: Upload zizmor results to Code Scanning
+        # Run even when the audit failed, so findings surface for triage.
+        if: always() && hashFiles('zizmor.sarif') != ''
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: zizmor.sarif
+          category: zizmor

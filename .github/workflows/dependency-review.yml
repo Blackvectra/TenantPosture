@@ -18,6 +18,13 @@ on:
 permissions:
   contents: read
 
+# One run per workflow and pull request (or branch). A newer push to the same
+# pull request cancels the older run; runs on main and scheduled runs are
+# never cancelled, so every commit on main keeps a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   dependency-review:
     name: Dependency Review
@@ -25,8 +32,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      # Only this job comments on the PR with the findings summary.
-      pull-requests: write
+      pull-requests: write  # comment the findings summary on the PR
     # GitHub Dependency Graph + Dependency Review API requires GitHub
     # Advanced Security on private repos. Skip on private repos so the
     # workflow doesn't surface "configuration error" failures
@@ -35,7 +41,7 @@ jobs:
     if: github.event.repository.private == false
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
