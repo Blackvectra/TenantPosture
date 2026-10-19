@@ -248,11 +248,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install PSScriptAnalyzer (pinned, hash-verified)
+      - name: Install PSScriptAnalyzer and InjectionHunter (pinned, hash-verified)
         shell: pwsh
-        run: ./tools/Install-TPPinnedModule.ps1 -Name PSScriptAnalyzer -Destination "$env:RUNNER_TEMP/tp-modules" -ExportToGitHubEnv
+        run: ./tools/Install-TPPinnedModule.ps1 -Name PSScriptAnalyzer, InjectionHunter -Destination "$env:RUNNER_TEMP/tp-modules" -ExportToGitHubEnv
 
-      - name: Run the security rules (any finding fails)
+      - name: Run the security and injection rules (any unreviewed finding fails)
         shell: pwsh
         run: ./tools/Invoke-TPSecurityAnalysis.ps1 -SarifPath ./psscriptanalyzer-security.sarif
 
