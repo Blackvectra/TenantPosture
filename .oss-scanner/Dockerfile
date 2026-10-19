@@ -11,7 +11,9 @@
 #               docker run --rm --network none tenantposture \
 #                 pwsh -NoProfile -Command 'Invoke-Pester -Path ./Testing, ./Email-IR/Testing'
 
-FROM mcr.microsoft.com/powershell:7.5-ubuntu-24.04
+# The base image by digest (7.5-ubuntu-24.04 as of 2026-10-19): a tag can be
+# re-pointed at a different image; a digest cannot.
+FROM mcr.microsoft.com/powershell:7.5-ubuntu-24.04@sha256:370134f0be3867fadc2e5845c39ed59120fbd4d19ca5136f40831a96f0404cf1
 
 ENV DEBIAN_FRONTEND=noninteractive \
     POWERSHELL_TELEMETRY_OPTOUT=1 \
@@ -20,20 +22,19 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # git: the Markdown check lists tracked files. python3 + openpyxl: the XLSX
 # publishers (compliance matrix, NIST matrix, SSP); without openpyxl those
-# tests skip. yamllint: the workflow and config lint.
+# tests skip. yamllint: the workflow and config lint. Both by exact version and
+# SHA-256 (.oss-scanner/requirements.txt), wheels only.
+COPY .oss-scanner/requirements.txt /tmp/oss-requirements.txt
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates python3 python3-pip \
  && rm -rf /var/lib/apt/lists/* \
- && pip3 install --no-cache-dir --break-system-packages 'openpyxl>=3.1,<4' 'yamllint>=1.35,<2'
+ && pip3 install --no-cache-dir --break-system-packages --require-hashes --only-binary=:all: -r /tmp/oss-requirements.txt
 
-# Pester and PSScriptAnalyzer within the version ranges CI accepts.
-RUN pwsh -NoProfile -Command ' \
-      $ErrorActionPreference = "Stop"; \
-      Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; \
-      Install-Module -Name Pester -MinimumVersion 5.5.0 -MaximumVersion 5.99.99 -Force -Scope AllUsers -SkipPublisherCheck; \
-      Install-Module -Name PSScriptAnalyzer -MinimumVersion 1.21.0 -MaximumVersion 1.99.99 -Force -Scope AllUsers; \
-      "Pester {0}" -f (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1).Version; \
-      "PSScriptAnalyzer {0}" -f (Get-Module -ListAvailable PSScriptAnalyzer | Sort-Object Version -Descending | Select-Object -First 1).Version'
+# Pester and PSScriptAnalyzer at the versions CI pins, each package checked
+# against its SHA-256 in tools/pinned-modules.psd1 before it is extracted.
+COPY tools/Install-TPPinnedModule.ps1 tools/pinned-modules.psd1 /tmp/tp-tools/
+RUN pwsh -NoProfile -File /tmp/tp-tools/Install-TPPinnedModule.ps1 -Name Pester -Destination /usr/local/share/powershell/Modules \
+ && pwsh -NoProfile -File /tmp/tp-tools/Install-TPPinnedModule.ps1 -Name PSScriptAnalyzer -Destination /usr/local/share/powershell/Modules
 
 COPY . /src
 WORKDIR /src
