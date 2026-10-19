@@ -66,6 +66,21 @@ if ($policy -eq 'AllSigned' -or $effective -eq 'AllSigned') {
 Write-Host ""
 Write-Host "[3/6] Unblocking files (Zone.Identifier from downloads)..." -ForegroundColor Cyan
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+
+# The version of one Python package the tool pins, read from .github/runtime-requirements.txt
+# (the file Dependabot updates). A missing or unreadable file is fatal: a silent default would
+# install a version nobody reviewed.
+function Get-TPRuntimePin {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [string] $Name)
+    $path = Join-Path $scriptDir '.github' 'runtime-requirements.txt'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Runtime requirements file not found: $path" }
+    foreach ($line in Get-Content -LiteralPath $path -Encoding utf8) {
+        if ($line -cmatch ('\A' + [regex]::Escape($Name) + '==(?<v>\d+(\.\d+)+)(\s|\\|;|\z)')) { return $Matches['v'] }
+    }
+    throw "No pinned version of '$Name' in $path."
+}
 # Removing the download mark is an authorization: with the policy set to
 # RemoteSigned above, that mark is what stops a downloaded script from running,
 # and the module dot-sources every *.ps1 under Lib, Collectors, Evaluators and
@@ -403,7 +418,7 @@ if ($SkipPython) {
         try {
             if (Test-TPPythonModule -Python $pythonCmd -Module 'openpyxl') { $openpyxlOk = $true }
         } catch { }
-        $openpyxlPin = '3.1.5'
+        $openpyxlPin = Get-TPRuntimePin -Name 'openpyxl'
         if ($openpyxlOk) {
             # The pin applies to an existing install too: a different version is
             # replaced, so the publishers run against the version the tool was tested with.
@@ -437,7 +452,7 @@ if ($SkipPython) {
         # runs never use it. A copy that IS present is held to the version the bounded
         # reader (Lib/Read-TPQuestionnaireFields.ps1) was tested with, as openpyxl is;
         # the reader itself refuses anything below 4.0.0 at run time.
-        $pypdfPin = '6.20.1'
+        $pypdfPin = Get-TPRuntimePin -Name 'pypdf'
         $pypdfPresent = $false
         try { if (Test-TPPythonModule -Python $pythonCmd -Module 'pypdf') { $pypdfPresent = $true } } catch { }
         if ($pypdfPresent) {

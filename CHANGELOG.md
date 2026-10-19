@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **[Supply chain] The runtime dependencies are pinned, and Dependabot or the weekly check keeps them current.**
+  The Microsoft modules the tool signs in with, ExchangeOnlineManagement 3.10.1, Microsoft.Graph.Authentication
+  2.41.1 and MicrosoftTeams 8.0.0, are now pinned in `tools/pinned-modules.psd1` by exact version and gallery
+  SHA-256, each verified against the gallery before it was recorded. The weekly freshness check reads that file,
+  so it reports a newer release once it has been public for seven days and fails when the same major version has
+  moved on. CI does not install these modules (about 500 MB), so the pin is the version the tool is validated
+  against, not something CI loads. The Python packages the tool uses at run time, openpyxl 3.1.5 and pypdf 6.20.1,
+  move to a hash-locked `.github/runtime-requirements.txt`, which Dependabot's pip ecosystem for `/.github` already
+  watches (weekly, 7-day cooldown). The installer reads both versions from that file instead of hard-coding them,
+  and `TP.RuntimePins.Tests.ps1` keeps the pins exact, hash-locked and in agreement with the SBOM and the docs. The
+  PowerShell Gallery is not a Dependabot ecosystem, so the Microsoft modules are covered by the freshness check
+  rather than Dependabot.
+
 - **[CI] The suite runs under Pester 6.2.0.** `tools/pinned-modules.psd1` moves Pester from 5.9.1 to
   6.2.0 (released 2026-09-09, gallery SHA-256 pinned as before), so CI, the Windows job and the OSS
   Scanner image all run it. Two changes were needed. The test gate imported Pester with
