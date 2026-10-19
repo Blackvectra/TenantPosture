@@ -15,7 +15,7 @@
 # Data only; read with Import-PowerShellDataFile, never executed.
 @{
     PSScriptAnalyzer = @{ Version = '1.25.0'; Sha256 = '14e634c828eb98efb9f40b2918ba90f139ed5eccdf663a2a747736d996995d60' }
-    Pester           = @{ Version = '5.9.1';  Sha256 = '8dd4060fc3bc895f05bd655e4ab82abe346de54a4e6415dfb727cc8378672b69' }
+    Pester           = @{ Version = '6.2.0';  Sha256 = 'e6ac7418d4f12500269aaca58ae56cf1caafbbf1afa2cec334e289d1cf50a239' }
     InjectionHunter  = @{ Version = '1.0.0';  Sha256 = 'feb24c5c3e98f4741f3967a558983e5e23303e6fd9ed4f34e4b96cbe72a8f650' }
     Pode             = @{ Version = '2.14.1'; Sha256 = '38f7bedb4fd40a65d7518fc87de483450fafab22f5274ef82ebcfb0fca8ec6de' }
 }

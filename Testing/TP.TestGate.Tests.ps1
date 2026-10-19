@@ -248,5 +248,17 @@ Describe 'Test gate' {
             $template = Get-Content -LiteralPath (Join-Path $script:RepoRoot '.github/PULL_REQUEST_TEMPLATE.md') -Raw
             $template | Should -Match 'Invoke-TPTestGate\.ps1'
         }
+
+        It 'the gate runs the pinned Pester and never re-imports one already loaded' {
+            # Pester 6 loads a compiled assembly: a forced second import into
+            # the session CI already imported it into leaves Should without its
+            # operators, and a version floor would let a local run pass under a
+            # Pester CI does not use.
+            $gate = Get-Content -LiteralPath $script:GatePath -Raw
+            $gate | Should -Match "pinned-modules\.psd1'\)\)\.Pester\.Version"
+            $gate | Should -Match 'Import-Module Pester -RequiredVersion \$pinnedPester'
+            $gate | Should -Not -Match 'Import-Module Pester[^\r\n]*-Force'
+            $gate | Should -Not -Match 'Import-Module Pester[^\r\n]*-MinimumVersion'
+        }
     }
 }

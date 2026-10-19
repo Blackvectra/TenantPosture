@@ -1230,6 +1230,10 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
                 Test-TPWebPathIsPlain -Path $link | Should -BeFalse
                 # LinkTarget is .NET 6+. Hide it, as an older runtime would: LinkType
                 # (PowerShell 6.0+) must still catch the link.
+                # Pester 6 throws on a call no filtered mock matches, so every other
+                # field is forwarded to the real function by a default mock.
+                $script:RealObjectField = ${function:Get-TPObjectField}
+                Mock Get-TPObjectField { & $script:RealObjectField @PesterBoundParameters }
                 Mock Get-TPObjectField { '' } -ParameterFilter { $Key -eq 'LinkTarget' }
                 Test-TPWebPathIsPlain -Path $link | Should -BeFalse
             }
