@@ -198,10 +198,11 @@ Describe 'Framework crosswalk accuracy' {
             # 3.1.2 limits the types of transactions and functions a user may
             # execute. A review of privileged access is 3.1.5 (access to privileged
             # accounts authorized in accordance with least privilege) and an account
-            # left enabled with nobody using it is 3.1.1 (system access limited to
-            # authorized users). The SSP joins through this column, so a wrong id
-            # files the evidence under the wrong requirement (raised 2026-10-18).
-            $expected = @{ 'AAD-8.2' = 'AC.L2-3.1.5'; 'SPO-3.1' = 'AC.L2-3.1.5'; 'AAD-12.2' = 'AC.L1-3.1.1'; 'AAD-12.3' = 'AC.L1-3.1.1' }
+            # left enabled with nobody using it, or guest access that never expires,
+            # is 3.1.1 (system access limited to authorized users). The SSP joins
+            # through this column, so a wrong id files the evidence under the wrong
+            # requirement (raised 2026-10-18).
+            $expected = @{ 'AAD-8.2' = 'AC.L2-3.1.5'; 'SPO-3.1' = 'AC.L2-3.1.5'; 'AAD-12.2' = 'AC.L1-3.1.1'; 'AAD-12.3' = 'AC.L1-3.1.1'; 'SPO-1.4' = 'AC.L1-3.1.1'; 'SPO-3.4' = 'AC.L1-3.1.1' }
             $bad = [System.Collections.Generic.List[string]]::new()
             foreach ($id in @($expected.Keys | Sort-Object)) {
                 $c = @($script:Controls | Where-Object { $_.ControlId -eq $id })
