@@ -50,11 +50,15 @@ Describe 'Runtime dependencies are pinned' {
         $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:Installer, [ref] $tokens, [ref] $errors)
         $fn = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-TPRuntimePin' }, $true) | Select-Object -First 1
         $fn | Should -Not -BeNullOrEmpty
+        # The body comes off the AST instead of being rebuilt from its source text:
+        # [scriptblock]::Create() over an extent is string evaluation, which the injection
+        # rules flag and the baseline is not for. GetScriptBlock() keeps the param block, so
+        # -Name binds as it does in the installer and $scriptDir resolves from this scope.
+        $getPin = $fn.Body.GetScriptBlock()
         $scriptDir = $script:RepoRoot
-        . ([scriptblock]::Create($fn.Extent.Text))
-        Get-TPRuntimePin -Name 'pypdf' | Should -Match '\A\d+\.\d+\.\d+\z'
-        Get-TPRuntimePin -Name 'openpyxl' | Should -Match '\A\d+\.\d+\.\d+\z'
-        { Get-TPRuntimePin -Name 'no-such-package' } | Should -Throw
+        & $getPin -Name 'pypdf' | Should -Match '\A\d+\.\d+\.\d+\z'
+        & $getPin -Name 'openpyxl' | Should -Match '\A\d+\.\d+\.\d+\z'
+        { & $getPin -Name 'no-such-package' } | Should -Throw
     }
 
     It 'the SBOM and the docs state the pypdf version the requirements file pins' {
