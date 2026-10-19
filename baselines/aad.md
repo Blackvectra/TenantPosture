@@ -826,7 +826,7 @@ PIM > Microsoft Entra roles > Access reviews > Create recurring quarterly review
 | NIST SP 800-53 Rev 5 | AC-6(7) |
 | CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.4.1 |
 | CIS Controls v8.1 | 6.8 |
-| CMMC 2.0 | AC.L1-3.1.2 |
+| CMMC 2.0 | AC.L2-3.1.5 |
 | ISO/IEC 27001:2022 | A.5.18, A.8.2 |
 | SOC 2 | CC6.3 |
 | HIPAA | §164.308(a)(4) |
@@ -1357,7 +1357,7 @@ Entra ID > External Identities > All users > Filter by guest, sort by last sign-
 | NIST SP 800-53 Rev 5 | AC-2(3) |
 | CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.3.4 |
 | CIS Controls v8.1 | 5.3 |
-| CMMC 2.0 | AC.L1-3.1.2 |
+| CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.18, A.6.5 |
 | SOC 2 | CC6.3 |
 | HIPAA | §164.308(a)(4)(ii)(C) |
@@ -1388,7 +1388,7 @@ Verify each account represents an active user. Disable accounts for departed emp
 | NIST SP 800-53 Rev 5 | AC-2(3) |
 | CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.6.1 |
 | CIS Controls v8.1 | 5.3 |
-| CMMC 2.0 | AC.L1-3.1.2 |
+| CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.18, A.6.5 |
 | SOC 2 | CC6.3 |
 | HIPAA | §164.308(a)(4)(ii)(C) |
