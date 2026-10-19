@@ -43,8 +43,8 @@ Describe 'PowerShell security analysis and pinned CI modules' {
 
     Context 'Pin file' {
 
-        It 'pins PSScriptAnalyzer, Pester and Pode' {
-            foreach ($n in 'PSScriptAnalyzer', 'Pester', 'Pode') { $script:Pins.Keys | Should -Contain $n }
+        It 'pins PSScriptAnalyzer, InjectionHunter, Pester and Pode' {
+            foreach ($n in 'PSScriptAnalyzer', 'InjectionHunter', 'Pester', 'Pode') { $script:Pins.Keys | Should -Contain $n }
         }
 
         It 'pins every module to an exact version and a full SHA-256' {
@@ -161,11 +161,96 @@ Describe 'PowerShell security analysis and pinned CI modules' {
         }
     }
 
+    Context 'InjectionHunter baseline' {
+
+        BeforeAll {
+            # A finding as PSScriptAnalyzer reports it: the rule name, the file
+            # and the extent of the flagged expression in that file.
+            function New-TestFinding {
+                param([string] $Path, [string] $Rule, [scriptblock] $Pick)
+                $tokens = $null; $errors = $null
+                $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$tokens, [ref]$errors)
+                $node = $ast.Find($Pick, $true)
+                [pscustomobject]@{ RuleName = $Rule; ScriptPath = $Path; Extent = $node.Extent; Line = $node.Extent.StartLineNumber; Column = 1; Severity = 'Warning'; Message = 'm' }
+            }
+            $script:IsReplace = { param($a) $a -is [System.Management.Automation.Language.BinaryExpressionAst] -and $a.Operator -eq 'Ireplace' }
+            $script:Baseline = (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'tools/injection-baseline.json') -Raw | ConvertFrom-Json).entries
+        }
+
+        It 'lets a replace through only when every replacement is the empty string' {
+            $f = Join-Path $TestDrive 'esc.ps1'
+            Set-Content -LiteralPath $f -Value '$a -replace ''x'', '''''
+            Test-TPRemovalOnlyReplace -Finding (New-TestFinding $f 'InjectionRisk.UnsafeEscaping' $script:IsReplace) | Should -BeTrue
+            Set-Content -LiteralPath $f -Value '$a -replace "''", "''''"'
+            Test-TPRemovalOnlyReplace -Finding (New-TestFinding $f 'InjectionRisk.UnsafeEscaping' $script:IsReplace) | Should -BeFalse
+            Set-Content -LiteralPath $f -Value '$a -replace "''", "''''" -replace ''y'', '''''
+            Test-TPRemovalOnlyReplace -Finding (New-TestFinding $f 'InjectionRisk.UnsafeEscaping' $script:IsReplace) | Should -BeFalse -Because 'one escaping replace in the chain is enough'
+            Set-Content -LiteralPath $f -Value '$a -replace ''x'', $b'
+            Test-TPRemovalOnlyReplace -Finding (New-TestFinding $f 'InjectionRisk.UnsafeEscaping' $script:IsReplace) | Should -BeFalse -Because 'a replacement that is not a constant is not proven empty'
+            Set-Content -LiteralPath $f -Value '$a -replace ''x'', ''''' 
+            Test-TPRemovalOnlyReplace -Finding (New-TestFinding $f 'InjectionRisk.StaticPropertyInjection' $script:IsReplace) | Should -BeFalse -Because 'only the escaping rule has this exemption'
+        }
+
+        It 'passes a reviewed finding, fails a new one, and counts copies' {
+            $f = Join-Path $TestDrive 'dyn.ps1'
+            Set-Content -LiteralPath $f -Value "`$o.`$p`n`$o.`$p"
+            $pick = { param($a) $a -is [System.Management.Automation.Language.MemberExpressionAst] }
+            $one = New-TestFinding $f 'InjectionRisk.StaticPropertyInjection' $pick
+            $entry = [pscustomobject]@{ Path = 'dyn.ps1'; Rule = 'InjectionRisk.StaticPropertyInjection'; Text = '$o.$p'; Count = 1; Reason = 'Reviewed: the name comes from a literal list.' }
+            $r = Compare-TPInjectionBaseline -Findings @($one) -Baseline @($entry) -RepoRoot $TestDrive
+            $r.Reviewed | Should -Be 1; @($r.New).Count | Should -Be 0; @($r.Stale).Count | Should -Be 0
+            $r = Compare-TPInjectionBaseline -Findings @($one, $one) -Baseline @($entry) -RepoRoot $TestDrive
+            @($r.New).Count | Should -Be 1 -Because 'a second copy of a reviewed line is new code'
+            $r = Compare-TPInjectionBaseline -Findings @($one) -Baseline @() -RepoRoot $TestDrive
+            @($r.New).Count | Should -Be 1
+        }
+
+        It 'fails a baseline entry nothing matches any more' {
+            $entry = [pscustomobject]@{ Path = 'gone.ps1'; Rule = 'InjectionRisk.Create'; Text = '[scriptblock]::Create($b)'; Count = 1; Reason = 'Reviewed: the text is a literal in the test.' }
+            $r = Compare-TPInjectionBaseline -Findings @() -Baseline @($entry) -RepoRoot $TestDrive
+            @($r.Stale).Count | Should -Be 1
+        }
+
+        It 'refuses an entry with no reason, a short reason, a missing field or a rule from another tool' {
+            @(Test-TPInjectionBaselineEntry -Baseline @([pscustomobject]@{ Path = 'a'; Rule = 'InjectionRisk.Create'; Text = 't'; Count = 1; Reason = 'ok' })).Count | Should -BeGreaterThan 0
+            @(Test-TPInjectionBaselineEntry -Baseline @([pscustomobject]@{ Path = 'a'; Rule = 'InjectionRisk.Create'; Text = 't'; Count = 1 })).Count | Should -BeGreaterThan 0
+            @(Test-TPInjectionBaselineEntry -Baseline @([pscustomobject]@{ Path = 'a'; Rule = 'PSAvoidUsingInvokeExpression'; Text = 't'; Count = 1; Reason = 'A reason that is long enough to read.' })).Count | Should -BeGreaterThan 0
+            @(Test-TPInjectionBaselineEntry -Baseline @([pscustomobject]@{ Path = 'a'; Rule = 'InjectionRisk.Create'; Text = 't'; Count = 0; Reason = 'A reason that is long enough to read.' })).Count | Should -BeGreaterThan 0
+        }
+
+        It 'the shipped baseline is well formed and names files that exist' {
+            @($script:Baseline).Count | Should -BeGreaterThan 0
+            @(Test-TPInjectionBaselineEntry -Baseline $script:Baseline) | Should -BeNullOrEmpty
+            foreach ($e in $script:Baseline) { Test-Path -LiteralPath (Join-Path $script:RepoRoot $e.Path) | Should -BeTrue -Because $e.Path }
+        }
+
+        It 'never accepts a security-rule finding or an Invoke-Expression through the baseline' {
+            foreach ($e in $script:Baseline) {
+                $e.Rule | Should -Not -Be 'InjectionRisk.InvokeExpression'
+                $e.Rule | Should -Not -Be 'InjectionRisk.CommandInjection'
+            }
+        }
+
+        It 'flags a planted ScriptBlock.Create of a variable as new (when the pinned modules are installed)' {
+            $ihPin = $script:Pins.InjectionHunter.Version
+            $ih = Get-Module -ListAvailable InjectionHunter | Where-Object { [string]$_.Version -eq $ihPin } | Select-Object -First 1
+            $pssa = Get-Module -ListAvailable PSScriptAnalyzer | Where-Object { [string]$_.Version -eq $script:Pins.PSScriptAnalyzer.Version }
+            if (-not $ih -or -not $pssa) { Set-ItResult -Skipped -Because 'the pinned PSScriptAnalyzer and InjectionHunter are not installed here; CI runs them in their own job'; return }
+            Import-Module PSScriptAnalyzer -RequiredVersion $script:Pins.PSScriptAnalyzer.Version -Force
+            $dir = Join-Path $TestDrive 'ihplant'
+            $null = New-Item -ItemType Directory -Path $dir
+            Set-Content -LiteralPath (Join-Path $dir 'p.ps1') -Value 'function Invoke-X { param([string] $UserText) & ([scriptblock]::Create($UserText)) }'
+            $found = @(Invoke-ScriptAnalyzer -Path $dir -Recurse -CustomRulePath (Join-Path $ih.ModuleBase 'InjectionHunter.psm1') -IncludeRule 'Measure-*' | Where-Object { $_.RuleName -like 'InjectionRisk.*' })
+            $r = Compare-TPInjectionBaseline -Findings $found -Baseline $script:Baseline -RepoRoot $dir
+            @($r.New).RuleName | Should -Contain 'InjectionRisk.Create'
+        }
+    }
+
     Context 'CI wiring' {
 
         It 'has a security-analysis job that installs the pinned analyzer and runs the gate' {
             $script:Ci | Should -Match '(?m)^  security-analysis:'
-            $script:Ci | Should -Match 'Install-TPPinnedModule\.ps1 -Name PSScriptAnalyzer'
+            $script:Ci | Should -Match 'Install-TPPinnedModule\.ps1 -Name PSScriptAnalyzer, InjectionHunter'
             $script:Ci | Should -Match 'Invoke-TPSecurityAnalysis\.ps1 -SarifPath'
             $script:Ci | Should -Match 'category: psscriptanalyzer-security'
         }

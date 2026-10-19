@@ -697,6 +697,13 @@ return
             { Resolve "/o=x/cn=y$([char]0x202E)" 'NotFound' } | Should -Throw -ExpectedMessage '*control or format character*'
             @(Calls).Count | Should -Be 0 -Because 'a refused identifier never reaches the directory'
         }
+        It 'refuses a DN holding a typographic quotation mark, which a filter could read as the closing quote' {
+            foreach ($cp in 0x2018, 0x2019, 0x201A, 0x201B) {
+                $dn = "/o=x/cn=a$([char]$cp) -or Name -like $([char]$cp)*"
+                { Resolve $dn 'NotFound' } | Should -Throw -ExpectedMessage '*typographic quotation mark*'
+                @(Calls).Count | Should -Be 0 -Because 'a refused identifier never reaches the directory, by Identity or by Filter'
+            }
+        }
         It 'does not ask the X500 lookup for a display name, and answers $null when the name is unknown' {
             Resolve 'Sales Team' 'NotFound' | Should -BeNullOrEmpty
             @(Calls).Count | Should -Be 1

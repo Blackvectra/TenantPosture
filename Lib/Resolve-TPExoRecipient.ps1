@@ -122,6 +122,18 @@ function Resolve-TPExoRecipient {
     if ($id -match '[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]') {
         throw 'The recipient identifier holds a control or format character and was not sent to the directory.'
     }
+    # The X500 lookup below quotes the identifier inside a -Filter by doubling
+    # the ASCII apostrophe, the one escape Microsoft documents for filters.
+    # Filters use PowerShell syntax, and PowerShell also reads U+2018..U+201B as
+    # quote delimiters, so one of those could end the quoted value early and
+    # widen the filter to another recipient, which would classify the rule by
+    # the wrong object. The identifier comes from an inbox rule, so it is
+    # refused rather than escaped: not asked, never answered.
+    foreach ($cp in 0x2018, 0x2019, 0x201A, 0x201B) {
+        if ($id.Contains([string][char]$cp)) {
+            throw 'The recipient identifier holds a typographic quotation mark and was not sent to the directory.'
+        }
+    }
     $isLegacyDn = ($id -match '^(?i)/o=')
 
     $notFound      = $false

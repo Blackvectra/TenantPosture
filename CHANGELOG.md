@@ -13,6 +13,23 @@
   digest, openpyxl and yamllint install by exact version and SHA-256 (`.oss-scanner/requirements.txt`,
   wheels only), Pester and PSScriptAnalyzer through `tools/Install-TPPinnedModule.ps1`, and
   Dependabot tracks the image and the requirements. `TP.WorkflowSecurity.Tests.ps1` pins each.
+- **[CI] Microsoft's InjectionHunter rules gate every pull request.** CodeQL does not analyze
+  PowerShell, so nothing looked for code-injection patterns in the tool's own language.
+  `tools/Invoke-TPSecurityAnalysis.ps1` now runs InjectionHunter 1.0.0 (pinned and hash-verified like
+  the analyzer) after the security rules: `Invoke-Expression`, `Add-Type`, `ScriptBlock.Create`
+  and the other dangerous methods, `cmd`/`powershell` given an expandable string, dynamic member and
+  method names, and hand-rolled quote escaping. Its rules are deliberately broad, so a finding passes
+  only when it is reviewed into `tools/injection-baseline.json` with the reason it is not an
+  injection (matched by file, rule and code text, with a count, so a second copy of a reviewed line
+  is new; an entry nothing matches fails as stale), or when it is a `-replace` whose every
+  replacement is the empty string, which the gate proves from the AST because the rule cannot tell
+  a removal from an escape. The first run found 97: 43 removals, 54 reviewed (19 in shipped code,
+  each with its own reason; the rest in tests). Review found one gap: the Exchange recipient
+  resolver quoted an inbox rule's legacy DN into a `Get-Recipient -Filter` by doubling the ASCII
+  apostrophe but did not refuse U+2018..U+201B, which PowerShell syntax also reads as quotes, so a
+  crafted DN could have widened the filter to another recipient and classified the rule by the
+  wrong object. It is now refused before any lookup (not asked, never answered), pinned in
+  `TP.ExchangeTruth.Tests.ps1`.
 - **[CI] PSScriptAnalyzer's security rules block a merge, and CI's modules are installed by hash.**
   The rules that catch `Invoke-Expression`, plain-text and wrongly typed credentials, unencrypted
   authentication, MD5 and SHA-1, and hard-coded computer names are Warning severity, and the
@@ -46,6 +63,23 @@
   requires `# vX.Y.Z`. yamllint, which the docs-lint job installed unpinned, is now hash-locked the same way
   (`.github/yamllint-requirements.txt`, every wheel of each release). SECURITY.md also no longer says four workflows' triggers are
   commented out; they run on every pull request.
+- **[Fix] SPO-1.4 and SPO-3.4 (guest access expiration) cite CMMC AC.L1-3.1.1, not AC.L1-3.1.2.** Both
+  evaluators read the SharePoint shell's `ExternalUserExpirationRequired` and `ExternalUserExpireInDays`
+  and pass only when guest access lapses after a finite number of days: who keeps access, which is
+  3.1.1 (objective [d], system access limited to authorized users), not the types of transactions and
+  functions a user may execute (3.1.2). Follows the AC.L1-3.1.2 correction of AAD-8.2, SPO-3.1,
+  AAD-12.2 and AAD-12.3; the baseline document and the `TP.FrameworkAccuracy.Tests.ps1` pin follow.
+- **[Fix] The three controls of the AC-2(9) correction, and AAD-12.2 beside them, cited CMMC
+  AC.L1-3.1.2, the types of transactions and functions a user may execute, for checks it does not
+  describe.** AAD-8.2 and SPO-3.1 (a review of privileged access) now cite AC.L2-3.1.5, least privilege
+  including privileged accounts, whose objective [b] is access to privileged accounts authorized in
+  accordance with least privilege; AAD-3.5, AAD-3.6 and AAD-15.1 already cite it. AAD-12.3 and its
+  sibling AAD-12.2 (licensed member and guest accounts with no sign-in for 90 days) now cite
+  AC.L1-3.1.1, limit system access to authorized users, whose objective [d] is exactly what an account
+  nobody uses fails. The baseline documents carry the same rows and `TP.FrameworkAccuracy.Tests.ps1`
+  pins the four. The SSP joins each control to its 800-171 requirement through this column, so the
+  four move with it; 3.1.1, 3.1.2 and 3.1.5 each keep automated evidence and the 41-of-110 count does
+  not change. Raised on 2026-10-18.
 - **[Fix] Three controls cited 800-53 AC-2(9), the restriction on shared and group accounts, for
   checks it does not describe.** AAD-8.2 (a recurring access review of privileged directory roles)
   and SPO-3.1 (site collection administrators reviewed) now cite AC-6(7), Review of User Privileges:
