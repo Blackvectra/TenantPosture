@@ -1,0 +1,20 @@
+# The Python packages the XLSX compliance matrix needs at run time: openpyxl and
+# its one dependency. Installed with --require-hashes and --only-binary=:all:, so
+# pip accepts only these exact releases and checks every wheel against a hash
+# here before it is unpacked.
+#
+# Kept apart from the questionnaire PDF importer's packages
+# (runtime-pdf-requirements.txt) because pip verifies a whole requirements file
+# in hash mode: naming one package on the command line is refused for having no
+# hash of its own, so a set that must be installable on its own needs its own
+# file. Dependabot (the pip ecosystem for /.github, weekly, 7-day cooldown)
+# proposes new versions with new hashes.
+#
+# Install-TPPrerequisites.ps1 reads the version of each package from the file
+# that pins it and installs from that same file; the SBOM generator and the docs
+# must agree with it (TP.RuntimePins.Tests.ps1 checks).
+
+openpyxl==3.1.5 \
+    --hash=sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2
+et-xmlfile==2.0.0 \
+    --hash=sha256:7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa

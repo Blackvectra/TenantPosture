@@ -67,19 +67,66 @@ Write-Host ""
 Write-Host "[3/6] Unblocking files (Zone.Identifier from downloads)..." -ForegroundColor Cyan
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
-# The version of one Python package the tool pins, read from .github/runtime-requirements.txt
-# (the file Dependabot updates). A missing or unreadable file is fatal: a silent default would
-# install a version nobody reviewed.
-function Get-TPRuntimePin {
+# The pinned version of one Python package AND the hash-locked file that pins it, read
+# from the requirements files Dependabot updates. The path comes back with the version
+# because the version on its own cannot be installed safely: `pip install name==version`
+# verifies no hash, so the install has to run -r against this same file under
+# --require-hashes. A missing or unreadable file is fatal: a silent default would install
+# a version nobody reviewed.
+function Get-TPRuntimeRequirement {
     [CmdletBinding()]
-    [OutputType([string])]
+    [OutputType([psobject])]
     param([Parameter(Mandatory)] [string] $Name)
-    $path = Join-Path $scriptDir '.github' 'runtime-requirements.txt'
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Runtime requirements file not found: $path" }
-    foreach ($line in Get-Content -LiteralPath $path -Encoding utf8) {
-        if ($line -cmatch ('\A' + [regex]::Escape($Name) + '==(?<v>\d+(\.\d+)+)(\s|\\|;|\z)')) { return $Matches['v'] }
+    # One file per set the operator can install on its own. pip's hash mode verifies a
+    # whole requirements file and refuses a package named on the command line for
+    # carrying no hash of its own, so openpyxl cannot share a file with pypdf, which
+    # stays optional.
+    $files = @(
+        (Join-Path $scriptDir '.github' 'runtime-xlsx-requirements.txt')
+        (Join-Path $scriptDir '.github' 'runtime-pdf-requirements.txt')
+    )
+    foreach ($path in $files) {
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Runtime requirements file not found: $path" }
+        foreach ($line in Get-Content -LiteralPath $path -Encoding utf8) {
+            if ($line -cmatch ('\A' + [regex]::Escape($Name) + '==(?<v>\d+(\.\d+)+)(\s|\\|;|\z)')) {
+                return [pscustomobject] @{ Name = $Name; Version = $Matches['v']; Path = $path }
+            }
+        }
     }
-    throw "No pinned version of '$Name' in $path."
+    throw "No pinned version of '$Name' in: $($files -join ', ')."
+}
+
+# The one way this installer installs a Python package. The requirements file arrives as
+# an argument rather than interpolated into the script, so a Windows path's backslashes
+# cannot escape anything in the Python source. --require-hashes makes pip check every
+# wheel against a hash in that file before it is unpacked, and --only-binary=:all: stops
+# it building an sdist, which no hash would cover.
+$script:TPPipInstallScript = @'
+import sys, runpy
+requirements = sys.argv[1]
+sys.argv = ['pip', 'install', '--require-hashes', '--only-binary=:all:', '-r', requirements, '--quiet']
+runpy.run_module('pip', run_name='__main__', alter_sys=True)
+'@
+
+# pip's own words when an install fails, so a refused hash reads as a refused hash and
+# not as "install failed". --quiet keeps a successful install silent but still prints a
+# hash mismatch, which is the one failure the operator must not have to guess at: it
+# means the index, a mirror or a proxy served content that is not what was reviewed.
+function Write-TPPipFailure {
+    [CmdletBinding()]
+    param([AllowNull()] [AllowEmptyCollection()] [object[]] $Output)
+    # Invoke-TPPython merges stderr, so pip's lines arrive as ErrorRecord objects. The
+    # text is on the exception: an ErrorRecord whose message is empty (pip's trailing
+    # blank line) stringifies to "System.Management.Automation.RemoteException", which
+    # would be printed as if pip had said it.
+    $lines = [System.Collections.Generic.List[string]]::new()
+    foreach ($item in @($Output | Where-Object { $null -ne $_ })) {
+        $text = if ($item -is [System.Management.Automation.ErrorRecord]) { [string] $item.Exception.Message } else { [string] $item }
+        if ($text -match '\S') { $lines.Add($text.TrimEnd()) }
+    }
+    foreach ($line in @($lines | Select-Object -Last 6)) {
+        Write-Host "      $line" -ForegroundColor DarkGray
+    }
 }
 # Removing the download mark is an authorization: with the policy set to
 # RemoteSigned above, that mark is what stops a downloaded script from running,
@@ -418,7 +465,8 @@ if ($SkipPython) {
         try {
             if (Test-TPPythonModule -Python $pythonCmd -Module 'openpyxl') { $openpyxlOk = $true }
         } catch { }
-        $openpyxlPin = Get-TPRuntimePin -Name 'openpyxl'
+        $openpyxlReq = Get-TPRuntimeRequirement -Name 'openpyxl'
+        $openpyxlPin = $openpyxlReq.Version
         if ($openpyxlOk) {
             # The pin applies to an existing install too: a different version is
             # replaced, so the publishers run against the version the tool was tested with.
@@ -435,14 +483,17 @@ if ($SkipPython) {
             try {
                 # pip runs through the same helper as every other Python call: the
                 # current directory is off sys.path (no planted pip.py) and the user
-                # site stays, so an unelevated install can fall back to --user.
-                $null = Invoke-TPPython -Python $pythonCmd -Script "import sys, runpy; sys.argv = ['pip', 'install', 'openpyxl==$openpyxlPin', '--quiet']; runpy.run_module('pip', run_name='__main__', alter_sys=True)"
+                # site stays, so an unelevated install can fall back to --user. It
+                # installs from the hash-locked file, so the recorded SHA-256 gates the
+                # wheel instead of a version number nobody can verify.
+                $pipOut = Invoke-TPPython -Python $pythonCmd -Arguments $openpyxlReq.Path -Script $script:TPPipInstallScript
                 if ($LASTEXITCODE -eq 0 -and (Test-TPPythonModule -Python $pythonCmd -Module 'openpyxl')) {
                     Write-Host "  [+] openpyxl installed" -ForegroundColor Green
                 } elseif ($LASTEXITCODE -eq 0) {
                     Write-Host "  [!] pip reported success but openpyxl still cannot be imported the way the tool imports it (XLSX matrix will be skipped at runtime)" -ForegroundColor Yellow
                 } else {
                     Write-Host "  [!] openpyxl install failed (XLSX matrix will be skipped at runtime)" -ForegroundColor Yellow
+                    Write-TPPipFailure -Output $pipOut
                 }
             } catch {
                 Write-Host "  [!] $($_.Exception.Message)" -ForegroundColor Yellow
@@ -452,7 +503,8 @@ if ($SkipPython) {
         # runs never use it. A copy that IS present is held to the version the bounded
         # reader (Lib/Read-TPQuestionnaireFields.ps1) was tested with, as openpyxl is;
         # the reader itself refuses anything below 4.0.0 at run time.
-        $pypdfPin = Get-TPRuntimePin -Name 'pypdf'
+        $pypdfReq = Get-TPRuntimeRequirement -Name 'pypdf'
+        $pypdfPin = $pypdfReq.Version
         $pypdfPresent = $false
         try { if (Test-TPPythonModule -Python $pythonCmd -Module 'pypdf') { $pypdfPresent = $true } } catch { }
         if ($pypdfPresent) {
@@ -462,18 +514,20 @@ if ($SkipPython) {
             } else {
                 Write-Host "  [*] pypdf $($havePdf.Trim()) found; installing the pinned $pypdfPin..." -ForegroundColor Yellow
                 try {
-                    $null = Invoke-TPPython -Python $pythonCmd -Script "import sys, runpy; sys.argv = ['pip', 'install', 'pypdf==$pypdfPin', '--quiet']; runpy.run_module('pip', run_name='__main__', alter_sys=True)"
+                    $pipOut = Invoke-TPPython -Python $pythonCmd -Arguments $pypdfReq.Path -Script $script:TPPipInstallScript
                     if ($LASTEXITCODE -eq 0 -and (Test-TPPythonModule -Python $pythonCmd -Module 'pypdf')) {
                         Write-Host "  [+] pypdf $pypdfPin installed" -ForegroundColor Green
                     } else {
                         Write-Host "  [!] pypdf $pypdfPin could not be installed; the questionnaire importer refuses a version below 4.0.0" -ForegroundColor Yellow
+                        Write-TPPipFailure -Output $pipOut
                     }
                 } catch {
                     Write-Host "  [!] $($_.Exception.Message)" -ForegroundColor Yellow
                 }
             }
         } else {
-            Write-Host "  [-] pypdf not installed — optional; needed only to import a filled questionnaire PDF ('pip install pypdf==$pypdfPin')" -ForegroundColor DarkGray
+            Write-Host "  [-] pypdf not installed — optional; needed only to import a filled questionnaire PDF" -ForegroundColor DarkGray
+            Write-Host "      To install it: pip install --require-hashes --only-binary=:all: -r $($pypdfReq.Path)" -ForegroundColor DarkGray
         }
     } else {
         Write-Host "  [-] Python not found. Install from python.org or 'winget install Python.Python.3.12'" -ForegroundColor Yellow
