@@ -167,57 +167,53 @@ jobs:
             $warnings | Format-Table RuleName,Severity,ScriptName,Line,Message -AutoSize -Wrap
           }
 
-          # ── Emit SARIF only when there are Error-severity findings ─────────
-          # Code Scanning creates a "failure" check-run for every SARIF upload
-          # whose `results` array is non-empty — including warnings and notes.
-          # Our codebase has ~100 long-standing warnings (PSAvoidUsing* style),
-          # so uploading a full SARIF would surface a permanent "failure" check
-          # on every push, even when nothing is actionable. Upload SARIF only
-          # when there are real Errors to triage; warnings remain visible in
-          # the workflow-log table above.
-          if ($errors.Count -gt 0) {
-              $repoRoot = (Resolve-Path '.').Path
-              $sarifResults = @(foreach ($r in $errors) {
-                  $rel = if ($r.ScriptPath) {
-                      ([System.IO.Path]::GetRelativePath($repoRoot, $r.ScriptPath)) -replace '\\','/'
-                  } else { '' }
-                  [pscustomobject]@{
-                      ruleId  = $r.RuleName
-                      level   = 'error'
-                      message = @{ text = [string]$r.Message }
-                      locations = @(@{
-                          physicalLocation = @{
-                              artifactLocation = @{ uri = $rel }
-                              region = @{
-                                  # SARIF 2.1.0 requires startLine/startColumn >= 1.
-                                  # PSScriptAnalyzer occasionally emits 0 for whole-
-                                  # file rules; clamp those up to 1.
-                                  startLine   = [Math]::Max(1, [int]$r.Line)
-                                  startColumn = [Math]::Max(1, [int]$r.Column)
-                              }
-                          }
-                      })
-                  }
-              })
-              $sarif = [ordered]@{
-                  '$schema' = 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json'
-                  version   = '2.1.0'
-                  runs      = @(@{
-                      tool = @{
-                          driver = @{
-                              name            = 'PSScriptAnalyzer'
-                              version         = ([string](Get-Module PSScriptAnalyzer).Version)
-                              informationUri  = 'https://github.com/PowerShell/PSScriptAnalyzer'
+          # ── SARIF on every run, empty when there are no Error findings ─────
+          # Code Scanning closes an alert only when a later analysis in the same
+          # category no longer reports it. The 2026-05-28 run uploaded every
+          # Warning under this category, then uploads stopped whenever there
+          # were no Errors, so those ~580 alerts (on files since renamed) could
+          # never close. An empty results array closes them and opens nothing;
+          # only Error findings are reported, as before, so the permanent
+          # Warning backlog stays in the log table above, not in Code Scanning.
+          $repoRoot = (Resolve-Path '.').Path
+          $sarifResults = @(foreach ($r in $errors) {
+              $rel = if ($r.ScriptPath) {
+                  ([System.IO.Path]::GetRelativePath($repoRoot, $r.ScriptPath)) -replace '\\','/'
+              } else { '' }
+              [pscustomobject]@{
+                  ruleId  = $r.RuleName
+                  level   = 'error'
+                  message = @{ text = [string]$r.Message }
+                  locations = @(@{
+                      physicalLocation = @{
+                          artifactLocation = @{ uri = $rel }
+                          region = @{
+                              # SARIF 2.1.0 requires startLine/startColumn >= 1.
+                              # PSScriptAnalyzer occasionally emits 0 for whole-
+                              # file rules; clamp those up to 1.
+                              startLine   = [Math]::Max(1, [int]$r.Line)
+                              startColumn = [Math]::Max(1, [int]$r.Column)
                           }
                       }
-                      results = $sarifResults
                   })
               }
-              $sarif | ConvertTo-Json -Depth 12 | Out-File -LiteralPath ./psscriptanalyzer.sarif -Encoding utf8NoBOM
-              Write-Host ('Wrote SARIF with {0} Error finding(s) for Code Scanning.' -f $sarifResults.Count)
-          } else {
-              Write-Host 'No Error-severity findings — skipping SARIF upload.' -ForegroundColor Green
+          })
+          $sarif = [ordered]@{
+              '$schema' = 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json'
+              version   = '2.1.0'
+              runs      = @(@{
+                  tool = @{
+                      driver = @{
+                          name            = 'PSScriptAnalyzer'
+                          version         = ([string](Get-Module PSScriptAnalyzer).Version)
+                          informationUri  = 'https://github.com/PowerShell/PSScriptAnalyzer'
+                      }
+                  }
+                  results = $sarifResults
+              })
           }
+          $sarif | ConvertTo-Json -Depth 12 | Out-File -LiteralPath ./psscriptanalyzer.sarif -Encoding utf8NoBOM
+          Write-Host ('Wrote SARIF with {0} Error finding(s) for Code Scanning (an empty file closes fixed alerts).' -f $sarifResults.Count)
 
           # ── Gate ────────────────────────────────────────────────────────────
           if ($errors.Count -gt 0) {

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **[CI] 580 stale Code Scanning alerts close, and the OSS Scanner image is pinned.** On 2026-05-28
+  the PSScriptAnalyzer job uploaded every Warning to Code Scanning under the `psscriptanalyzer`
+  category; days later it was changed to upload only when there were Error findings, so that
+  category never received another analysis and those alerts (BOM encoding, plural nouns, empty
+  catch blocks, on `NRG-*` files since renamed) stayed open. Code Scanning closes an alert only when
+  a later analysis in the same category stops reporting it, so the job now uploads its SARIF on
+  every run, empty when there are no Errors; only Error findings are reported, as before. Scorecard's
+  Pinned-Dependencies alerts on `.oss-scanner/Dockerfile` are fixed: the base image is pinned by
+  digest, openpyxl and yamllint install by exact version and SHA-256 (`.oss-scanner/requirements.txt`,
+  wheels only), Pester and PSScriptAnalyzer through `tools/Install-TPPinnedModule.ps1`, and
+  Dependabot tracks the image and the requirements. `TP.WorkflowSecurity.Tests.ps1` pins each.
 - **[CI] PSScriptAnalyzer's security rules block a merge, and CI's modules are installed by hash.**
   The rules that catch `Invoke-Expression`, plain-text and wrongly typed credentials, unencrypted
   authentication, MD5 and SHA-1, and hard-coded computer names are Warning severity, and the

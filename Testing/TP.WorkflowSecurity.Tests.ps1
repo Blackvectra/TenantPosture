@@ -87,6 +87,33 @@ Describe 'Workflow security' {
         }
     }
 
+    Context 'Code Scanning and the OSS Scanner image' {
+
+        It 'uploads the PSScriptAnalyzer SARIF on every run, so an alert closes once fixed' {
+            # Uploads stopped whenever there were no Errors, so the warnings a
+            # 2026-05-28 run uploaded under this category could never close.
+            $ci = Get-Content -LiteralPath (Join-Path $script:WorkflowDir 'ci.yml') -Raw
+            $ci | Should -Not -Match 'skipping SARIF upload'
+            $ci | Should -Match "Out-File -LiteralPath ./psscriptanalyzer\.sarif"
+            $ci | Should -Match 'category: psscriptanalyzer\b'
+        }
+
+        It 'pins the image by digest and installs every package by hash' {
+            $docker = Get-Content -LiteralPath (Join-Path $script:RepoRoot '.oss-scanner/Dockerfile') -Raw
+            foreach ($m in [regex]::Matches($docker, '(?m)^FROM\s+(?<ref>\S+)')) { $m.Groups['ref'].Value | Should -Match '@sha256:[0-9a-f]{64}$' }
+            $docker | Should -Not -Match '\b(Install-Module|Install-PSResource)\b'
+            $joined = $docker -replace '\\\r?\n\s*', ' '
+            foreach ($m in [regex]::Matches($joined, 'pip3?\s+install\b[^\r\n]*')) {
+                $m.Value | Should -Match '--require-hashes'
+                $m.Value | Should -Match '--only-binary=:all:'
+            }
+            $req = Get-Content -LiteralPath (Join-Path $script:RepoRoot '.oss-scanner/requirements.txt') -Raw
+            foreach ($pkg in 'openpyxl', 'et-xmlfile', 'yamllint', 'pathspec', 'pyyaml') {
+                $req | Should -Match "(?m)^$pkg==\d+(\.\d+)+ \\\s*\r?\n\s+--hash=sha256:[0-9a-f]{64}"
+            }
+        }
+    }
+
     Context 'every workflow' {
 
         It '<Name>: suppresses a zizmor finding only with a stated reason' -ForEach $workflowCases {
