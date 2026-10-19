@@ -714,7 +714,7 @@ Eight GitHub Actions workflows cover the repository. All run automatically on pu
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
 | **Scorecard** | OpenSSF Scorecard supply-chain posture, weekly |
 | **zizmor** | Static security analysis of the workflows themselves at the strictest persona; any finding fails; hash-locked install; weekly sweep |
-| **OSS Scanner image** | Builds `.oss-scanner/Dockerfile` (pinned base image and packages, module import, full Pester suite inside the image) and starts it with no network; on changes to its inputs and weekly |
+| **OSS Scanner image** | Builds `.oss-scanner/Dockerfile` (pinned base image plus Ubuntu security updates, pinned packages, module import, full suite through the test gate inside the image), fails on any test failure recorded in the image, and starts it with no network; on changes to its inputs and weekly, when it also checks every pinned PowerShell module against the gallery |
 | **Release** | On `v*` tags: CycloneDX SBOM generation + Authenticode signature/integrity verification |
 
 The framework-accuracy suite validates every SCuBA citation against the bundled ScubaGear v2.0.0 policy list, every CIS Controls citation against the v8.1 safeguard list, CMMC domain/level correctness, and ISO 27001:2022 Annex-A ranges — a wrong citation fails the PR, not the client report.

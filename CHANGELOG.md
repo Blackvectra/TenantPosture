@@ -9,6 +9,19 @@
   module, as the scanner runs it. A broken pin, a base-image digest gone from the registry or a
   module that no longer imports fails a check here instead of a scanner submission, and no
   workstation needs Docker. Nothing is pushed to a registry; the job has read-only access.
+  **Errors surface.** The image ran its tests with a bare `Invoke-Pester` and a `FailedCount` check
+  and kept going whatever happened, so a failure inside the image was only a warning line in a log
+  nobody read. It now runs them through `tools/Invoke-TPTestGate.ps1` (the gate CI uses: every file
+  parses, tests run, nothing fails) and records the exit code, log and NUnit results in `/oss-test`;
+  the image still builds on a failure, so the scanner can run, but the workflow reads the code back
+  out of the image, fails the check on anything but 0, names the failing tests and publishes the
+  log as an artifact. **Dependencies stay current.** The image now applies Ubuntu's security updates
+  on top of the pinned base image (a local build showed 55 packages behind). And because Dependabot
+  cannot read the PowerShell Gallery, `tools/Test-TPPinnedModuleFreshness.ps1` runs weekly (and on
+  demand) and fails when a pinned module has a newer release in its major version that has been
+  public for seven days; a new major version is reported as a warning, since it is a migration, not
+  a pin bump. Its first run found Pester 5.9.1 against the pinned 5.8.0, now bumped (the full suite
+  passes under it), and reports Pester 6.x as available for a planned migration.
 - **[CI] 580 stale Code Scanning alerts close, and the OSS Scanner image is pinned.** On 2026-05-28
   the PSScriptAnalyzer job uploaded every Warning to Code Scanning under the `psscriptanalyzer`
   category; days later it was changed to upload only when there were Error findings, so that
