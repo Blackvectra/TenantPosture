@@ -12,6 +12,16 @@
 # started with no network to prove it runs offline, as the scanner runs it.
 # Nothing is pushed to a registry.
 #
+# The built image is then scanned with Trivy (.github/scanners/trivy/Dockerfile
+# pins the scanner by tag and digest; the job reads the FROM line) for HIGH and
+# CRITICAL vulnerabilities in the operating system and the packages installed,
+# and a second job checks .oss-scanner/Dockerfile against Trivy's Dockerfile
+# rules at every severity. Any finding fails, except one reviewed into
+# .trivyignore.yaml with a statement a reviewer can check, and a vulnerability
+# the distribution has no fix for (--ignore-unfixed: the weekly rebuild takes
+# the fix when it ships, and nothing in this repository can act on it
+# sooner). Both uploads go to Code Scanning.
+#
 # The weekly run also checks that every pinned PowerShell module is on the
 # newest release of its major version (tools/Test-TPPinnedModuleFreshness.ps1),
 # since Dependabot cannot read the PowerShell Gallery.
@@ -26,6 +36,8 @@ on:
     paths:
       - '.oss-scanner/**'
       - '.dockerignore'
+      - '.trivyignore.yaml'
+      - '.github/scanners/trivy/**'
       - 'tools/pinned-modules.psd1'
       - 'tools/Install-TPPinnedModule.ps1'
       - 'tools/Sync-ExportedFunctions.ps1'
@@ -37,6 +49,8 @@ on:
     paths:
       - '.oss-scanner/**'
       - '.dockerignore'
+      - '.trivyignore.yaml'
+      - '.github/scanners/trivy/**'
       - 'tools/pinned-modules.psd1'
       - 'tools/Install-TPPinnedModule.ps1'
       - 'tools/Sync-ExportedFunctions.ps1'
@@ -66,6 +80,7 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read  # read the repository
+      security-events: write  # upload the Trivy SARIF to Code Scanning
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,6 +121,93 @@ jobs:
             $n = @(Get-Command -Module TenantPosture).Count
             if ($n -lt 1) { throw "The module exported no functions." }
             "TenantPosture {0}: {1} functions, imported with no network" -f $TPAssessmentVersion, $n'
+
+      - name: Scan the image for known vulnerabilities (Trivy)
+        run: |
+          set -euo pipefail
+          image="$(awk '/^FROM /{print $2}' .github/scanners/trivy/Dockerfile)"
+          echo "Trivy image: ${image}"
+          # The image is handed to the scanner as an archive, so the scanner
+          # container needs no Docker socket.
+          docker save tenantposture:ci -o "$RUNNER_TEMP/tenantposture.tar"
+          mkdir -p trivy-out
+          scan() {
+            docker run --rm \
+              -v "$RUNNER_TEMP/tenantposture.tar:/scan/image.tar:ro" \
+              -v "${PWD}/.trivyignore.yaml:/scan/.trivyignore.yaml:ro" \
+              -v "${PWD}/trivy-out:/out" \
+              -v trivy-cache:/root/.cache/trivy \
+              "${image}" image --input /scan/image.tar --scanners vuln \
+              --severity HIGH,CRITICAL --ignore-unfixed --ignorefile /scan/.trivyignore.yaml \
+              --skip-version-check "$@"
+          }
+          set +e
+          scan --format sarif --output /out/trivy-image.sarif --exit-code 1
+          rc=$?
+          set -e
+          # The table is for the log; the SARIF run above decided the result.
+          scan --format table --exit-code 0
+          if [ "${rc}" -ne 0 ]; then
+            echo "::error title=Vulnerable packages in the OSS Scanner image::Trivy reported a HIGH or CRITICAL vulnerability with a fix available (exit ${rc}). Rebuild on the current base image, or review it into .trivyignore.yaml with a statement."
+            exit 1
+          fi
+
+      - name: Upload the image scan to Code Scanning
+        # Run even when the scan failed, so findings surface for triage.
+        if: always() && hashFiles('trivy-out/trivy-image.sarif') != ''
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: trivy-out/trivy-image.sarif
+          category: trivy-image
+
+  dockerfile-config:
+    name: Dockerfile configuration (Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read  # read the repository
+      security-events: write  # upload the Trivy SARIF to Code Scanning
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the Dockerfile against Trivy's misconfiguration rules
+        run: |
+          set -euo pipefail
+          image="$(awk '/^FROM /{print $2}' .github/scanners/trivy/Dockerfile)"
+          echo "Trivy image: ${image}"
+          mkdir -p trivy-out
+          # Only .oss-scanner is mounted, so only it is scanned: the files under
+          # .github/scanners are one-line pins the jobs read, never images that
+          # are built or run. The scan root is the mount root, so a finding is
+          # reported as .oss-scanner/Dockerfile, the path .trivyignore.yaml names.
+          scan() {
+            docker run --rm \
+              -v "${PWD}/.oss-scanner:/scan/.oss-scanner:ro" \
+              -v "${PWD}/.trivyignore.yaml:/scan/.trivyignore.yaml:ro" \
+              -v "${PWD}/trivy-out:/out" \
+              -v trivy-cache:/root/.cache/trivy \
+              -w /scan "${image}" config --severity LOW,MEDIUM,HIGH,CRITICAL \
+              --ignorefile /scan/.trivyignore.yaml --skip-version-check "$@" .
+          }
+          set +e
+          scan --format sarif --output /out/trivy-config.sarif --exit-code 1
+          rc=$?
+          set -e
+          scan --format table --exit-code 0
+          if [ "${rc}" -ne 0 ]; then
+            echo "::error title=Dockerfile misconfiguration::Trivy reported a finding in .oss-scanner/Dockerfile (exit ${rc}). Fix it, or review it into .trivyignore.yaml with a statement."
+            exit 1
+          fi
+
+      - name: Upload the configuration scan to Code Scanning
+        if: always() && hashFiles('trivy-out/trivy-config.sarif') != ''
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: trivy-out/trivy-config.sarif
+          category: trivy-config
 
   pinned-module-freshness:
     name: Pinned PowerShell modules are current

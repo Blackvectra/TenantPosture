@@ -243,6 +243,17 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             # Only the report route lets itself be framed, and only by the GUI's own
             # origin; everything else stays unframeable.
             $script:ServerSrc | Should -Match 'frame-ancestors \{1\};'
+            # style-src is the third value. The GUI's own pages get 'self': app.js
+            # styles through the CSSOM, which CSP does not restrict, and index.html
+            # carries no style attribute or <style> block. Only the two routes that
+            # serve a run's report add 'unsafe-inline', because the publisher emits
+            # inline style attributes no CSP hash can cover. The dynamic scan (ZAP
+            # 10055) flagged the blanket value on the page that lists tenants.
+            $script:ServerSrc | Should -Match 'style-src \{2\};'
+            $script:ServerSrc | Should -Not -Match "style-src 'self' 'unsafe-inline'"
+            ([regex]::Matches($script:ServerSrc, [regex]::Escape('-f $cfg.ImgSrc, "''none''", "''self''")'))).Count | Should -Be 1
+            ([regex]::Matches($script:ServerSrc, [regex]::Escape('"''self'' ''unsafe-inline''"'))).Count | Should -Be 2
+            (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Web' 'index.html') -Raw) | Should -Not -Match '<style|\sstyle='
             ([regex]::Matches($script:ServerSrc, "-f \`$sources, `"'self'`"")).Count | Should -Be 1
             ([regex]::Matches($script:ServerSrc, "`"'none'`"")).Count | Should -Be 2
             # The GUI loads the report through the iframe's src, never srcdoc: a srcdoc
@@ -1780,9 +1791,14 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
             It 'the site is served under the same strict CSP, not a relaxed one' {
                 $idx  = (& $script:Get '/').Headers['Content-Security-Policy']
                 $site = (& $script:Get "/site/_flat/$($script:Id)/index.html").Headers['Content-Security-Policy']
-                # The same policy, with the one difference a run may add: the origin
-                # of the brand logo its results file recorded (this run's cdn.example).
-                [string]$site | Should -Be (([string]$idx) -replace "img-src 'self' data:;", "img-src 'self' data: https://cdn.example;")
+                # The same policy, with the two differences a report page gets: the
+                # origin of the brand logo its results file recorded (this run's
+                # cdn.example), and 'unsafe-inline' for the publisher's inline styles.
+                # The GUI's own page never sends 'unsafe-inline'.
+                [string]$idx  | Should -Match "style-src 'self';"
+                [string]$idx  | Should -Not -Match 'unsafe-inline'
+                [string]$site | Should -Match "style-src 'self' 'unsafe-inline';"
+                [string]$site | Should -Be ((([string]$idx) -replace "img-src 'self' data:;", "img-src 'self' data: https://cdn.example;") -replace "style-src 'self';", "style-src 'self' 'unsafe-inline';")
                 [string]$site | Should -Match "default-src 'none'"
                 [string]$site | Should -Match "script-src 'self'(;|$)"
                 [string]$site | Should -Match "frame-ancestors 'none'"

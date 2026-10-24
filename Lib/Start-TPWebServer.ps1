@@ -231,15 +231,22 @@ function Start-TPWebServer {
             ImgSrc      = $imgSrc
             # The active profile's name for the scan child ('' = Config/branding.psd1).
             ProfileName = $activeProfileName
-            # The one policy string; {0} is the img-src value and {1} the
-            # frame-ancestors value. The middleware fills them with the server's
-            # sources and 'none'; the report route with that run's sources and
-            # 'self', because the GUI frames the report (through the iframe's
-            # src, so this response's own policy governs the framed document);
-            # a site page with the run's sources and 'none' (it opens in a tab).
+            # The one policy string; {0} is the img-src value, {1} the
+            # frame-ancestors value and {2} the style-src value. The middleware
+            # fills them with the server's sources, 'none' and 'self'; the report
+            # route with that run's sources, 'self' (the GUI frames the report
+            # through the iframe's src, so this response's own policy governs
+            # the framed document) and 'self' 'unsafe-inline'; a site page with
+            # the run's sources, 'none' (it opens in a tab) and the same
+            # style-src. The GUI's own pages need no inline style: app.js styles
+            # through the CSSOM, which CSP does not restrict, so a blanket
+            # 'unsafe-inline' only widened what an injected style could do on
+            # the page that lists tenants (the dynamic scan flagged it). The
+            # report pages keep it because Publish-TPAssessmentHTML emits inline
+            # style attributes, which no CSP hash can cover.
             CspTemplate = ("default-src 'none'; " +
                 "script-src 'self'; " +
-                "style-src 'self' 'unsafe-inline'; " +
+                "style-src {2}; " +
                 "img-src {0}; " +
                 "connect-src 'self'; " +
                 "frame-src 'self' data:; " +
@@ -268,7 +275,7 @@ function Start-TPWebServer {
         # script/style/data, no framing, no plugins, no form posts to off-host.
         Add-PodeMiddleware -Name 'SecurityHeaders' -ScriptBlock {
             $cfg = Get-PodeState -Name 'cfg'
-            Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $cfg.ImgSrc, "'none'")
+            Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $cfg.ImgSrc, "'none'", "'self'")
             Set-PodeHeader -Name 'X-Content-Type-Options' -Value 'nosniff'
             Set-PodeHeader -Name 'Referrer-Policy' -Value 'no-referrer'
             # Everything served here is tenant data. no-store keeps the browser
@@ -411,7 +418,7 @@ function Start-TPWebServer {
             $cfg = Get-PodeState -Name 'cfg'
             $sources = Get-TPWebRunImageSources -ReportPath $found.Path -Id $WebEvent.Parameters['id'] `
                 -ImgSrc $cfg.ImgSrc -Cache (Get-PodeState -Name 'runMetadata')
-            Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $sources, "'self'")
+            Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $sources, "'self'", "'self' 'unsafe-inline'")
             $html = Get-Content -LiteralPath $found.Path -Raw -Encoding utf8
             Write-PodeHtmlResponse -Value $html
         }
@@ -451,7 +458,7 @@ function Start-TPWebServer {
                 $cfg = Get-PodeState -Name 'cfg'
                 $sources = Get-TPWebRunImageSources -ReportPath $found.Path -Id $WebEvent.Parameters['id'] `
                     -ImgSrc $cfg.ImgSrc -Cache (Get-PodeState -Name 'runMetadata')
-                Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $sources, "'none'")
+                Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $sources, "'none'", "'self' 'unsafe-inline'")
                 Write-PodeTextResponse -Bytes $bytes -ContentType 'text/html'
             }
         }

@@ -33,3 +33,7 @@ Thumbs.db
 # the EXAMPLE- template is tracked.
 Config/monthly-delta/*.psd1
 !Config/monthly-delta/EXAMPLE-*.psd1
+
+# Scanner output written by local runs of the DAST and image-scan steps.
+zap-wrk/
+trivy-out/

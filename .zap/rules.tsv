@@ -1,0 +1,8 @@
+# Reviewed exceptions for the dynamic scan of the -Web GUI (.github/workflows/dast.yml).
+# zap-baseline.py reads this file: <rule id> TAB <IGNORE|WARN|FAIL> TAB <reason>.
+# Every rule not listed here is a WARN, and any WARN or FAIL fails the job, so a
+# new alert is reviewed before it is accepted; Testing/TP.RuntimeScans.Tests.ps1
+# fails a line whose reason a reviewer could not check.
+10027	IGNORE	Suspicious Comments: app.js's own documentation comments contain the words USER, ADMIN, FROM and WHERE as prose. None is a credential, a hidden path or a note about a weakness, and the file is a public asset of the GUI; the rule matches words, not disclosures.
+10055	IGNORE	CSP style-src unsafe-inline: the GUI's own pages send style-src 'self' (TP.WebServer.Tests.ps1 pins the template fill). Only the two routes that serve a run's report add 'unsafe-inline', because Publish-TPAssessmentHTML emits inline style attributes that a CSP hash cannot cover; default-src 'none', img-src and connect-src confine what injected CSS could reach to this server and the run's recorded logo origin.
+10109	IGNORE	Modern Web Application: informational. The GUI is a script-driven page whose anchors app.js fills in from /api/runs; the rule describes the application's shape, not a weakness.

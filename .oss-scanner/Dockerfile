@@ -65,4 +65,11 @@ RUN mkdir -p /oss-test \
     tail -n 40 /oss-test/test.log; \
     echo "Test gate exit code: $(cat /oss-test/exit-code)"
 
+# The scanner runs this image as a user, not as root (Trivy DS-0002: a process
+# in a root container that finds a runtime escape is root on the host). The
+# build steps above run as root and are finished; the scan only needs to read
+# /src and run pwsh, and PowerShell wants a writable home for its own cache.
+RUN useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin scanner
+USER scanner
+
 CMD ["pwsh", "-NoProfile"]

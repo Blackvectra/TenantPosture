@@ -121,7 +121,7 @@ This matches the structure CISA expects in the [Secure Software Development Atte
 | Task | Evidence |
 |---|---|
 | PW.8.1 — Determine whether executable code testing should be performed | Yes — `Testing/TP.Security.Tests.ps1` and 4 other Pester suites |
-| PW.8.2 — Scope the testing | OWASP Top 10:2025, ASVS v5 controls, framework-coverage invariants, finding-shape contracts |
+| PW.8.2 — Scope the testing | OWASP Top 10:2025, ASVS v5 controls, framework-coverage invariants, finding-shape contracts; dynamic analysis of the running web GUI (OWASP ZAP baseline, `.github/workflows/dast.yml`) and vulnerability scanning of the built OSS Scanner image (Trivy, `oss-scanner-image.yml`); `docs/security/TESTING-METHODOLOGY.md` maps each scan to its PTES phase |
 
 ### PW.9 — Configure Software to Have Secure Settings by Default
 
@@ -139,7 +139,7 @@ This matches the structure CISA expects in the [Secure Software Development Atte
 | Task | Evidence |
 |---|---|
 | RV.1.1 — Gather information from acquirers, users, and public sources | `SECURITY.md` + `docs/VULNERABILITY-DISCLOSURE-POLICY.md` describe inbound channels (private advisory, email); GitHub Security tab routes private reports |
-| RV.1.2 — Review, analyze, and / or test the software's code to identify or confirm the presence of previously undetected vulnerabilities | Weekly OpenSSF Scorecard sweep; Gitleaks / TruffleHog full-history scans; `/security-review` skill on the current diff |
+| RV.1.2 — Review, analyze, and / or test the software's code to identify or confirm the presence of previously undetected vulnerabilities | Weekly OpenSSF Scorecard sweep; Gitleaks / TruffleHog full-history scans; weekly Trivy scan of the OSS Scanner image (a newly published CVE against a pinned package is reported with no code change) and weekly ZAP scan of the GUI; `/security-review` skill on the current diff |
 | RV.1.3 — Have a policy that addresses vulnerability disclosure and remediation | `docs/VULNERABILITY-DISCLOSURE-POLICY.md` (CISA BOD 20-01 aligned) |
 
 ### RV.2 — Assess, Prioritize, and Remediate Vulnerabilities
