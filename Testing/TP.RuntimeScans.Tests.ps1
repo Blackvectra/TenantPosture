@@ -75,6 +75,10 @@ Describe 'Runtime scans: the dynamic scan of the web GUI and the image scan' {
         It 'runs ZAP against the real GUI on loopback, drives it with the AJAX spider, and reads the reviewed rules file' {
             $script:Dast | Should -Match 'zap-baseline\.py -t http://127\.0\.0\.1:8765 -j '
             $script:Dast | Should -Match '-c rules\.tsv'
+            # Without -silent, zap-baseline.py downloads rule add-ons at start and the
+            # rules that judge a pull request are whatever was published that day,
+            # not what the pinned image ships.
+            $script:Dast | Should -Match 'zap-baseline\.py[^\n]* -z "-silent"'
             $script:Dast | Should -Match 'cp \.zap/rules\.tsv zap-wrk/rules\.tsv'
             # The container must reach the loopback server and send the Host header
             # the request policy requires; only host networking gives it both.
@@ -153,7 +157,7 @@ Describe 'Runtime scans: the dynamic scan of the web GUI and the image scan' {
         }
 
         It 'the OSS Scanner image drops root before the scanner runs it (Trivy DS-0002)' {
-            $script:Docker | Should -Match '(?m)^RUN useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin scanner'
+            $script:Docker | Should -Match '(?m)^RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin scanner'
             $users = @([regex]::Matches($script:Docker, '(?m)^USER\s+(\S+)') | ForEach-Object { $_.Groups[1].Value })
             $users.Count | Should -Be 1
             $users[0] | Should -Be 'scanner'
@@ -181,7 +185,7 @@ Describe 'Runtime scans: the dynamic scan of the web GUI and the image scan' {
             foreach ($c in $calls) {
                 $c | Should -Not -Match '^(Invoke-WebRequest|Invoke-RestMethod|Connect-|Import-Module|Start-Process|Start-Job|Resolve-DnsName|Invoke-Expression)' -Because 'the fixture is data only'
             }
-            $allowed = 'Join-Path', 'New-Item', 'Split-Path', 'Set-Content', 'Set-StrictMode', 'ConvertTo-Json', 'Write-Output'
+            $allowed = 'Join-Path', 'Split-Path', 'Set-Content', 'Set-StrictMode', 'ConvertTo-Json', 'Write-Output'
             foreach ($c in $calls) { $c | Should -BeIn $allowed -Because "an unexpected command ($c) in the fixture builder is worth a look" }
             (Get-Content -LiteralPath $script:Fixture -Raw) | Should -Match '\$out = Join-Path \$Path ''output'''
         }
@@ -198,14 +202,14 @@ Describe 'Runtime scans: the dynamic scan of the web GUI and the image scan' {
             }
             $meta = (Get-Content -LiteralPath (Join-Path $out 'SCANTENANT-20261016-110000-results.json') -Raw | ConvertFrom-Json).Metadata
             $meta.TenantDomain | Should -Be 'scan-tenant.onmicrosoft.com'
-            $meta.Brand.LogoUrl | Should -Be 'https://cdn.example/logo.png'
+            $meta.Brand.LogoUrl | Should -Be 'https://cdn.example.com/logo.png'
             $clients = (Get-Content -LiteralPath (Join-Path $work 'Config' 'clients.json') -Raw | ConvertFrom-Json).clients
             @($clients | Where-Object { $_.TenantId -eq $meta.TenantId }).Count | Should -Be 1
             # The report carries what the real publisher emits and the scanner checks:
             # an inline stylesheet and the recorded logo.
             $report = Get-Content -LiteralPath (Join-Path $out 'SCANTENANT-20261016-110000-assessment.html') -Raw
             $report | Should -Match '<style>'
-            $report | Should -Match 'src="https://cdn\.example/logo\.png"'
+            $report | Should -Match 'src="https://cdn\.example\.com/logo\.png"'
             # The action plan keeps the byte-order mark the publisher writes for Excel.
             $bytes = [System.IO.File]::ReadAllBytes((Join-Path $out 'SCANTENANT-20261016-110000-report/ActionPlan.csv'))
             ($bytes[0..2] -join ',') | Should -Be '239,187,191'

@@ -278,6 +278,10 @@ function Start-TPWebServer {
             Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $cfg.ImgSrc, "'none'", "'self'")
             Set-PodeHeader -Name 'X-Content-Type-Options' -Value 'nosniff'
             Set-PodeHeader -Name 'Referrer-Policy' -Value 'no-referrer'
+            # The GUI uses no browser feature a permissions policy governs;
+            # saying so closes them to any script that reached the page or a
+            # framed report (the dynamic scan's first CI run flagged the absence).
+            Set-PodeHeader -Name 'Permissions-Policy' -Value 'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()'
             # Everything served here is tenant data. no-store keeps the browser
             # from writing reports and the action plan to its on-disk cache,
             # outside the access-restricted files the tool itself writes.

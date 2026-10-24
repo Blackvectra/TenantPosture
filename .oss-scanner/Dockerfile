@@ -69,7 +69,7 @@ RUN mkdir -p /oss-test \
 # in a root container that finds a runtime escape is root on the host). The
 # build steps above run as root and are finished; the scan only needs to read
 # /src and run pwsh, and PowerShell wants a writable home for its own cache.
-RUN useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin scanner
+RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin scanner
 USER scanner
 
 CMD ["pwsh", "-NoProfile"]

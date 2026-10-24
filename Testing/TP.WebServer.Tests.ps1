@@ -277,6 +277,9 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             # cover; CORP same-origin stops another origin embedding or reading a
             # response it managed to request.
             $script:ServerSrc | Should -Match "Set-PodeHeader -Name 'Cache-Control' -Value 'no-store'"
+            # No browser feature is granted: the GUI uses none, and the header closes
+            # them to a framed report as well (the dynamic scan flagged its absence).
+            $script:ServerSrc | Should -Match "Set-PodeHeader -Name 'Permissions-Policy' -Value 'accelerometer=\(\), camera=\(\), geolocation=\(\), gyroscope=\(\), magnetometer=\(\), microphone=\(\), payment=\(\), usb=\(\)'"
             $script:ServerSrc | Should -Match "Set-PodeHeader -Name 'Cross-Origin-Resource-Policy' -Value 'same-origin'"
         }
 

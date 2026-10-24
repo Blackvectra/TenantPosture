@@ -19,7 +19,9 @@
 # ZAP runs from the image .github/scanners/zap/Dockerfile pins by tag and
 # digest (Dependabot moves both); the job reads the FROM line and runs it
 # with --network host so the container reaches the loopback server and
-# sends the Host header the request policy requires.
+# sends the Host header the request policy requires. The passive rules are
+# the ones that image ships (-silent: no add-on download at start), so the
+# same commit gets the same verdict until the pin moves.
 
 name: DAST
 
@@ -121,6 +123,13 @@ jobs:
           set -euo pipefail
           image="$(awk '/^FROM /{print $2}' .github/scanners/zap/Dockerfile)"
           echo "ZAP image: ${image}"
+          # -z "-silent": without it zap-baseline.py runs ZAP with -addonupdate and
+          # -addoninstall pscanrulesBeta, fetching rule add-ons from the internet at
+          # start, so the rules that judge a pull request would be whatever was
+          # published that morning, not what the pinned image ships (the first run
+          # here reported three alerts the same image never raised offline). The
+          # rule set now changes only when the image pin does, through Dependabot
+          # and review. -silent also stops ZAP's own update check and telemetry.
           # ZAP runs as its own user inside the image; the work folder must let
           # it write the reports, and it lives in the workspace so the upload
           # step can find it.
@@ -129,7 +138,7 @@ jobs:
           chmod 777 zap-wrk
           set +e
           docker run --rm --network host -v "${PWD}/zap-wrk:/zap/wrk:rw" "${image}" \
-            zap-baseline.py -t http://127.0.0.1:8765 -j -m 2 -T 10 -c rules.tsv \
+            zap-baseline.py -t http://127.0.0.1:8765 -j -m 2 -T 10 -c rules.tsv -z "-silent" \
             -r zap-report.html -J zap-report.json -w zap-report.md
           rc=$?
           set -e

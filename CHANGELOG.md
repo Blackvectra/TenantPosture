@@ -6,7 +6,10 @@
   vulnerability scan of the OSS Scanner image.** Every scan so far read code. `.github/workflows/dast.yml`
   starts the real `-Web` server on loopback over a data-only fixture (`tools/New-TPWebScanFixture.ps1`) and
   runs OWASP ZAP's baseline scan with the AJAX spider against it, so `app.js` runs, `/api/runs` is read and the
-  framed report is opened; every alert not reviewed in `.zap/rules.tsv` with its reason fails the job. Its first
+  framed report is opened, with the passive rules the pinned image ships (`-silent`: zap-baseline otherwise downloads rule
+  add-ons at start, and the first CI run judged with three rules the same image never raised offline); every alert
+  not reviewed in `.zap/rules.tsv` with its reason fails the job. The scan also added a `Permissions-Policy` header
+  that grants no browser feature, which the first CI run reported missing. Its first
   run found one real thing: the GUI's own page sent `style-src 'self' 'unsafe-inline'`, which it never needed
   (`app.js` styles through the CSSOM, which CSP does not restrict). `style-src` is now the template's third
   value: the GUI's pages send `'self'`, and only the two routes that serve a run's report add `'unsafe-inline'`,

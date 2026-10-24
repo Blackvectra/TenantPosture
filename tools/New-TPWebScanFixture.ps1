@@ -36,7 +36,7 @@ $ErrorActionPreference = 'Stop'
 $out = Join-Path $Path 'output'
 $put = {
     param([string] $File, [string] $Value)
-    $null = New-Item -ItemType Directory -Path (Split-Path -Parent $File) -Force
+    $null = [System.IO.Directory]::CreateDirectory((Split-Path -Parent $File))
     Set-Content -LiteralPath $File -Value $Value -Encoding utf8
 }
 
@@ -57,7 +57,7 @@ $report = @'
 </style>
 </head>
 <body>
-<header><img src="https://cdn.example/logo.png" alt="logo" width="120"> <h1>Security assessment</h1></header>
+<header><img src="https://cdn.example.com/logo.png" alt="logo" width="120"> <h1>Security assessment</h1></header>
 <p>Tenant scan-tenant.onmicrosoft.com, assessed 2026-10-16. Score 71%.</p>
 <table>
 <tr><th>Control</th><th>State</th><th>Detail</th></tr>
@@ -90,7 +90,7 @@ $id = 'SCANTENANT-20261016-110000'
         TenantDomain = 'scan-tenant.onmicrosoft.com'
         TenantId     = '11111111-2222-3333-4444-555555555555'
         ToolVersion  = '4.14.3'
-        Brand        = @{ LogoUrl = 'https://cdn.example/logo.png' }
+        Brand        = @{ LogoUrl = 'https://cdn.example.com/logo.png' }
     }
     RawData  = @{}
     Findings = @()
