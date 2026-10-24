@@ -4,7 +4,7 @@
 
 - **[Supply chain] The runtime dependencies are pinned, and Dependabot or the weekly check keeps them current.**
   The Microsoft modules the tool signs in with, ExchangeOnlineManagement 3.10.1, Microsoft.Graph.Authentication
-  2.41.1 and MicrosoftTeams 8.0.0, are now pinned in `tools/pinned-modules.psd1` by exact version and gallery
+  2.41.2 and MicrosoftTeams 8.0.0, are now pinned in `tools/pinned-modules.psd1` by exact version and gallery
   SHA-256, each verified against the gallery before it was recorded. The weekly freshness check reads that file,
   so it reports a newer release once it has been public for seven days and fails when the same major version has
   moved on. CI does not install these modules (about 500 MB), so the pin is the version the tool is validated

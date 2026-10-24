@@ -22,6 +22,6 @@
     # about 500 MB together); the pin is the version the tool is validated against,
     # and the weekly freshness check reports and fails a pin that has fallen behind.
     ExchangeOnlineManagement       = @{ Version = '3.10.1'; Sha256 = '545fb0fdf65b96abed37f4f5b5d7db661276ddc7de48a742bb6e7199ab9414a3' }
-    'Microsoft.Graph.Authentication' = @{ Version = '2.41.1'; Sha256 = 'b6fcb400d5f204f06301f8809c2dcd364e184d7a335673bf1272b1a793cfb8c7' }
+    'Microsoft.Graph.Authentication' = @{ Version = '2.41.2'; Sha256 = 'a4f41cab6fc3ce0891a9295f191a218e0cfe692f21c6395763f339260c00d98c' }
     MicrosoftTeams                 = @{ Version = '8.0.0';  Sha256 = '6aa426d37913dee78628ad36dfc26e40161702018479f110f396712e896f2882' }
 }
