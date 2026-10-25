@@ -83,5 +83,11 @@
   "DistributionListMemberJoinRestriction": {
     "_help": "Distribution-list scan, DL-2.5. The join settings NRG accepts, any of Open, Closed, ApprovalRequired (for example [\"Closed\", \"ApprovalRequired\"]). Empty means join restriction is not judged.",
     "Values": []
+  },
+  "IntuneAntivirusBaseline": {
+    "_help": "The configuration standard INT-1.5 judges an assigned Intune Defender Antivirus policy against. Approved by the owner 2026-10-25: the CIS Microsoft Intune for Microsoft Defender Antivirus Benchmark v1.0.0, Level 1 - Workstation, as encoded in Config/cis-intune-defender-av.json. Leave Benchmark empty to withdraw the approval; INT-1.5 then judges only real-time, cloud-delivered and PUA protection, as before.",
+    "Benchmark": "CIS Microsoft Intune for Microsoft Defender Antivirus Benchmark v1.0.0",
+    "Profile": "Level 1 - Workstation",
+    "ApprovedDate": "2026-10-25"
   }
 }

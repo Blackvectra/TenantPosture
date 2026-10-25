@@ -55,7 +55,7 @@ code change.
 | DEF-2.2, DEF-2.3, EXO-1.5, INT-1.5, AAD-6.2, AAD-2.1 | Verified components kept; approved-list components not assessed until approved | The setting each Detail names |
 
 Also re-check the controls the last live run flagged: EXO-1.6, EXO-1.1, DEF-3.4, EXO-3.3, INT-2.2,
-INT-1.1, DEF-2.3. INT-1.5's and INT-2.2's Settings Catalog parsers have not been verified live. For INT-2.2, open the results file and confirm each `AsrRuleModes` key under the assigned ASR policies contains its rule's `Id` from `Config/asr-required-rules.json`: fourteen of the seventeen ids are name fragments (for example `adobereader`, `psexec`, `ransomware`) chosen without a published Graph sample, and a fragment that matches nothing reports a configured rule as NotConfigured.
+INT-1.1, DEF-2.3. INT-1.5's and INT-2.2's Settings Catalog parsers have not been verified live: on the first run with an Intune Antivirus policy, open the results file and confirm `AvSettingValues` on the policy under `Intune-EndpointSecurity` holds a definition id ending in each benchmark node, the Defender CSP settings (`hideexclusionsfromlocalusers`, `enablefilehashcomputation` and others) included, and that INT-1.5 names no setting as not set that the Intune portal shows configured. For INT-2.2, open the results file and confirm each `AsrRuleModes` key under the assigned ASR policies contains its rule's `Id` from `Config/asr-required-rules.json`: fourteen of the seventeen ids are name fragments (for example `adobereader`, `psexec`, `ransomware`) chosen without a published Graph sample, and a fragment that matches nothing reports a configured rule as NotConfigured.
 
 ## 5. Report back
 

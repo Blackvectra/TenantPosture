@@ -15,6 +15,49 @@
   standard rules. Fourteen of the rule ids are name fragments, because Microsoft publishes no Graph sample of the ASR
   keys; a fragment that matches nothing is a false NotConfigured, never a pass, and `docs/TP-LIVE-VALIDATION.md` asks
   the first live run to confirm them. `TP.ExpectedStateEvidence.Tests.ps1` pins the list, the modes and the judgment.
+- **[Accuracy] INT-1.5 judges the antivirus policy against the CIS Intune for Defender Antivirus benchmark,
+  not three settings.** INT-1.5 passed any assigned Intune Defender Antivirus policy that turned on real-time,
+  cloud-delivered and PUA protection, whatever else it left unset. With the owner's approval (2026-10-25,
+  `Config/tp-standards.json` `IntuneAntivirusBaseline`) it now judges the 30 settings of the CIS Microsoft Intune
+  for Microsoft Defender Antivirus Benchmark v1.0.0, Level 1 - Workstation, that live in the Endpoint security
+  Antivirus profile (`Config/cis-intune-defender-av.json`): every one must be set by policy to a value the
+  benchmark accepts, across every assigned policy. A setting set below the benchmark, or set by no policy, is a
+  shortfall named with its value, the requirement and the Windows default; a value Microsoft does not document is
+  not assessed, never compliant. The accepted values are Microsoft's (Policy CSP and Defender CSP references), not
+  the benchmark's audit registry values, several of which are inverted relative to what Intune stores. The catalog
+  accounts for all 55 recommendations: the 17 attack surface reduction rules stay with INT-2.2 and its approved
+  rule set, Level 2 items are outside the approved profile, and four Administrative Templates settings plus
+  Remote Encryption Protection, which the collector cannot read, are recorded as an evidence limit every report
+  shows. The collector stores each policy's setting values (`AvSettingValues`); a results file from before that,
+  or a withdrawn approval, keeps the three-setting judgment. Expect more INT-1.5 Partials: most tenants configure
+  part of the benchmark. Not yet verified against a live tenant; `docs/TP-LIVE-VALIDATION.md` says what to check.
+  `TP.IntuneAvBaseline.Tests.ps1` pins the catalog, the approval, the readers, the judgment and the real collector.
+- **[Security scanning] Two scans now look at the tool running: a dynamic scan of the web GUI and a
+  vulnerability scan of the OSS Scanner image.** Every scan so far read code. `.github/workflows/dast.yml`
+  starts the real `-Web` server on loopback over a data-only fixture (`tools/New-TPWebScanFixture.ps1`) and
+  runs OWASP ZAP's baseline scan with the AJAX spider against it, so `app.js` runs, `/api/runs` is read and the
+  framed report is opened, with the passive rules the pinned image ships (`-silent`: zap-baseline otherwise downloads rule
+  add-ons at start, and the first CI run judged with three rules the same image never raised offline); every alert
+  not reviewed in `.zap/rules.tsv` with its reason fails the job. The scan also added a `Permissions-Policy` header
+  that grants no browser feature, which the first CI run reported missing. Its first
+  run found one real thing: the GUI's own page sent `style-src 'self' 'unsafe-inline'`, which it never needed
+  (`app.js` styles through the CSSOM, which CSP does not restrict). `style-src` is now the template's third
+  value: the GUI's pages send `'self'`, and only the two routes that serve a run's report add `'unsafe-inline'`,
+  because `Publish-TPAssessmentHTML` emits inline style attributes no CSP hash can cover. The OSS Scanner image
+  workflow now scans the built image with Trivy for HIGH and CRITICAL vulnerabilities (SARIF to Code Scanning;
+  `--ignore-unfixed`, since nothing in this repository can act on a CVE the distribution has not fixed) and checks
+  the Dockerfile against Trivy's rules at every severity; a finding passes only when reviewed into
+  `.trivyignore.yaml` with a statement. Its first run found that the image ran as root (DS-0002): it now drops to a
+  system user before the scanner runs it. Both scanners run from images pinned by tag and digest in one-line
+  Dockerfiles under `.github/scanners/` that Dependabot's docker ecosystem tracks with the same seven-day cooldown
+  as everything else, and each job reads the FROM line and runs exactly that image. That tracking is not
+  optional: the base-image digest pinned on 2026-10-19 was gone from MCR by 2026-10-24 (the tag was re-pushed
+  and the registry answers 404 for the old digest); Dependabot had already moved `main` to the new one, and a
+  scanner digest sitting in a workflow step would have rotted the same way with nothing to move it.
+  `docs/security/TESTING-METHODOLOGY.md` maps every scan in CI to its PTES phase and says plainly which phases
+  nothing here automates: the dynamic scan is passive and no exploitation is attempted, so it is a scan, not a
+  penetration test. `TP.RuntimeScans.Tests.ps1` pins the pins, the gates and the reason on every exception, and
+  `TP.WebServer.Tests.ps1` pins the per-route `style-src` against the live server.
 
 - **[Supply chain] The runtime dependencies are pinned, and Dependabot or the weekly check keeps them current.**
   The Microsoft modules the tool signs in with, ExchangeOnlineManagement 3.10.1, Microsoft.Graph.Authentication

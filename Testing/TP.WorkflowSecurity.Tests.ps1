@@ -99,8 +99,18 @@ Describe 'Workflow security' {
         }
 
         It 'pins the image by digest and installs every package by hash' {
+            # Every Dockerfile in the tree, the scanner pins under .github/scanners
+            # included: a tag alone can be re-pointed at other content after review.
+            # -Force: .github and .oss-scanner are hidden folders on Linux and would be skipped.
+            $dockerfiles = @(Get-ChildItem -LiteralPath $script:RepoRoot -Recurse -File -Force -Filter Dockerfile |
+                Where-Object { $_.FullName -notmatch '[\\/](\.git|node_modules|output)[\\/]' })
+            $dockerfiles.Count | Should -BeGreaterOrEqual 3
+            foreach ($df in $dockerfiles) {
+                foreach ($m in [regex]::Matches((Get-Content -LiteralPath $df.FullName -Raw), '(?m)^FROM\s+(?<ref>\S+)')) {
+                    $m.Groups['ref'].Value | Should -Match '@sha256:[0-9a-f]{64}$' -Because $df.FullName
+                }
+            }
             $docker = Get-Content -LiteralPath (Join-Path $script:RepoRoot '.oss-scanner/Dockerfile') -Raw
-            foreach ($m in [regex]::Matches($docker, '(?m)^FROM\s+(?<ref>\S+)')) { $m.Groups['ref'].Value | Should -Match '@sha256:[0-9a-f]{64}$' }
             $docker | Should -Not -Match '\b(Install-Module|Install-PSResource)\b'
             $joined = $docker -replace '\\\r?\n\s*', ' '
             foreach ($m in [regex]::Matches($joined, 'pip3?\s+install\b[^\r\n]*')) {

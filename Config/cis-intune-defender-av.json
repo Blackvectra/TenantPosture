@@ -1,0 +1,628 @@
+{
+  "_comment": "CIS Microsoft Intune for Microsoft Defender Antivirus Benchmark v1.0.0, Level 1 - Workstation: the 30 settings in the Endpoint security Antivirus profile that INT-1.5 judges. Each requirement is the benchmark's; each node and value is Microsoft's (Policy CSP - Defender, Defender CSP), because the benchmark's audit registry values are the on-device form and several are inverted relative to the CSP. Choice values are the CSP integer, the suffix Intune appends to the setting definition id; integers are the Settings Catalog integer value; threat actions are the token after the child definition id. OutOfScope accounts for every other recommendation in the benchmark, with the reason. The standard is applied only while Config/tp-standards.json IntuneAntivirusBaseline is approved. Testing/TP.IntuneAvBaseline.Tests.ps1 pins this file.",
+  "Benchmark": "CIS Microsoft Intune for Microsoft Defender Antivirus Benchmark",
+  "Version": "1.0.0",
+  "Profile": "Level 1 - Workstation",
+  "RecommendationCount": 55,
+  "Settings": [
+    {
+      "Cis": "2.1",
+      "Title": "Allow Archive Scanning",
+      "Node": "AllowArchiveScanning",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "1",
+      "Values": {
+        "0": "Not allowed",
+        "1": "Allowed"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#allowarchivescanning"
+    },
+    {
+      "Cis": "2.2",
+      "Title": "Allow Behavior Monitoring",
+      "Node": "AllowBehaviorMonitoring",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "1",
+      "Values": {
+        "0": "Not allowed",
+        "1": "Allowed"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#allowbehaviormonitoring"
+    },
+    {
+      "Cis": "2.3",
+      "Title": "Allow Cloud Protection",
+      "Node": "AllowCloudProtection",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "1",
+      "Values": {
+        "0": "Not allowed",
+        "1": "Allowed"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#allowcloudprotection"
+    },
+    {
+      "Cis": "2.4",
+      "Title": "Allow Email Scanning",
+      "Node": "AllowEmailScanning",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "0",
+      "Values": {
+        "0": "Not allowed",
+        "1": "Allowed"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#allowemailscanning"
+    },
+    {
+      "Cis": "2.5",
+      "Title": "Allow Full Scan Removable Drive Scanning",
+      "Node": "AllowFullScanRemovableDriveScanning",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "0",
+      "Values": {
+        "0": "Not allowed",
+        "1": "Allowed"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#allowfullscanremovabledrivescanning"
+    },
+    {
+      "Cis": "2.6",
+      "Title": "Allow On Access Protection",
+      "Node": "AllowOnAccessProtection",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "1",
+      "Values": {
+        "0": "Not allowed",
+        "1": "Allowed"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#allowonaccessprotection"
+    },
+    {
+      "Cis": "2.7",
+      "Title": "Allow Realtime Monitoring",
+      "Node": "AllowRealtimeMonitoring",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "1",
+      "Values": {
+        "0": "Not allowed",
+        "1": "Allowed"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#allowrealtimemonitoring"
+    },
+    {
+      "Cis": "2.8",
+      "Title": "Allow scanning of all downloaded files and attachments",
+      "Node": "AllowIOAVProtection",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "1",
+      "Values": {
+        "0": "Not allowed",
+        "1": "Allowed"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#allowioavprotection"
+    },
+    {
+      "Cis": "2.9",
+      "Title": "Allow Script Scanning",
+      "Node": "AllowScriptScanning",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "1",
+      "Values": {
+        "0": "Not allowed",
+        "1": "Allowed"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#allowscriptscanning"
+    },
+    {
+      "Cis": "2.27",
+      "Title": "Check For Signatures Before Running Scan",
+      "Node": "CheckForSignaturesBeforeRunningScan",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "0",
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#checkforsignaturesbeforerunningscan"
+    },
+    {
+      "Cis": "2.28",
+      "Title": "Cloud Block Level",
+      "Node": "CloudBlockLevel",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "2",
+        "4",
+        "6"
+      ],
+      "WindowsDefault": "0",
+      "Values": {
+        "0": "Not configured",
+        "2": "High",
+        "4": "High plus",
+        "6": "Zero tolerance"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#cloudblocklevel"
+    },
+    {
+      "Cis": "2.29",
+      "Title": "Cloud Extended Timeout",
+      "Node": "CloudExtendedTimeout",
+      "Family": "PolicyCsp",
+      "Kind": "Integer",
+      "Minimum": 1,
+      "Maximum": 50,
+      "WindowsDefault": "0",
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#cloudextendedtimeout"
+    },
+    {
+      "Cis": "2.30",
+      "Title": "Days Until Aggressive Catchup Quick Scan",
+      "Node": "DaysUntilAggressiveCatchupQuickScan",
+      "Family": "DefenderCsp",
+      "Kind": "Integer",
+      "Minimum": 7,
+      "Maximum": 7,
+      "WindowsDefault": "30",
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/defender-csp#configurationdaysuntilaggressivecatchupquickscan"
+    },
+    {
+      "Cis": "2.32",
+      "Title": "Enable Dynamic Signature Dropped Event Reporting",
+      "Node": "EnableDynamicSignatureDroppedEventReporting",
+      "Family": "DefenderCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "0",
+      "Values": {
+        "0": "Not reported",
+        "1": "Reported"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/defender-csp#configurationreportingenabledynamicsignaturedroppedeventreporting"
+    },
+    {
+      "Cis": "2.33",
+      "Title": "Enable File Hash Computation",
+      "Node": "EnableFileHashComputation",
+      "Family": "DefenderCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "0",
+      "Values": {
+        "0": "Disable",
+        "1": "Enable"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/defender-csp#configurationenablefilehashcomputation"
+    },
+    {
+      "Cis": "2.34",
+      "Title": "Enable Network Protection",
+      "Node": "EnableNetworkProtection",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "0",
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled (block mode)",
+        "2": "Enabled (audit mode)"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#enablenetworkprotection"
+    },
+    {
+      "Cis": "2.35",
+      "Title": "Hide Exclusions From Local Users",
+      "Node": "HideExclusionsFromLocalUsers",
+      "Family": "DefenderCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "0",
+      "Values": {
+        "0": "Visible to local users",
+        "1": "Hidden from local users"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/defender-csp#configurationhideexclusionsfromlocalusers"
+    },
+    {
+      "Cis": "2.36",
+      "Title": "Oobe Enable Rtp And Sig Update",
+      "Node": "OobeEnableRtpAndSigUpdate",
+      "Family": "DefenderCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "0",
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/defender-csp#configurationoobeenablertpandsigupdate"
+    },
+    {
+      "Cis": "2.37",
+      "Title": "PUA Protection",
+      "Node": "PUAProtection",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "0",
+      "Values": {
+        "0": "Off",
+        "1": "On (block)",
+        "2": "Audit mode"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#puaprotection"
+    },
+    {
+      "Cis": "2.38",
+      "Title": "Quick Scan Include Exclusions",
+      "Node": "QuickScanIncludeExclusions",
+      "Family": "DefenderCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1"
+      ],
+      "WindowsDefault": "0",
+      "Values": {
+        "0": "Exclusions not scanned",
+        "1": "Exclusions scanned"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/defender-csp#configurationquickscanincludeexclusions"
+    },
+    {
+      "Cis": "2.39",
+      "Title": "Real Time Scan Direction",
+      "Node": "RealTimeScanDirection",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "0"
+      ],
+      "WindowsDefault": "0",
+      "Values": {
+        "0": "Monitor all files (bi-directional)",
+        "1": "Incoming only",
+        "2": "Outgoing only"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#realtimescandirection"
+    },
+    {
+      "Cis": "2.42",
+      "Title": "Scan Parameter",
+      "Node": "ScanParameter",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1",
+        "2"
+      ],
+      "WindowsDefault": "1",
+      "Values": {
+        "1": "Quick scan",
+        "2": "Full scan"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#scanparameter"
+    },
+    {
+      "Cis": "2.43",
+      "Title": "Schedule Quick Scan Time",
+      "Node": "ScheduleQuickScanTime",
+      "Family": "PolicyCsp",
+      "Kind": "Integer",
+      "Minimum": 1,
+      "Maximum": 1380,
+      "WindowsDefault": "120",
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#schedulequickscantime"
+    },
+    {
+      "Cis": "2.44",
+      "Title": "Schedule Scan Time",
+      "Node": "ScheduleScanTime",
+      "Family": "PolicyCsp",
+      "Kind": "Integer",
+      "Minimum": 1,
+      "Maximum": 1380,
+      "WindowsDefault": "120",
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#schedulescantime"
+    },
+    {
+      "Cis": "2.45",
+      "Title": "Schedule Scan Day",
+      "Node": "ScheduleScanDay",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7"
+      ],
+      "WindowsDefault": "0",
+      "Values": {
+        "0": "Every day",
+        "8": "No scheduled scan"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#schedulescanday"
+    },
+    {
+      "Cis": "2.46",
+      "Title": "Signature Update Interval",
+      "Node": "SignatureUpdateInterval",
+      "Family": "PolicyCsp",
+      "Kind": "Integer",
+      "Minimum": 1,
+      "Maximum": 4,
+      "WindowsDefault": "8",
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#signatureupdateinterval"
+    },
+    {
+      "Cis": "2.47",
+      "Title": "Submit Samples Consent",
+      "Node": "SubmitSamplesConsent",
+      "Family": "PolicyCsp",
+      "Kind": "Choice",
+      "Compliant": [
+        "1",
+        "3"
+      ],
+      "WindowsDefault": "1",
+      "Values": {
+        "0": "Always prompt",
+        "1": "Send safe samples automatically",
+        "2": "Never send",
+        "3": "Send all samples automatically"
+      },
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#submitsamplesconsent"
+    },
+    {
+      "Cis": "2.48",
+      "Title": "Remediation action for Moderate severity threats",
+      "Node": "ThreatSeverityDefaultAction_moderateseveritythreats",
+      "Family": "PolicyCsp",
+      "Kind": "ThreatAction",
+      "Compliant": [
+        "quarantine",
+        "remove"
+      ],
+      "WindowsDefault": null,
+      "Severity": "Moderate",
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#threatseveritydefaultaction"
+    },
+    {
+      "Cis": "2.49",
+      "Title": "Remediation action for High severity threats",
+      "Node": "ThreatSeverityDefaultAction_highseveritythreats",
+      "Family": "PolicyCsp",
+      "Kind": "ThreatAction",
+      "Compliant": [
+        "quarantine",
+        "remove"
+      ],
+      "WindowsDefault": null,
+      "Severity": "High",
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#threatseveritydefaultaction"
+    },
+    {
+      "Cis": "2.50",
+      "Title": "Remediation action for Severe threats",
+      "Node": "ThreatSeverityDefaultAction_severethreats",
+      "Family": "PolicyCsp",
+      "Kind": "ThreatAction",
+      "Compliant": [
+        "quarantine",
+        "remove"
+      ],
+      "WindowsDefault": null,
+      "Severity": "Severe",
+      "Source": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender#threatseveritydefaultaction"
+    }
+  ],
+  "OutOfScope": [
+    {
+      "Cis": "1.3.1",
+      "Level": 1,
+      "Reason": "Administrative Templates (ADMX) setting configured in a general Settings Catalog profile, not the Endpoint security Antivirus profile; the collector reads only Antivirus policies.",
+      "EvidenceLimit": true
+    },
+    {
+      "Cis": "1.3.2",
+      "Level": 1,
+      "Reason": "Administrative Templates (ADMX) setting configured in a general Settings Catalog profile, not the Endpoint security Antivirus profile; the collector reads only Antivirus policies.",
+      "EvidenceLimit": true
+    },
+    {
+      "Cis": "1.8.1",
+      "Level": 1,
+      "Reason": "Administrative Templates (ADMX) setting configured in a general Settings Catalog profile, not the Endpoint security Antivirus profile; the collector reads only Antivirus policies.",
+      "EvidenceLimit": true
+    },
+    {
+      "Cis": "1.14",
+      "Level": 1,
+      "Reason": "Administrative Templates (ADMX) setting configured in a general Settings Catalog profile, not the Endpoint security Antivirus profile; the collector reads only Antivirus policies.",
+      "EvidenceLimit": true
+    },
+    {
+      "Cis": "1.10.1",
+      "Level": 2,
+      "Reason": "Level 2. The approved profile is Level 1 - Workstation.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.10",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.11",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.12",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.13",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.14",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.15",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.16",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.17",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.18",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.19",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.20",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.21",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.22",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.23",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.24",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.25",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.26",
+      "Level": 1,
+      "Reason": "Attack surface reduction rule; judged by INT-2.2 against the owner-approved rule set in Config/asr-required-rules.json, not by INT-1.5.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.31",
+      "Level": 2,
+      "Reason": "Level 2. The approved profile is Level 1 - Workstation.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.40",
+      "Level": 2,
+      "Reason": "Level 2. The approved profile is Level 1 - Workstation.",
+      "EvidenceLimit": false
+    },
+    {
+      "Cis": "2.41",
+      "Level": 1,
+      "Reason": "Remote Encryption Protection Configured State: Microsoft's Policy CSP and Defender CSP references do not document the node or its values, so the Settings Catalog value cannot be read with confidence.",
+      "EvidenceLimit": true
+    }
+  ]
+}

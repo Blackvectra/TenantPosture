@@ -140,6 +140,9 @@ function Invoke-TPCollectIntuneEndpointSecurity {
                             $entry.AsrSettingsStatus = $sStatus
                         } else {
                             $entry.AvSettings = Get-TPAvSettings -Settings $sAll
+                            # Every value the policy sets, so INT-1.5 can judge the approved
+                            # configuration standard from the stored policy (Get-TPAvBaselineRows).
+                            $entry.AvSettingValues = Get-TPAvSettingValues -Settings $sAll
                             $entry.AvSettingsStatus = $sStatus
                         }
                     } catch {

@@ -311,7 +311,7 @@ Evaluators/      turn raw data into findings
 Publishers/      turn findings into documents
 Lib/             shared helpers — scoring, NIST rollups, escaping, file ACLs
 Device/          the endpoint script. PS 5.1. Does not run on your machine.
-Testing/         121 Pester suites. Run: ./tools/Invoke-TPTestGate.ps1
+Testing/         123 Pester suites. Run: ./tools/Invoke-TPTestGate.ps1
 docs/            this file, and the policy docs
 ```
 
