@@ -7,7 +7,7 @@
 #   1. Summary        — Overall posture, score, workload breakdown, framework scores
 #   2. All Controls   — Every control with status, severity, framework citations
 #   3. Gaps Only      — Filtered to Gap/Partial, with remediation commands
-#   4. CIS M365 v6    — Controls mapped to CIS sections
+#   4. CIS M365 v7    — Controls mapped to CIS sections
 #   5. CISA SCuBA     — Controls mapped to SCuBA policy IDs
 #   6. NIST 800-53    — Controls mapped to NIST control families
 #   7. CMMC 2.0       — Controls mapped to CMMC practices
@@ -433,7 +433,7 @@ for wl in ['AAD','EXO','DEF','DNS','SPO','TMS','INT','PVW','PPL']:
     row+=1
 
 # Framework scores
-fws = {'CIS':'CIS M365 v6.0.1','SCuBA':'CISA SCuBA','NIST':'NIST 800-53r5','CMMC':'CMMC 2.0 L2',
+fws = {'CIS':'CIS M365 v7.0.0','SCuBA':'CISA SCuBA','NIST':'NIST 800-53r5','CMMC':'CMMC 2.0 L2',
        'ISO27001':'ISO 27001:2022','SOC2':'SOC 2','HIPAA':'HIPAA §164','PCIDSS':'PCI DSS v4.0'}
 ws.merge_cells(f'A{row+1}:D{row+1}')
 hdr(ws,row+1,1,'Framework Compliance',NAVY,WHITE)
@@ -517,7 +517,7 @@ build_findings_sheet(wb, 'Gaps & Partials', gap_rows, ALL_COLS)
 
 # Framework-specific sheets
 FW_SHEETS = [
-    ('CIS M365 v6', 'CIS',      'CIS',       [('Control ID',16),('Title',36),('State',12),('Severity',10),('CIS Ref',14),('Remediation',40)]),
+    ('CIS M365 v7', 'CIS',      'CIS',       [('Control ID',16),('Title',36),('State',12),('Severity',10),('CIS Ref',14),('Remediation',40)]),
     ('CISA SCuBA',  'SCuBA',    'SCuBA',      [('Control ID',16),('Title',36),('State',12),('Severity',10),('SCuBA Ref',18),('Remediation',40)]),
     ('NIST 800-53', 'NIST',     'NIST',       [('Control ID',16),('Title',36),('State',12),('Severity',10),('NIST Ref',64),('Business Risk',40)]),
     ('CMMC 2.0',    'CMMC',     'CMMC',       [('Control ID',16),('Title',36),('State',12),('Severity',10),('CMMC Ref',14),('Remediation',40)]),

@@ -412,7 +412,7 @@ function Publish-TPRemediationPlaybook {
     }
     $null = $exec.AppendLine()
     $null = $exec.AppendLine("---")
-    $null = $exec.AppendLine("*This assessment was conducted using read-only access to the $client Microsoft 365 environment. No changes were made. Assessment framework: CIS M365 Foundations Benchmark v6.0.1, CISA SCuBA, NIST SP 800-53 Rev 5.*  ")
+    $null = $exec.AppendLine("*This assessment was conducted using read-only access to the $client Microsoft 365 environment. No changes were made. Assessment framework: CIS M365 Foundations Benchmark v7.0.0, CISA SCuBA, NIST SP 800-53 Rev 5.*  ")
     $null = $exec.AppendLine("*NRG Technology Services / NextLayerSec LLC · $date*")
 
     # Publisher self-hardens via Set-TPSensitiveFileContent: the file is

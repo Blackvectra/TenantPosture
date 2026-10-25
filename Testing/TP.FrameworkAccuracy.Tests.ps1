@@ -11,7 +11,8 @@
 #          IDs, and version drift (e.g. MS.AAD.3.3v1 -> v2) in CI instead of at
 #          client-report time.
 #
-# Consumes: Config/controls.json, Config/framework-baselines/scuba-ids-v2.0.0.txt
+# Consumes: Config/controls.json, Config/frameworks.json, baselines/*.md,
+#           Config/framework-baselines/scuba-ids-v2.0.0.txt, cis-m365-v7.0.0.txt
 # Sets:     nothing.
 
 Describe 'Framework crosswalk accuracy' {
@@ -30,6 +31,71 @@ Describe 'Framework crosswalk accuracy' {
         $script:AuthCis = @(Get-Content -LiteralPath $cisPath |
             Where-Object { $_ -match '^\d' } |
             ForEach-Object { ($_ -split '\s+', 2)[0] })
+
+        $m365Path = Join-Path $script:RepoRoot 'Config' 'framework-baselines' 'cis-m365-v7.0.0.txt'
+        $script:AuthM365 = @(Get-Content -LiteralPath $m365Path |
+            Where-Object { $_ -match '^\d' } |
+            ForEach-Object { ($_ -split "`t", 2)[0] })
+        $script:Frameworks = (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config' 'frameworks.json') -Raw | ConvertFrom-Json).frameworks
+    }
+
+    Context 'CIS Microsoft 365 Foundations references vs the v7.0.0 recommendation list' {
+        # The v6 citations carried 78 numbers that v7 does not have, and most
+        # of the rest named a different recommendation in v7, because CIS
+        # renumbers between editions. Nothing checked them, so the CIS card
+        # showed numbers a client could not look up.
+        It 'Bundled v7.0.0 list has all 160 recommendations, each once' {
+            $script:AuthM365.Count | Should -Be 160
+            @($script:AuthM365 | Select-Object -Unique).Count | Should -Be 160
+        }
+
+        It 'Every non-empty References.CIS value exists in the v7.0.0 list' {
+            $authSet = [System.Collections.Generic.HashSet[string]]::new(
+                [string[]]$script:AuthM365, [System.StringComparer]::Ordinal)
+            $bad = [System.Collections.Generic.List[string]]::new()
+            foreach ($c in $script:Controls) {
+                foreach ($id in @($c.References.CIS)) {
+                    if ([string]::IsNullOrEmpty([string]$id)) { continue }
+                    if (-not $authSet.Contains([string]$id)) { $bad.Add("$($c.ControlId) -> $id") }
+                }
+            }
+            $bad -join "`n" | Should -BeNullOrEmpty -Because 'a CIS citation must name a real v7.0.0 recommendation; leave it empty when no recommendation describes the check'
+        }
+
+        It 'frameworks.json and every publisher name the same edition' {
+            $fw = $script:Frameworks | Where-Object Id -eq 'CIS'
+            $fw.Version | Should -Be '7.0.0'
+            $fw.FullName | Should -Match 'v7\.0\.0$'
+            $bad = @()
+            foreach ($f in Get-ChildItem (Join-Path $script:RepoRoot 'Publishers') -Filter '*.ps1' -File) {
+                $t = Get-Content -LiteralPath $f.FullName -Raw
+                foreach ($m in [regex]::Matches($t, 'CIS M365[^''"\n]{0,30}?\bv(\d+(?:\.\d+)*)')) {
+                    if (-not ('7.0.0' -like "$($m.Groups[1].Value)*")) { $bad += "$($f.Name): $($m.Value)" }
+                }
+            }
+            $bad -join "`n" | Should -BeNullOrEmpty -Because 'a report that labels the CIS card with an older edition misstates what the client was measured against'
+        }
+
+        It 'Every baseline document cites the control''s own CIS number under the v7.0.0 label' {
+            $byId = @{}; foreach ($c in $script:Controls) { $byId[$c.ControlId] = [string]$c.References.CIS }
+            $bad = @()
+            foreach ($f in Get-ChildItem (Join-Path $script:RepoRoot 'baselines') -Filter '*.md' -File) {
+                $cur = $null; $seen = @{}
+                foreach ($line in Get-Content -LiteralPath $f.FullName -Encoding utf8) {
+                    if ($line -match '^### ([A-Z]{2,4}-\d+\.\d+) ') { $cur = $Matches[1]; $seen[$cur] = '' ; continue }
+                    if ($cur -and $line -match '^\| CIS Microsoft 365 Foundations Benchmark (v[\d.]+) \| ([^|]*)\|') {
+                        if ($Matches[1] -ne 'v7.0.0') { $bad += "$($f.Name) ${cur}: cites $($Matches[1])" }
+                        $seen[$cur] = $Matches[2].Trim()
+                    }
+                }
+                foreach ($id in $seen.Keys) {
+                    if ($byId.ContainsKey($id) -and $seen[$id] -ne $byId[$id]) {
+                        $bad += "$($f.Name) ${id}: documents '$($seen[$id])', controls.json cites '$($byId[$id])'"
+                    }
+                }
+            }
+            $bad -join "`n" | Should -BeNullOrEmpty
+        }
     }
 
     Context 'SCuBA references vs authoritative ScubaGear 2.0.0 baseline' {
