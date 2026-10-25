@@ -148,13 +148,13 @@ Create app protection policies in Intune > Apps > App protection policies for iO
 **License required:** M365 Business Premium or Intune Plan 1
 
 **Description:**
-Intune endpoint security antivirus policies are deployed to Windows devices, enforcing Defender AV settings.
+An assigned Intune endpoint security antivirus policy configures Microsoft Defender Antivirus on Windows devices to the approved standard: the CIS Microsoft Intune for Microsoft Defender Antivirus Benchmark v1.0.0, Level 1 - Workstation (Config/cis-intune-defender-av.json).
 
 **Business risk:**
 Without enforced AV policy, users can disable Defender or create exclusions, leaving endpoints unprotected.
 
 **Remediation:**
-Create Endpoint Security > Antivirus policy in Intune. Set CloudBlockLevel = High, enable real-time protection and tamper protection.
+In Intune, create an Endpoint security > Antivirus policy (Microsoft Defender Antivirus), assign it to every Windows device, and set each setting the CIS Microsoft Intune for Microsoft Defender Antivirus Benchmark v1.0.0, Level 1 - Workstation, lists: archive, behavior, email, removable-drive, on-access, real-time, download and script scanning allowed; cloud protection allowed with Cloud Block Level High or above and Cloud Extended Timeout 1 to 50 seconds; signatures checked before a scan and updated every 4 hours or less; network protection in block mode; PUA protection on; file hash computation, dynamic signature dropped-event reporting, OOBE real-time protection and quick-scan-of-exclusions enabled; exclusions hidden from local users; bi-directional real-time scanning; a quick or full scheduled scan on a set day and time with a 7-day catch-up; samples sent automatically; quarantine or remove for moderate, high and severe threats. The finding lists each setting that is not set or set below the benchmark. Tamper protection is a separate Windows Security experience setting.
 
 **Framework mappings:**
 
