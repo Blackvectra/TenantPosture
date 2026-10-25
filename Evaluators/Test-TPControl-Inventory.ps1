@@ -107,6 +107,7 @@ function Test-TPControlInventoryMFAUsers {
             "$($_.UserDisplayName) ($($_.UserPrincipalName))"
         })
         $remaining = if ($noMFA.Count -gt 100) { " ($($noMFA.Count - 100) additional users in full results)" } else { '' }
+        if ($unknown.Count -gt 0) { $remaining += " MFA capability was not recorded for $($unknown.Count) other user(s) who have a method registered (a results file from before the collector read isMfaCapable); they are counted neither way." }
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity $ctrl.Severity -FrameworkIds $cit `
             -Detail "$($withMFA.Count) of $total $popLabel ($pct%) are MFA capable. The $($noMFA.Count) user(s) listed below are not: they have no strong method registered, or only one the authentication methods policy does not allow. That is a registration gap: it does not show whether a sign-in was attempted or succeeded, or which Conditional Access policies apply to the account, but a password alone may be enough to sign in wherever no policy requires more.$remaining$syncNote" `
