@@ -164,6 +164,7 @@ Set-AntiPhishPolicy -Identity "Office365 AntiPhish Default" -PhishThresholdLevel
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3, SI-4 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.7 |
 | CIS Controls v8.1 | 9.7 |
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.7, A.8.23 |

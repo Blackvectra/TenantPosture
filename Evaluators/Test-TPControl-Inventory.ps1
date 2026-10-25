@@ -70,21 +70,38 @@ function Test-TPControlInventoryMFAUsers {
             @{ UserPrincipalName = $upn
                UserDisplayName   = [string](Get-TPObjectField -Item $_ -Key 'DisplayName' -Default $upn)
                # No registration record = no registered method (as AAD-1.2 treats it).
-               IsMfaRegistered   = [bool]($rec -and (Get-TPObjectField -Item $rec -Key 'IsMfaRegistered' -Default $false)) }
+               IsMfaRegistered   = [bool]($rec -and (Get-TPObjectField -Item $rec -Key 'IsMfaRegistered' -Default $false))
+               IsMfaCapable      = if ($rec) { Get-TPObjectField -Item $rec -Key 'IsMfaCapable' -Default $null } else { $false } }
         })
     } else {
-        $enabled = @($regDetails | Where-Object { $_.IsEnabled -eq $true })
+        $enabled = @($regDetails | Where-Object { $_.IsEnabled -eq $true } | ForEach-Object {
+            @{ UserPrincipalName = [string](Get-TPObjectField -Item $_ -Key 'UserPrincipalName' -Default '')
+               UserDisplayName   = [string](Get-TPObjectField -Item $_ -Key 'UserDisplayName' -Default '')
+               IsMfaRegistered   = [bool](Get-TPObjectField -Item $_ -Key 'IsMfaRegistered' -Default $false)
+               IsMfaCapable      = Get-TPObjectField -Item $_ -Key 'IsMfaCapable' -Default $null }
+        })
     }
+    # The verdict is MFA CAPABLE, not registered (CIS Microsoft 365 Foundations
+    # v7.0.0 5.2.3.4): Microsoft's registration report marks a user capable
+    # when a strong method is registered AND the authentication methods policy
+    # allows it, so a user registered only with a method the policy has since
+    # turned off is registered and still cannot complete MFA. A results file
+    # from before the collector stored isMfaCapable carries no such value; a
+    # user registered there is "capability not recorded", never a pass.
     $popLabel  = if ($memberList.Count -gt 0) { 'enabled member accounts (guests excluded)' } else { 'enabled users' }
-    $withMFA   = @($enabled    | Where-Object { $_.IsMfaRegistered -eq $true })
-    $noMFA     = @($enabled    | Where-Object { $_.IsMfaRegistered -eq $false })
+    $withMFA   = @($enabled    | Where-Object { $_.IsMfaCapable -eq $true })
+    $noMFA     = @($enabled    | Where-Object { $_.IsMfaCapable -eq $false -or $_.IsMfaRegistered -eq $false })
+    $unknown   = @($enabled    | Where-Object { $_.IsMfaRegistered -eq $true -and $null -eq $_.IsMfaCapable })
     $total     = $enabled.Count
     $pct       = if ($total -gt 0) { [Math]::Round($withMFA.Count * 100 / $total, 1) } else { 0 }
 
-    if ($noMFA.Count -eq 0) {
+    if ($noMFA.Count -eq 0 -and $unknown.Count -gt 0) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "MFA capability was not recorded for $($unknown.Count) of $total $popLabel (a results file from before the collector read isMfaCapable); every one of them has a method registered, but whether the authentication methods policy allows it was not read. Not assessed.$syncNote"
+    } elseif ($noMFA.Count -eq 0) {
         Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "$($withMFA.Count) of $total $popLabel ($pct%) have MFA registered.$syncNote"
+            -Detail "$($withMFA.Count) of $total $popLabel ($pct%) are MFA capable (a strong method registered and allowed by the authentication methods policy).$syncNote"
     } else {
         $objects = @($noMFA | Select-Object -First 100 | ForEach-Object {
             "$($_.UserDisplayName) ($($_.UserPrincipalName))"
@@ -92,9 +109,9 @@ function Test-TPControlInventoryMFAUsers {
         $remaining = if ($noMFA.Count -gt 100) { " ($($noMFA.Count - 100) additional users in full results)" } else { '' }
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title `
             -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "$($withMFA.Count) of $total $popLabel ($pct%) have MFA registered. The $($noMFA.Count) user(s) listed below have no MFA method registered. That is a registration gap: it does not show whether a sign-in was attempted or succeeded, or which Conditional Access policies apply to the account, but a password alone may be enough to sign in wherever no policy requires more.$remaining$syncNote" `
-            -CurrentValue "$($withMFA.Count)/$total users with MFA ($pct%)" `
-            -RequiredValue '100% of enabled users registered for MFA' `
+            -Detail "$($withMFA.Count) of $total $popLabel ($pct%) are MFA capable. The $($noMFA.Count) user(s) listed below are not: they have no strong method registered, or only one the authentication methods policy does not allow. That is a registration gap: it does not show whether a sign-in was attempted or succeeded, or which Conditional Access policies apply to the account, but a password alone may be enough to sign in wherever no policy requires more.$remaining$syncNote" `
+            -CurrentValue "$($withMFA.Count)/$total users MFA capable ($pct%)" `
+            -RequiredValue '100% of enabled member users MFA capable' `
             -Remediation $ctrl.Remediation -AffectedObjects $objects
     }
 }

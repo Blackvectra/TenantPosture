@@ -133,6 +133,7 @@ Enable-DkimSigningConfig -Identity domain.com. Publish the CNAME records from M3
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-8, SC-13 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.9 |
 | CIS Controls v8.1 | 9.5 |
 | CISA SCuBA | MS.EXO.3.1v1 |
 | CMMC 2.0 | SC.L2-3.13.8 |

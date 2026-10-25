@@ -37,7 +37,7 @@ Describe 'controls.json — framework citation coverage' {
         # (Config/cis-m365-uncited-controls.json). This gate once required a
         # CIS number on every control, and controls the benchmark does not
         # cover (Intune, Power Platform, DNS) were given numbers it does not
-        # contain; the v7.0.0 review left 143 uncited, each with the reason.
+        # contain; the v7.0.0 review left 135 uncited, each with the reason.
         $script:CisUncited = @{}
         $cunc = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/cis-m365-uncited-controls.json') -Raw -Encoding utf8 | ConvertFrom-Json
         foreach ($p in $cunc.controls.PSObject.Properties) { $script:CisUncited[$p.Name] = [string]$p.Value }

@@ -53,7 +53,8 @@ Describe 'SharePoint settings are read for the control that names them' {
         }
         It 'SPO-1.4 (guest expiration) is decided by ExternalUserExpirationRequired' {
             (Run 'Test-TPControlSharePoint' 'SPO-1.4' @{} @{ ExternalUserExpirationRequired = $false; ExternalUserExpireInDays = 0 }).State | Should -Be 'Gap'
-            (Run 'Test-TPControlSharePoint' 'SPO-1.4' @{} @{ ExternalUserExpirationRequired = $true; ExternalUserExpireInDays = 60 }).State | Should -Be 'Satisfied'
+            (Run 'Test-TPControlSharePoint' 'SPO-1.4' @{} @{ ExternalUserExpirationRequired = $true; ExternalUserExpireInDays = 30 }).State | Should -Be 'Satisfied'
+            (Run 'Test-TPControlSharePoint' 'SPO-1.4' @{} @{ ExternalUserExpirationRequired = $true; ExternalUserExpireInDays = 60 }).State | Should -Be 'Partial' -Because 'CIS Microsoft 365 Foundations v7.0.0 7.2.9 requires 30 days'
             (Run 'Test-TPControlSharePoint' 'SPO-1.4').State | Should -Be 'NotApplicable'
         }
         It 'SPO-1.5 (unmanaged devices) is decided by ConditionalAccessPolicy' {
@@ -91,7 +92,8 @@ Describe 'SharePoint settings are read for the control that names them' {
         }
         It 'SPO-2.7 needs email attestation on; a leftover day count is not reauthentication' {
             (Run 'Test-TPControlSPOReauth' 'SPO-2.7' @{} @{ EmailAttestationRequired = $false; EmailAttestationReAuthDays = 30 }).State | Should -Be 'Gap'
-            (Run 'Test-TPControlSPOReauth' 'SPO-2.7' @{} @{ EmailAttestationRequired = $true;  EmailAttestationReAuthDays = 30 }).State | Should -Be 'Satisfied'
+            (Run 'Test-TPControlSPOReauth' 'SPO-2.7' @{} @{ EmailAttestationRequired = $true;  EmailAttestationReAuthDays = 15 }).State | Should -Be 'Satisfied'
+            (Run 'Test-TPControlSPOReauth' 'SPO-2.7' @{} @{ EmailAttestationRequired = $true;  EmailAttestationReAuthDays = 30 }).State | Should -Be 'Partial' -Because 'CIS Microsoft 365 Foundations v7.0.0 7.2.10 requires 15 days or fewer'
             (Run 'Test-TPControlSPOReauth' 'SPO-2.7' @{} @{ EmailAttestationRequired = $true;  EmailAttestationReAuthDays = 90 }).State | Should -Be 'Partial'
         }
     }

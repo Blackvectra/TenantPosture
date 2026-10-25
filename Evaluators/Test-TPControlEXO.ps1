@@ -275,14 +275,15 @@ function Test-TPControlEXODKIM {
     $cfgByDomain = @{}
     foreach ($c in $dkimConfigs) { $cfgByDomain[([string](Get-TPObjectField -Item $c -Key 'Domain' -Default '')).ToLowerInvariant()] = $c }
 
-    # Every authoritative accepted domain should sign. A domain with no DKIM
+    # Every accepted domain should sign, relay domains included (CIS Microsoft
+    # 365 Foundations v7.0.0 2.1.9 audits every accepted domain that is not
+    # the initial or a coexistence domain). A domain with no DKIM
     # configuration at all is unsigned (Microsoft signs only the
     # onmicrosoft.com domain by default), so it is judged, not skipped.
     # Accepted domains unread: judge the configurations that exist.
     $domains = @()
     if (Test-TPSectionCollected $exoData 'AcceptedDomains') {
         $domains = @(@(Get-TPObjectField -Item $exoData.Data -Key 'AcceptedDomains' -Default @()) |
-            Where-Object { [string](Get-TPObjectField -Item $_ -Key 'DomainType' -Default 'Authoritative') -eq 'Authoritative' } |
             ForEach-Object { ([string](Get-TPObjectField -Item $_ -Key 'DomainName' -Default '')).ToLowerInvariant() } |
             Where-Object { $_ -and $_ -notmatch '\.onmicrosoft\.com$' })
     }
@@ -298,20 +299,31 @@ function Test-TPControlEXODKIM {
         $sizes = @('Selector1KeySize','Selector2KeySize','KeySize') | ForEach-Object { Get-TPObjectField -Item $c -Key $_ -Default $null } |
             Where-Object { $null -ne $_ -and "$_" -match '^\d+$' } | ForEach-Object { [int]"$_" }
         if (@($sizes).Count) { ($sizes | Measure-Object -Maximum).Maximum } else { $null } }
-    $unsigned = @($domains | Where-Object { -not $cfgByDomain.ContainsKey($_) -or -not [bool](Get-TPObjectField -Item $cfgByDomain[$_] -Key 'Enabled' -Default $false) })
+    # Enabled is the switch; Status is whether Microsoft is signing. An enabled
+    # configuration whose Status is not Valid (CNAME records missing, keys not
+    # saved) signs nothing, and 2.1.9 fails it. A Status that was not read (a
+    # results file from before the collector stored it) is not established.
+    $status   = { param($d) [string](Get-TPObjectField -Item $cfgByDomain[$d] -Key 'Status' -Default '') }
+    $unsigned = @($domains | Where-Object { -not $cfgByDomain.ContainsKey($_) -or -not [bool](Get-TPObjectField -Item $cfgByDomain[$_] -Key 'Enabled' -Default $false) -or ((& $status $_) -and (& $status $_) -ne 'Valid') })
     $signed   = @($domains | Where-Object { $_ -notin $unsigned })
+    $statusUnread = @($signed | Where-Object { -not (& $status $_) })
     # Weak: no selector holds a 2048-bit key. One 1024-bit selector beside a
     # 2048-bit one is a rotation in progress, not a weakness.
     $weak     = @($signed | Where-Object { $b = & $keyBits $cfgByDomain[$_]; $null -ne $b -and $b -lt 2048 })
 
-    if ($unsigned.Count -eq 0 -and $weak.Count -eq 0) {
+    $notSigning = @($unsigned | ForEach-Object { if ($cfgByDomain.ContainsKey($_) -and (& $status $_)) { "$_ (Status: $(& $status $_))" } else { $_ } })
+    if ($unsigned.Count -eq 0 -and $weak.Count -eq 0 -and $statusUnread.Count -gt 0) {
+        Add-TPFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+            -Title $control.Title -FrameworkIds $citations `
+            -Detail "DKIM signing is enabled for every custom domain, but whether Microsoft is signing (Status) was not recorded for $($statusUnread -join ', '); not assessed."
+    } elseif ($unsigned.Count -eq 0 -and $weak.Count -eq 0) {
         Add-TPFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
             -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-            -Detail "DKIM signing is enabled for every custom domain: $($signed -join ', ')."
+            -Detail "DKIM signing is enabled and valid (Status: Valid) for every custom domain: $($signed -join ', ')."
     } elseif ($unsigned.Count -gt 0 -and $signed.Count -gt 0) {
         Add-TPFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
             -Title $control.Title -Severity 'High' -FrameworkIds $citations `
-            -Detail "DKIM signs $($signed.Count) domain(s) but not $($unsigned.Count): $($unsigned -join ', ')." `
+            -Detail "DKIM signs $($signed.Count) domain(s) but not $($unsigned.Count): $($notSigning -join ', ')." `
             -CurrentValue "DKIM not signing: $($unsigned -join ', ')" -RequiredValue 'DKIM enabled for all domains' -Remediation $control.Remediation
     } elseif ($unsigned.Count -eq 0) {
         Add-TPFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
@@ -321,7 +333,7 @@ function Test-TPControlEXODKIM {
     } else {
         Add-TPFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
-            -Detail "DKIM signing is not enabled for any custom domain: $($unsigned -join ', ')." `
+            -Detail "DKIM is not signing for any custom domain: $($notSigning -join ', ')." `
             -CurrentValue 'DKIM not signing any custom domain' -RequiredValue 'DKIM enabled for all domains' `
             -Remediation $control.Remediation
     }

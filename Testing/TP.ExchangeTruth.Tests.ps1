@@ -89,13 +89,13 @@ Describe 'Exchange controls read the setting they name' {
         }
         It 'reads the documented Selector1KeySize / Selector2KeySize (was: Satisfied on 1024-bit keys)' {
             Set-TPRawData -Key 'EXO-MailboxConfig' -Data (Raw @{ AcceptedDomains = $script:Accepted
-                DkimSigningConfigs = @(@{ Domain = 'contoso.com'; Enabled = $true; Selector1KeySize = 1024; Selector2KeySize = 1024 })
+                DkimSigningConfigs = @(@{ Domain = 'contoso.com'; Enabled = $true; Status = 'Valid'; Selector1KeySize = 1024; Selector2KeySize = 1024 })
                 SectionStatus = @{ DkimSigningConfigs = 'Collected'; AcceptedDomains = 'Collected' } })
             (Verdict 'Test-TPControlEXODKIM' 'EXO-1.4').State | Should -Be 'Partial'
         }
         It 'one 2048-bit selector beside a 1024-bit one is a rotation in progress, not a weakness' {
             Set-TPRawData -Key 'EXO-MailboxConfig' -Data (Raw @{ AcceptedDomains = $script:Accepted
-                DkimSigningConfigs = @(@{ Domain = 'contoso.com'; Enabled = $true; Selector1KeySize = 1024; Selector2KeySize = 2048 })
+                DkimSigningConfigs = @(@{ Domain = 'contoso.com'; Enabled = $true; Status = 'Valid'; Selector1KeySize = 1024; Selector2KeySize = 2048 })
                 SectionStatus = @{ DkimSigningConfigs = 'Collected'; AcceptedDomains = 'Collected' } })
             (Verdict 'Test-TPControlEXODKIM' 'EXO-1.4').State | Should -Be 'Satisfied'
         }
@@ -512,7 +512,7 @@ return @{ value = @() }
                     @{ UserPrincipalName = 'a@contoso.com'; DisplayName = 'A'; AccountEnabled = $true; UserType = 'Member' },
                     @{ UserPrincipalName = 'b@contoso.com'; DisplayName = 'B'; AccountEnabled = $true; UserType = 'Member' },
                     @{ UserPrincipalName = 'Sync_DC01_1a2b3c@contoso.onmicrosoft.com'; DisplayName = 'On-Premises Directory Synchronization Service Account'; AccountEnabled = $true; UserType = 'Member' })
-                MFARegistration = @{ RegistrationDetails = @(@{ UserPrincipalName = 'a@contoso.com'; IsMfaRegistered = $true; IsEnabled = $true }) } })
+                MFARegistration = @{ RegistrationDetails = @(@{ UserPrincipalName = 'a@contoso.com'; IsMfaRegistered = $true; IsMfaCapable = $true; IsEnabled = $true }) } })
             $f = Verdict 'Test-TPControlInventoryMFAUsers' 'AAD-12.1'
             $f.Detail | Should -Match '^1 of 2 enabled member accounts'
             $f.Detail | Should -Match '1 Entra Connect sync service account\(s\) excluded'

@@ -1296,6 +1296,7 @@ Entra ID > Users > [select user] > Authentication methods > Add method. For bulk
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2(1) |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.3.4 |
 | CIS Controls v8.1 | 6.3 |
 | CISA SCuBA | MS.AAD.3.1v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
