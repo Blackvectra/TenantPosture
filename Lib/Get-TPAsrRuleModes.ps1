@@ -91,7 +91,8 @@ function Test-TPAsrRuleSet {
     .SYNOPSIS
         Judges read rule modes against the required rules. Per required rule the
         best mode across policies wins (Block > Warn > Audit > Off); a rule with no
-        setting found is 'NotConfigured'.
+        setting found is 'NotConfigured'. A rule is met when that mode is one of its
+        Accept modes (Block when the entry names none).
     #>
     [CmdletBinding()]
     param(
@@ -112,12 +113,18 @@ function Test-TPAsrRuleSet {
                 }
             }
         }
-        [ordered]@{ Id = $id; Name = [string](Get-TPObjectField -Item $req -Key 'Name' -Default $id); Mode = $best }
+        # The modes that meet this rule's requirement. An entry without Accept requires Block,
+        # the rule every approved list followed before per-rule modes existed.
+        $accept = @(@(Get-TPObjectField -Item $req -Key 'Accept' -Default @()) | ForEach-Object { [string]$_ } | Where-Object { $_ -in @('Block', 'Audit', 'Warn') })
+        if ($accept.Count -eq 0) { $accept = @('Block') }
+        [ordered]@{ Id = $id; Name = [string](Get-TPObjectField -Item $req -Key 'Name' -Default $id); Mode = $best; Accept = $accept; Met = ($best -in $accept) }
     }
     $rows = @($rows)
     return [ordered]@{
         Rows     = $rows
         Required = $rows.Count
+        Met      = @($rows | Where-Object { $_.Met }).Count
+        NotMet   = @($rows | Where-Object { -not $_.Met })
         Blocking = @($rows | Where-Object { $_.Mode -eq 'Block' }).Count
         NotBlock = @($rows | Where-Object { $_.Mode -ne 'Block' })
     }

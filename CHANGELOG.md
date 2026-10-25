@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **[Accuracy] INT-2.2 judges the 17 ASR rules of the CIS Intune for Defender Antivirus benchmark, each in its
+  required mode.** The approved rule list held Microsoft's three standard protection rules and required Block for
+  every listed rule. With the owner's approval (2026-10-25) `Config/asr-required-rules.json` now holds the 17
+  attack surface reduction rules of the CIS Microsoft Intune for Microsoft Defender Antivirus Benchmark v1.0.0,
+  Level 1 (2.10 to 2.26), and each entry carries the modes that meet it: 11 rules require Block, and the 6 the
+  benchmark accepts at "Audit or higher" (all Office applications creating child processes, the prevalence, age or
+  trusted-list rule, obfuscated scripts, Office communication applications creating child processes, PSExec and WMI
+  process creation, advanced ransomware protection) accept Audit, Warn or Block. `Test-TPAsrRuleSet` honors each
+  entry's `Accept` list (an entry without one still requires Block); a shortfall names the rule, its mode and what it
+  requires; a pass names the rules running in Audit. Expect INT-2.2 to fall on tenants that enabled only the three
+  standard rules. Fourteen of the rule ids are name fragments, because Microsoft publishes no Graph sample of the ASR
+  keys; a fragment that matches nothing is a false NotConfigured, never a pass, and `docs/TP-LIVE-VALIDATION.md` asks
+  the first live run to confirm them. `TP.ExpectedStateEvidence.Tests.ps1` pins the list, the modes and the judgment.
+
 - **[Supply chain] The runtime dependencies are pinned, and Dependabot or the weekly check keeps them current.**
   The Microsoft modules the tool signs in with, ExchangeOnlineManagement 3.10.1, Microsoft.Graph.Authentication
   2.41.2 and MicrosoftTeams 8.0.0, are now pinned in `tools/pinned-modules.psd1` by exact version and gallery

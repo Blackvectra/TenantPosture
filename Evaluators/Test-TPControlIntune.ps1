@@ -391,8 +391,8 @@ function Test-TPControlIntuneASR {
     }
     $st = Get-TPIntuneBucketState -Raw $int -Section 'ASRPolicies'
     if ($st.Assigned.Count -gt 0) {
-        # The expected state is the approved NRG ASR rule set, every rule in Block
-        # mode. The policy existing is verified; the rule modes come from the settings
+        # The expected state is the approved NRG ASR rule set, every rule in the mode
+        # its entry requires (Block, or Audit where the approved benchmark accepts it). The policy existing is verified; the rule modes come from the settings
         # read (collector), and the REQUIRED list is an operator-approved file (an empty
         # list means no standard is approved). Nothing is inferred: an unread mode is unknown, never Block.
         $asrPolicies = @($st.Assigned)
@@ -406,25 +406,27 @@ function Test-TPControlIntuneASR {
             Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
                 -Detail "$verified Not assessed: the rule settings of $($asrPolicies.Count - $read.Count) of $($asrPolicies.Count) assigned policy(ies) could not be read, so which rules are configured and in what mode is not established.$(if ($modeSummary) { " Read so far: $modeSummary." })" `
                 -CurrentValue "$($st.Assigned.Count) assigned ASR policy(ies); rule settings not fully read" `
-                -RequiredValue 'The approved NRG ASR rule set with every rule in Block mode'
+                -RequiredValue 'The approved NRG ASR rule set with every rule in its required mode'
         } elseif ($required.Count -eq 0) {
             Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
-                -Detail "$verified Rule modes read: $(if ($modeSummary) { $modeSummary } else { 'no ASR rule settings found in the assigned policies' }). Not assessed: whether the approved NRG rule set is in Block mode, because no required rule list is approved (Config/asr-required-rules.json is empty)." `
+                -Detail "$verified Rule modes read: $(if ($modeSummary) { $modeSummary } else { 'no ASR rule settings found in the assigned policies' }). Not assessed: whether the approved NRG rule set is in its required modes, because no required rule list is approved (Config/asr-required-rules.json is empty)." `
                 -CurrentValue "$($st.Assigned.Count) assigned ASR policy(ies); $(if ($modeSummary) { $modeSummary } else { 'no rule settings found' })" `
-                -RequiredValue 'The approved NRG ASR rule set with every rule in Block mode'
+                -RequiredValue 'The approved NRG ASR rule set with every rule in its required mode'
         } else {
             $judge = Test-TPAsrRuleSet -RuleModeMaps $modeMaps -Required $required
-            if ($judge.NotBlock.Count -eq 0) {
+            if ($judge.NotMet.Count -eq 0) {
+                $audit = @($judge.Rows | Where-Object { $_.Mode -ne 'Block' })
+                $auditNote = if ($audit.Count) { " $($audit.Count) of them in $(@($audit | ForEach-Object { $_.Mode } | Select-Object -Unique) -join '/') mode, which their approved entry accepts: $(($audit | ForEach-Object { $_.Name }) -join '; ')." } else { '' }
                 Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-                    -Detail "All $($judge.Required) required ASR rule(s) are in Block mode in the assigned policy(ies).$($st.Note)"
+                    -Detail "All $($judge.Required) required ASR rule(s) are in their required mode in the assigned policy(ies).$auditNote$($st.Note)"
             } else {
-                $list = ($judge.NotBlock | ForEach-Object { "$($_.Name) ($($_.Mode))" }) -join '; '
-                $state = if ($judge.Blocking -gt 0) { 'Partial' } else { 'Gap' }
+                $list = ($judge.NotMet | ForEach-Object { "$($_.Name) ($($_.Mode); requires $(@($_.Accept) -join ' or '))" }) -join '; '
+                $state = if ($judge.Met -gt 0) { 'Partial' } else { 'Gap' }
                 Add-TPFinding -ControlId $cid -State $state -Category $ctrl.Category -Title $ctrl.Title -Severity $(if ($state -eq 'Gap') { $ctrl.Severity } else { 'Medium' }) -FrameworkIds $cit `
-                    -Detail "$verified Shortfall: $($judge.Required - $judge.Blocking) of $($judge.Required) required ASR rule(s) are not in Block mode: $list." `
-                    -CurrentValue "$($judge.Blocking) of $($judge.Required) required rules in Block mode" `
-                    -RequiredValue 'Every approved NRG ASR rule in Block mode' -Remediation $ctrl.Remediation `
-                    -AffectedObjects @($judge.NotBlock | ForEach-Object { [ordered]@{ Rule = $_.Name; Mode = $_.Mode } })
+                    -Detail "$verified Shortfall: $($judge.NotMet.Count) of $($judge.Required) required ASR rule(s) are not in their required mode: $list." `
+                    -CurrentValue "$($judge.Met) of $($judge.Required) required rules in their required mode" `
+                    -RequiredValue 'Every approved NRG ASR rule in its required mode' -Remediation $ctrl.Remediation `
+                    -AffectedObjects @($judge.NotMet | ForEach-Object { [ordered]@{ Rule = $_.Name; Mode = $_.Mode; Requires = (@($_.Accept) -join ' or ') } })
             }
         }
     } else {

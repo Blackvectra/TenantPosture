@@ -1,17 +1,153 @@
 {
-  "_comment": "The Attack Surface Reduction rules NRG requires, every one in Block mode. Approved 2026-10-02: Microsoft's three standard protection rules, which Microsoft says can be enabled in Block mode without Audit-mode testing. Each Id is the rule key read from the Settings Catalog policy (the setting definition id after 'attacksurfacereductionrules_'), as seen in a real tenant read. An EMPTY list means no standard is approved and INT-2.2 leaves the rule-set half not assessed.",
+  "_comment": "The Attack Surface Reduction rules NRG requires and the mode each must be in. Approved 2026-10-02 (Microsoft's three standard protection rules, Block) and widened by the owner 2026-10-25 to the 17 rules of the CIS Microsoft Intune for Microsoft Defender Antivirus Benchmark v1.0.0, Level 1 - Workstation (recommendations 2.10 to 2.26), each with the mode the benchmark requires: Block, or 'Audit or higher' (Audit, Warn or Block) where the benchmark accepts audit (rules that can break legitimate software, such as PSExec and WMI process creation beside Configuration Manager). Id is matched as a substring of the rule key the Settings Catalog reports (the setting definition id after 'attacksurfacereductionrules_'): the three original ids were seen in a real tenant read; the fourteen added are distinctive fragments of the rule name, because Microsoft publishes no Graph sample of the ASR keys, and docs/TP-LIVE-VALIDATION.md asks the first live run to confirm each one matches. A fragment that matches nothing reports the rule as NotConfigured, a false shortfall, never a false pass. Accept lists the modes that meet the requirement; an entry without Accept requires Block. An EMPTY list means no standard is approved and INT-2.2 leaves the rule-set half not assessed.",
   "Rules": [
     {
+      "Cis": "2.10",
       "Id": "blockabuseofexploitedvulnerablesigneddrivers",
-      "Name": "Block abuse of exploited vulnerable signed drivers (Device)"
+      "Name": "Block abuse of exploited vulnerable signed drivers (Device)",
+      "Accept": [
+        "Block"
+      ]
     },
     {
+      "Cis": "2.11",
+      "Id": "adobereader",
+      "Name": "Block Adobe Reader from creating child processes",
+      "Accept": [
+        "Block"
+      ]
+    },
+    {
+      "Cis": "2.12",
+      "Id": "allofficeapplications",
+      "Name": "Block all Office applications from creating child processes",
+      "Accept": [
+        "Block",
+        "Warn",
+        "Audit"
+      ]
+    },
+    {
+      "Cis": "2.13",
       "Id": "blockcredentialstealingfromwindowslocalsecurityauthoritysubsystem",
-      "Name": "Block credential stealing from the Windows local security authority subsystem"
+      "Name": "Block credential stealing from the Windows local security authority subsystem",
+      "Accept": [
+        "Block"
+      ]
     },
     {
+      "Cis": "2.14",
+      "Id": "executablecontentfromemail",
+      "Name": "Block executable content from email client and webmail",
+      "Accept": [
+        "Block"
+      ]
+    },
+    {
+      "Cis": "2.15",
+      "Id": "prevalence",
+      "Name": "Block executable files from running unless they meet a prevalence, age, or trusted list criterion",
+      "Accept": [
+        "Block",
+        "Warn",
+        "Audit"
+      ]
+    },
+    {
+      "Cis": "2.16",
+      "Id": "obfuscated",
+      "Name": "Block execution of potentially obfuscated scripts",
+      "Accept": [
+        "Block",
+        "Warn",
+        "Audit"
+      ]
+    },
+    {
+      "Cis": "2.17",
+      "Id": "javascriptorvbscript",
+      "Name": "Block JavaScript or VBScript from launching downloaded executable content",
+      "Accept": [
+        "Block"
+      ]
+    },
+    {
+      "Cis": "2.18",
+      "Id": "creatingexecutablecontent",
+      "Name": "Block Office applications from creating executable content",
+      "Accept": [
+        "Block"
+      ]
+    },
+    {
+      "Cis": "2.19",
+      "Id": "injectingcode",
+      "Name": "Block Office applications from injecting code into other processes",
+      "Accept": [
+        "Block"
+      ]
+    },
+    {
+      "Cis": "2.20",
+      "Id": "officecommunication",
+      "Name": "Block Office communication application from creating child processes",
+      "Accept": [
+        "Block",
+        "Warn",
+        "Audit"
+      ]
+    },
+    {
+      "Cis": "2.21",
       "Id": "blockpersistencethroughwmieventsubscription",
-      "Name": "Block persistence through WMI event subscription"
+      "Name": "Block persistence through WMI event subscription",
+      "Accept": [
+        "Block"
+      ]
+    },
+    {
+      "Cis": "2.22",
+      "Id": "psexec",
+      "Name": "Block process creations originating from PSExec and WMI commands",
+      "Accept": [
+        "Block",
+        "Warn",
+        "Audit"
+      ]
+    },
+    {
+      "Cis": "2.23",
+      "Id": "safemode",
+      "Name": "Block rebooting machine in Safe Mode",
+      "Accept": [
+        "Block"
+      ]
+    },
+    {
+      "Cis": "2.24",
+      "Id": "usb",
+      "Name": "Block untrusted and unsigned processes that run from USB",
+      "Accept": [
+        "Block"
+      ]
+    },
+    {
+      "Cis": "2.25",
+      "Id": "win32api",
+      "Name": "Block Win32 API calls from Office macros",
+      "Accept": [
+        "Block"
+      ]
+    },
+    {
+      "Cis": "2.26",
+      "Id": "ransomware",
+      "Name": "Use advanced protection against ransomware",
+      "Accept": [
+        "Block",
+        "Warn",
+        "Audit"
+      ]
     }
   ]
 }
