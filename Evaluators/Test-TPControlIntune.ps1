@@ -220,11 +220,49 @@ function Test-TPControlIntune {
         Add-TPFinding -ControlId 'INT-1.5' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.5') -Detail 'EndpointSecurityPolicies was not collected; not assessed.'
     } elseif ($c) {
         $av = @(Select-TPAssignedPolicies @($d.EndpointSecurityPolicies | Where-Object { (Get-TPObjectField -Item $_ -Key 'TemplateType') -eq 'Antivirus' }))
-        if ($av.Count -gt 0) {
+        $baseline = Get-TPIntuneAvBaseline
+        $avRead = @($av | Where-Object { (Get-TPObjectField -Item $_ -Key 'AvSettingsStatus' -Default '') -eq 'Read' })
+        # The approved standard is judged only from policies the collector stored every
+        # value of; a results file from before that read keeps the three-setting judgment.
+        $valueMaps = @($avRead | ForEach-Object { Get-TPObjectField -Item $_ -Key 'AvSettingValues' -Default $null } | Where-Object { $null -ne $_ })
+        if ($av.Count -gt 0 -and $null -ne $baseline -and $avRead.Count -gt 0 -and $valueMaps.Count -eq $avRead.Count) {
+            # The expected state is the approved configuration standard: every setting of
+            # the CIS Intune for Defender Antivirus benchmark (Level 1 - Workstation) in the
+            # Antivirus profile set by policy to a value the benchmark accepts. Not set is a
+            # shortfall (the not-configured rule): the benchmark requires the setting managed,
+            # and the Windows default is named in the finding, never credited.
+            $rows = @(Get-TPAvBaselineRows -SettingMaps $valueMaps -Catalog $baseline)
+            $met = @($rows | Where-Object Status -eq 'Met')
+            $below = @($rows | Where-Object Status -eq 'Below')
+            $unset = @($rows | Where-Object Status -eq 'NotSet')
+            $odd = @($rows | Where-Object Status -eq 'Unrecognized')
+            $verified = @("$($av.Count) assigned Microsoft Defender Antivirus policy(ies).")
+            if ($met.Count) { $verified += "$($met.Count) of $($rows.Count) settings of the $($baseline.Name) ($($baseline.Profile)) meet it: $(($met.Cis) -join ', ')." }
+            $short = @(); $unknown = @()
+            if ($below.Count) {
+                $short += 'Set to a value the benchmark does not accept: ' + (($below | ForEach-Object { "$($_.Cis) $($_.Title) ($(@($_.Observed) -join ' / '); requires $($_.Required))" }) -join '; ') + '.'
+            }
+            if ($unset.Count) {
+                $short += 'Not set by any assigned policy, which the benchmark requires: ' + (($unset | ForEach-Object {
+                    if ($null -ne $_.WindowsDefault) { "$($_.Cis) $($_.Title) (Windows default $($_.WindowsDefault))" } else { "$($_.Cis) $($_.Title)" } }) -join '; ') + '.'
+            }
+            if ($odd.Count) {
+                $unknown += 'a value Microsoft does not document for ' + (($odd | ForEach-Object { "$($_.Cis) $($_.Title) ($(@($_.Observed) -join ' / '))" }) -join '; ') + '.'
+            }
+            if ($avRead.Count -lt $av.Count) {
+                $unknown += "the settings of $($av.Count - $avRead.Count) of $($av.Count) assigned policy(ies) could not be read, so no setting is established for the devices they target."
+            }
+            $affected = @($rows | Where-Object Status -ne 'Met' | ForEach-Object {
+                [ordered]@{ Cis = $_.Cis; Setting = $_.Title; Status = $_.Status; Observed = (@($_.Observed) -join ' / '); Required = $_.Required; WindowsDefault = $_.WindowsDefault } })
+            Add-TPExpectedStateFinding -ControlId 'INT-1.5' -Control $c -FrameworkIds (& $cit 'INT-1.5') -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+                -AffectedObjects $affected `
+                -CurrentValue "$($met.Count) of $($rows.Count) benchmark settings met across $($av.Count) assigned AV policy(ies)" `
+                -RequiredValue "$($baseline.Name), $($baseline.Profile): all $($rows.Count) Antivirus-profile settings set by policy to an accepted value"
+        } elseif ($av.Count -gt 0) {
             # The expected state is that an assigned policy CONFIGURES Defender Antivirus:
             # real-time protection, cloud-delivered protection and PUA protection. The
             # policy existing is verified; the settings come from the collector's read.
-            $read = @($av | Where-Object { (Get-TPObjectField -Item $_ -Key 'AvSettingsStatus' -Default '') -eq 'Read' })
+            $read = $avRead
             $maps = @($read | ForEach-Object { Get-TPObjectField -Item $_ -Key 'AvSettings' -Default $null } | Where-Object { $null -ne $_ })
             $verified = @("$($av.Count) assigned Microsoft Defender Antivirus policy(ies).")
             $short = @(); $unknown = @()

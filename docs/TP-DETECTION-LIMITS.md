@@ -45,7 +45,7 @@ components kept in the Detail. Nothing narrows the baseline requirement.
 | DEF-2.3 Common attachments | Filter on in every malware policy in force **and** every approved file type blocked | `CommonAttachmentFileTypes` empty: filter verified, list **not assessed** |
 | DNS-1.3 DMARC | p=quarantine/reject, pct, sp **and** the approved reporting address in `rua` | `DmarcReportingAddresses` empty (not the case since 2026-10-02): enforcement verified, reporting address **not assessed** |
 | EXO-1.5 Impersonation | Organization-domain and mailbox-intelligence protection acting **and** the approved priority users listed with user protection on and an action | `PriorityUsers` empty: priority users **not assessed** |
-| INT-1.5 Antivirus | An assigned Defender Antivirus policy **and** real-time, cloud-delivered and PUA protection read as on | A setting off or audit-only is a shortfall; settings not read, not set by any policy, or an unrecognized value is not assessed |
+| INT-1.5 Antivirus | An assigned Defender Antivirus policy **and**, while `IntuneAntivirusBaseline` is approved, every one of the 30 Antivirus-profile settings of the CIS Intune for Defender Antivirus Benchmark v1.0.0 (Level 1 - Workstation) set by policy to an accepted value | A setting set below the benchmark, or set by no assigned policy, is a shortfall; settings not read or a value Microsoft does not document is not assessed. Without the approval, or from a results file older than the value read, only real-time, cloud-delivered and PUA protection are judged, as before |
 
 The approved lists live in `Config/tp-standards.json` and `Config/asr-required-rules.json`.
 The tool does not invent NRG's standard: a list holds only values the owner approved (on
@@ -60,9 +60,16 @@ collect". A collector that failed is still named as the cause first.
 
 Remaining limits inside these checks:
 
-- **INT-1.5** parses Settings Catalog definition ids by suffix (`defender_allowrealtimemonitoring`,
-  `defender_allowcloudprotection`, `defender_puaprotection`). Unverified against a live tenant.
-  Legacy (intent-based) antivirus policies have no settings read, so they stay not assessed.
+- **INT-1.5** stores every setting value of an assigned Antivirus policy and matches the benchmark's
+  30 settings by the CSP node at the end of the setting definition id. Microsoft's own Graph sample
+  of an Antivirus policy shows the Policy CSP form (`device_vendor_msft_policy_config_defender_<node>`,
+  choice value `<id>_<n>`, integers as `simpleSettingValue`, threat actions as children of
+  `..._threatseveritydefaultaction`); the seven Defender CSP settings (Hide Exclusions From Local
+  Users and others) have no published sample, which is why the node, not a full prefix, is matched.
+  Unverified against a live tenant. Legacy (intent-based) antivirus policies have no settings read,
+  so they stay not assessed. The values come from Microsoft's Policy CSP and Defender CSP references,
+  never from the benchmark's audit registry values, which are the on-device form and several of which
+  are inverted relative to the CSP (Allow Archive Scanning is audited as `DisableArchiveScanning = 0`).
 - **EXO-1.5** matches priority users to `TargetedUsersToProtect` entries of the form
   `Display Name;address`; other shapes do not match and show as a shortfall.
 - **AAD-2.1** judges the approved templates with the Conditional Access view's own matching
@@ -166,6 +173,16 @@ Intune applied them to a given device is not, and Conditional Access (AAD-2.3 / 
 turns device state into restricted access. `Config/evidence-limits.json` is empty today; the
 mechanism stays for the next component the tool cannot read.
 
+**INT-1.5 — Antivirus Policy Deployed via Intune.** INT-1.5 judges an assigned Intune Defender
+Antivirus policy against the approved CIS Microsoft Intune for Microsoft Defender Antivirus Benchmark
+v1.0.0, Level 1 - Workstation (`Config/cis-intune-defender-av.json`): the 30 settings that live in the
+Endpoint security Antivirus profile. Five Level 1 recommendations are not established and the reports
+say so: four are Administrative Templates settings (CIS 1.3.1, 1.3.2, 1.8.1, 1.14) configured in a
+general Settings Catalog profile, which the collector does not read, and Remote Encryption Protection
+(CIS 2.41) has no node in Microsoft's Policy CSP or Defender CSP reference, so its stored value cannot
+be read with confidence. The benchmark's attack surface reduction rules (2.10 to 2.26) are INT-2.2's,
+judged against the owner-approved rule set, and its Level 2 items are outside the approved profile.
+
 **INT-4.2 — Windows Hello for Business Enabled.** The assessment reads the tenant-wide Intune
 enrollment configuration for Windows Hello for Business and nothing else. Microsoft's own guidance
 says that policy applies only at enrollment time, to every device, and "is usually disabled", with
@@ -178,8 +195,10 @@ tenant following Microsoft's pattern.
 
 ## Open verification
 
-- INT-2.2's ASR settings parser and INT-1.5's antivirus settings parser follow the documented
-  Settings Catalog structure and are unverified against a live tenant.
+- INT-2.2's ASR settings parser and INT-1.5's antivirus settings readers (`Get-TPAvSettings`,
+  `Get-TPAvSettingValues`) follow the documented Settings Catalog structure and are unverified
+  against a live tenant. The first live run should confirm `AvSettingValues` in the results file
+  holds the definition ids of the Defender CSP settings (Configuration nodes).
 - The approved NRG lists in `Config/tp-standards.json` and `Config/asr-required-rules.json`
   are empty; each affected control reports that component not assessed until NRG approves it.
 - The 2026-09-30 baseline reference predates the changes above; regenerate it from a fresh

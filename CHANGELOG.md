@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **[Accuracy] INT-1.5 judges the antivirus policy against the CIS Intune for Defender Antivirus benchmark,
+  not three settings.** INT-1.5 passed any assigned Intune Defender Antivirus policy that turned on real-time,
+  cloud-delivered and PUA protection, whatever else it left unset. With the owner's approval (2026-10-25,
+  `Config/tp-standards.json` `IntuneAntivirusBaseline`) it now judges the 30 settings of the CIS Microsoft Intune
+  for Microsoft Defender Antivirus Benchmark v1.0.0, Level 1 - Workstation, that live in the Endpoint security
+  Antivirus profile (`Config/cis-intune-defender-av.json`): every one must be set by policy to a value the
+  benchmark accepts, across every assigned policy. A setting set below the benchmark, or set by no policy, is a
+  shortfall named with its value, the requirement and the Windows default; a value Microsoft does not document is
+  not assessed, never compliant. The accepted values are Microsoft's (Policy CSP and Defender CSP references), not
+  the benchmark's audit registry values, several of which are inverted relative to what Intune stores. The catalog
+  accounts for all 55 recommendations: the 17 attack surface reduction rules stay with INT-2.2 and its approved
+  rule set, Level 2 items are outside the approved profile, and four Administrative Templates settings plus
+  Remote Encryption Protection, which the collector cannot read, are recorded as an evidence limit every report
+  shows. The collector stores each policy's setting values (`AvSettingValues`); a results file from before that,
+  or a withdrawn approval, keeps the three-setting judgment. Expect more INT-1.5 Partials: most tenants configure
+  part of the benchmark. Not yet verified against a live tenant; `docs/TP-LIVE-VALIDATION.md` says what to check.
+  `TP.IntuneAvBaseline.Tests.ps1` pins the catalog, the approval, the readers, the judgment and the real collector.
+
 - **[Supply chain] The runtime dependencies are pinned, and Dependabot or the weekly check keeps them current.**
   The Microsoft modules the tool signs in with, ExchangeOnlineManagement 3.10.1, Microsoft.Graph.Authentication
   2.41.2 and MicrosoftTeams 8.0.0, are now pinned in `tools/pinned-modules.psd1` by exact version and gallery
