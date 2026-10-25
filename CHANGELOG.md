@@ -15,7 +15,9 @@
   exception files. `docs/TP-SECURITY-BASELINE-CANDIDATES.md` is now generated from the CIS mapping. Also fixed: the
   scope classifier filed SPO-1.4, SPO-2.6, SPO-2.7 and SPO-3.4 as not applicable to the tenant when the SharePoint
   shell was not connected (their "Re-run with -IncludeSharePointShell" sentence matched no collection pattern); they
-  are a collection gap now, which the baseline reports as OptionalCollectorRequired.
+  are a collection gap now, which the baseline reports as OptionalCollectorRequired. And the Markdown summary's All
+  Findings table now carries each finding's Detail (and the Not Applicable list says why each was not scored): a
+  Partial or not-assessed finding's reason reached the Markdown only when its control was a baseline row.
 
 - **[Baseline v1.1] AAD-3.1 allows two to four Global Administrators, not eight (owner's decision, 2026-10-25).**
   CIS Microsoft 365 Foundations v7.0.0 1.1.3 sets two to four; the tool and the NRG baseline v1.0 allowed eight, as

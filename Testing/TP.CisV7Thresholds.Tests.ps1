@@ -47,10 +47,10 @@ Describe 'Evaluators tightened to CIS Microsoft 365 Foundations v7.0.0' {
         It 'four passes'      { (Ga 4).State | Should -Be 'Satisfied' }
         It 'five is a Gap'    { (Ga 5).State | Should -Be 'Gap' }
         It 'eight is a Gap, though CISA SCuBA allows it' { (Ga 8).State | Should -Be 'Gap' }
-        It 'the baseline expected state says four' {
+        It 'the baseline row says two to four' {
             $b = Get-Content (Join-Path $script:RepoRoot 'Config/tp-baseline.json') -Raw | ConvertFrom-Json
-            $b.version | Should -Be '1.1'
-            ($b | ConvertTo-Json -Depth 20) | Should -Match 'Two to four Global Administrators'
+            $row = @($b.controls | Where-Object ControlId -eq 'AAD-3.1')[0]
+            $row.ExpectedState | Should -Match 'between two and four global admins'
         }
     }
 

@@ -346,15 +346,15 @@ Describe 'Approved emergency-access exclusions' {
         It 'editing a baseline exception keeps the emergency-access block (New, Set and Remove write it back as read; review finding)' {
             $rec = Record @((Entry -Id $script:U1 -Upn 'bg1@contoso.example'), (Entry -Id $script:U2 -Review $script:Past))
             $future = (Get-Date).AddMonths(3)
-            $null = New-TPBaselineException -TenantDomain contoso.example -ControlId 'AAD-2.3' -Reason 'r' -CompensatingControl 'c' -Approver 'a@nrg.example' -ReviewDate $future -Path $rec -Confirm:$false
+            $null = New-TPBaselineException -TenantDomain contoso.example -ControlId 'AAD-1.2' -Reason 'r' -CompensatingControl 'c' -Approver 'a@nrg.example' -ReviewDate $future -Path $rec -Confirm:$false
             $e = Get-TPBaselineExceptions -Path $rec
-            $e.Approved.ContainsKey('AAD-2.3') | Should -BeTrue
+            $e.Approved.ContainsKey('AAD-1.2') | Should -BeTrue
             @($e.EmergencyAccessEntries).Count | Should -Be 2 -Because 'both entries, the lapsed one included, are written back as read'
             $e.EmergencyAccess.ContainsKey("user:$($script:U1)") | Should -BeTrue
             $e.EmergencyAccess["user:$($script:U1)"].UserPrincipalName | Should -Be 'bg1@contoso.example'
-            $null = Set-TPBaselineException -TenantDomain contoso.example -ControlId 'AAD-2.3' -Reason 'changed' -Path $rec -Confirm:$false
+            $null = Set-TPBaselineException -TenantDomain contoso.example -ControlId 'AAD-1.2' -Reason 'changed' -Path $rec -Confirm:$false
             @((Get-TPBaselineExceptions -Path $rec).EmergencyAccessEntries).Count | Should -Be 2
-            $null = Remove-TPBaselineException -TenantDomain contoso.example -ControlId 'AAD-2.3' -Path $rec -Confirm:$false
+            $null = Remove-TPBaselineException -TenantDomain contoso.example -ControlId 'AAD-1.2' -Path $rec -Confirm:$false
             $e = Get-TPBaselineExceptions -Path $rec
             @($e.Entries).Count | Should -Be 0
             @($e.EmergencyAccessEntries).Count | Should -Be 2
