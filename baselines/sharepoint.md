@@ -37,7 +37,7 @@ Set-SPOTenant -SharingCapability ExistingExternalUserSharingOnly
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3, AC-17 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.2.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.3 |
 | CIS Controls v8.1 | 3.3, 6.8 |
 | CISA SCuBA | MS.SHAREPOINT.1.1v1 |
 | CMMC 2.0 | AC.L2-3.1.3 |
@@ -69,7 +69,6 @@ Set-SPOTenant -DefaultSharingLinkType Internal
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.2.2 |
 | CIS Controls v8.1 | 3.3 |
 | CISA SCuBA | MS.SHAREPOINT.2.1v1 |
 | CMMC 2.0 | AC.L2-3.1.3 |
@@ -101,7 +100,7 @@ Set-SPOTenant -LegacyAuthProtocolsEnabled $false
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2, SC-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.3.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
 | ISO/IEC 27001:2022 | A.5.17, A.8.5 |
 | SOC 2 | CC6.1 |
@@ -131,7 +130,6 @@ Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-2(3) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.2.6 |
 | CIS Controls v8.1 | 6.2, 3.4 |
 | CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.18 |
@@ -162,7 +160,6 @@ Set-SPOTenant -ConditionalAccessPolicy AllowLimitedAccess
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3, AC-17 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.3.2 |
 | CIS Controls v8.1 | 3.3, 13.5 |
 | CMMC 2.0 | AC.L1-3.1.2 |
 | ISO/IEC 27001:2022 | A.8.1 |
@@ -193,7 +190,6 @@ Set-SPOTenant -AllowedDomainGuidsForSyncApp @('your-tenant-guid')
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-28, AC-19 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.2.7 |
 | CIS Controls v8.1 | 3.3, 13.5 |
 | CMMC 2.0 | MP.L2-3.8.1 |
 | ISO/IEC 27001:2022 | A.8.1 |
@@ -224,7 +220,6 @@ Set-SPOTenant -RequireAnonymousLinksExpireInDays 30
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.2.3 |
 | CIS Controls v8.1 | 3.4 |
 | CISA SCuBA | MS.SHAREPOINT.3.1v1 |
 | CMMC 2.0 | AC.L2-3.1.3 |
@@ -256,7 +251,6 @@ SharePoint Admin Center > Settings > Apps > disable apps from the SharePoint sto
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CM-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.3.3 |
 | CIS Controls v8.1 | 2.5 |
 | CMMC 2.0 | CM.L2-3.4.6 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.19 |
@@ -287,7 +281,6 @@ Set-SPOSite -DenyAddAndCustomizePages 1 (applies to all sites)
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-18, SI-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.3.4 |
 | CIS Controls v8.1 | 2.7 |
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.28 |
@@ -318,7 +311,7 @@ Disable the connectors: Set-CsTeamsClientConfiguration -Identity Global -AllowDr
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.3.5 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.1.1 |
 | CIS Controls v8.1 | 3.3 |
 | CMMC 2.0 | MP.L2-3.8.1 |
 | ISO/IEC 27001:2022 | A.5.23 |
@@ -349,7 +342,6 @@ Set-SPOTenant -EmailAttestationRequired $true -EmailAttestationReAuthDays 30
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-3, AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.2.4 |
 | CIS Controls v8.1 | 3.3 |
 | CMMC 2.0 | IA.L1-3.5.2 |
 | ISO/IEC 27001:2022 | A.5.17, A.5.18 |
@@ -380,7 +372,6 @@ Set-SPOTenant -EmailAttestationReAuthDays 30
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.2.5 |
 | CIS Controls v8.1 | 6.2 |
 | CISA SCuBA | MS.SHAREPOINT.3.3v1 |
 | CMMC 2.0 | AC.L2-3.1.11 |
@@ -412,7 +403,6 @@ Set-SPOTenant -AllowedDomainGuidsForSyncApp (Get-SPOTenant).TenantId
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-4, SC-28 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.2.8 |
 | CIS Controls v8.1 | 3.3, 13.5 |
 | CMMC 2.0 | MP.L2-3.8.1 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.1 |
@@ -443,7 +433,6 @@ Review site admins: Get-SPOSite -Limit ALL | ForEach-Object { Get-SPOUser -Site 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6(7) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.1.1 |
 | CIS Controls v8.1 | 5.4, 6.8 |
 | CMMC 2.0 | AC.L2-3.1.5 |
 | ISO/IEC 27001:2022 | A.5.18, A.8.2 |
@@ -474,7 +463,6 @@ Set-SPOTenant -NotifyOwnersWhenItemsReshared $true
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3, AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.2.9 |
 | CIS Controls v8.1 | 3.14 |
 | CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.8.16 |
@@ -505,7 +493,6 @@ Verify via SharePoint Admin Center > Settings that versioning is enabled and ver
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CP-9, CP-10 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.3.6 |
 | CIS Controls v8.1 | 11.1, 11.2 |
 | CMMC 2.0 | CM.L2-3.4.2 |
 | ISO/IEC 27001:2022 | A.8.13 |
@@ -536,7 +523,6 @@ Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-2(3) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.2.6 |
 | CIS Controls v8.1 | 6.2, 3.4 |
 | CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.18 |
@@ -565,7 +551,6 @@ Set-SPOTenant -DeletedUserPersonalSiteRetentionPeriodInDays 365 (maximum 3650). 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CP-9, CP-10, SI-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 7.2.10 |
 | CIS Controls v8.1 | 11.1, 3.4 |
 | CMMC 2.0 | MP.L2-3.8.9 |
 | MITRE ATT&CK | T1485, T1531 |

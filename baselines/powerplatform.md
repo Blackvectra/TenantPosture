@@ -37,7 +37,6 @@ Power Platform Admin Center > Policies > Tenant Isolation: enable and configure 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-4, SC-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 9.1.1 |
 | CIS Controls v8.1 | 4.1 |
 | CISA SCuBA | MS.POWERPLATFORM.3.1v1 |
 | CMMC 2.0 | SC.L1-3.13.1 |
@@ -69,7 +68,6 @@ Power Platform Admin Center > Policies > Data policies: create environment polic
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-4, SC-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 9.2.1 |
 | CIS Controls v8.1 | 3.13 |
 | CISA SCuBA | MS.POWERPLATFORM.2.1v1 |
 | CMMC 2.0 | MP.L2-3.8.1 |
@@ -101,7 +99,6 @@ Power Platform Admin Center > Settings: restrict environment creation to admins 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CM-5, AC-6 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 9.3.1 |
 | CIS Controls v8.1 | 6.8 |
 | CISA SCuBA | MS.POWERPLATFORM.1.1v1 |
 | CMMC 2.0 | CM.L2-3.4.5 |
@@ -133,7 +130,6 @@ Power Platform Admin Center > Data policies > Edit existing policy > Review all 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 9.2.2 |
 | CIS Controls v8.1 | 3.13 |
 | CISA SCuBA | MS.POWERPLATFORM.2.1v1 |
 | CMMC 2.0 | MP.L2-3.8.1 |
@@ -165,7 +161,6 @@ Power Platform Admin Center > Tenant settings > Power Automate > Disable for gue
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CM-5, AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 9.3.2 |
 | CIS Controls v8.1 | 6.8 |
 | CISA SCuBA | MS.POWERPLATFORM.1.1v1 |
 | CMMC 2.0 | AC.L1-3.1.2 |
@@ -197,7 +192,6 @@ Power Platform Admin Center > Settings > Power Apps > Disable portal creation by
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CM-5, AC-6 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 9.3.3 |
 | CIS Controls v8.1 | 6.8 |
 | CISA SCuBA | MS.POWERPLATFORM.5.1v1 |
 | CMMC 2.0 | CM.L2-3.4.5 |
@@ -229,7 +223,6 @@ Purview > Information protection > Labels > Create/verify labels with Files & em
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-16, SC-28 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.4.1 |
 | CIS Controls v8.1 | 3.7 |
 | CMMC 2.0 | MP.L2-3.8.4 |
 | ISO/IEC 27001:2022 | A.8.11, A.8.12 |
@@ -260,7 +253,6 @@ Purview > DLP > Create policy > Locations: Include Microsoft 365 Copilot. Add se
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-28, AC-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.3.4 |
 | CIS Controls v8.1 | 3.13 |
 | CMMC 2.0 | SC.L2-3.13.16 |
 | ISO/IEC 27001:2022 | A.8.12 |
@@ -291,7 +283,6 @@ M365 Admin Center > Settings > Microsoft 365 Copilot > Control access. Assign li
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.5.1 |
 | CIS Controls v8.1 | 6.8 |
 | CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.18, A.8.3 |
@@ -322,7 +313,6 @@ Power Platform Admin Center > Copilot Studio > Policies > Require admin approval
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CM-7, AC-6 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 9.3.4 |
 | CIS Controls v8.1 | 6.8 |
 | CMMC 2.0 | CM.L2-3.4.6 |
 | ISO/IEC 27001:2022 | A.8.32 |
@@ -353,7 +343,7 @@ Ensure Unified Audit Log is enabled (Set-AdminAuditLogConfig -UnifiedAuditLogIng
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-2, AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.1.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 3.1.1 |
 | CIS Controls v8.1 | 8.2, 8.10 |
 | CMMC 2.0 | AU.L2-3.3.1 |
 | ISO/IEC 27001:2022 | A.8.15 |

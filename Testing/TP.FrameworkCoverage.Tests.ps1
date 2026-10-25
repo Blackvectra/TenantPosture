@@ -33,6 +33,14 @@ Describe 'controls.json — framework citation coverage' {
         $script:HipaaUncited = @{}
         $unc = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/hipaa-uncited-controls.json') -Raw -Encoding utf8 | ConvertFrom-Json
         foreach ($p in $unc.controls.PSObject.Properties) { $script:HipaaUncited[$p.Name] = [string]$p.Value }
+        # The same rule for the CIS Microsoft 365 Foundations Benchmark
+        # (Config/cis-m365-uncited-controls.json). This gate once required a
+        # CIS number on every control, and controls the benchmark does not
+        # cover (Intune, Power Platform, DNS) were given numbers it does not
+        # contain; the v7.0.0 review left 143 uncited, each with the reason.
+        $script:CisUncited = @{}
+        $cunc = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/cis-m365-uncited-controls.json') -Raw -Encoding utf8 | ConvertFrom-Json
+        foreach ($p in $cunc.controls.PSObject.Properties) { $script:CisUncited[$p.Name] = [string]$p.Value }
     }
 
     It 'controls.json exists and parses' {
@@ -60,10 +68,24 @@ Describe 'controls.json — framework citation coverage' {
                 # MITRE may be a string OR an array; empty array also fails
                 if ($val -is [array]) { return $val.Count -eq 0 }
                 if ($fw -eq 'HIPAA' -and $script:HipaaUncited.ContainsKey($_.ControlId)) { return $false }
+                if ($fw -eq 'CIS' -and $script:CisUncited.ContainsKey($_.ControlId)) { return $false }
                 [string]::IsNullOrWhiteSpace([string]$val)
             } | ForEach-Object { $_.ControlId })
 
             $offenders | Should -BeNullOrEmpty -Because "$fw must be cited for every control — this gate exists because the MSP product depends on it"
+        }
+    }
+
+    Context 'Controls deliberately left without a CIS Microsoft 365 citation' {
+
+        It 'every listed control exists, has an empty CIS citation, and states why' {
+            $ids = @($script:Controls | ForEach-Object { $_.ControlId })
+            foreach ($cid in $script:CisUncited.Keys) {
+                $ids | Should -Contain $cid
+                $c = @($script:Controls | Where-Object ControlId -eq $cid)[0]
+                [string]$c.References.CIS | Should -BeNullOrEmpty -Because "$cid is listed as uncited; remove it from Config/cis-m365-uncited-controls.json when a reviewed citation is added"
+                $script:CisUncited[$cid].Length | Should -BeGreaterThan 25 -Because "$cid needs a stated reason"
+            }
         }
     }
 

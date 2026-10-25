@@ -37,7 +37,7 @@ Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-2, AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.1.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 3.1.1 |
 | CIS Controls v8.1 | 8.2, 8.5 |
 | CMMC 2.0 | AU.L2-3.3.1 |
 | ISO/IEC 27001:2022 | A.8.15 |
@@ -68,7 +68,6 @@ Configure custom retention policies in Purview Compliance > Audit > Retention po
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-11 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.1.2 |
 | CIS Controls v8.1 | 8.10 |
 | CISA SCuBA | MS.DEFENDER.6.3v1 |
 | CMMC 2.0 | AU.L2-3.3.2 |
@@ -100,7 +99,6 @@ Create DLP policies in Purview > Data loss prevention using Microsoft-provided t
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-28, AC-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.3.1 |
 | CIS Controls v8.1 | 3.13 |
 | CMMC 2.0 | MP.L2-3.8.1 |
 | ISO/IEC 27001:2022 | A.8.12 |
@@ -131,7 +129,7 @@ Create labels in Purview > Information protection. Publish via label policies. M
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-16, SC-28 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.4.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 3.3.1 |
 | CIS Controls v8.1 | 3.7 |
 | CMMC 2.0 | MP.L2-3.8.1 |
 | ISO/IEC 27001:2022 | A.8.11, A.8.12 |
@@ -162,7 +160,7 @@ Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-2, AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.1.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 3.1.1 |
 | CIS Controls v8.1 | 8.11 |
 | CMMC 2.0 | AU.L2-3.3.1 |
 | ISO/IEC 27001:2022 | A.8.15 |
@@ -193,7 +191,6 @@ Purview > Communication compliance > Create policy. Requires E5 Compliance.
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.2.1 |
 | CIS Controls v8.1 | 3.14 |
 | CMMC 2.0 | AU.L2-3.3.1 |
 | ISO/IEC 27001:2022 | A.5.34, A.8.16 |
@@ -224,7 +221,6 @@ Set-PolicyConfig -InformationBarrierMode MultiSegment. Requires E5 Compliance.
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.2.2 |
 | CIS Controls v8.1 | 3.12 |
 | CMMC 2.0 | AC.L2-3.1.3 |
 | ISO/IEC 27001:2022 | A.5.18, A.8.3 |
@@ -255,7 +251,6 @@ Purview > Insider risk management > Create policy (Departing user data theft, Da
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.2.3 |
 | CIS Controls v8.1 | 3.14 |
 | CMMC 2.0 | SI.L2-3.14.7 |
 | ISO/IEC 27001:2022 | A.6.8, A.8.16 |
@@ -286,7 +281,6 @@ Purview > Data lifecycle management > Retention policies. Create policies for Ex
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-11 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.3.2 |
 | CIS Controls v8.1 | 3.4 |
 | CMMC 2.0 | AU.L2-3.3.2 |
 | ISO/IEC 27001:2022 | A.8.10, A.8.13 |
@@ -317,7 +311,6 @@ Purview > Information protection > Auto-labeling > Create policy for sensitive i
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-16, SC-28 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.4.2 |
 | CIS Controls v8.1 | 3.7 |
 | CMMC 2.0 | MP.L2-3.8.1 |
 | ISO/IEC 27001:2022 | A.8.11 |
@@ -348,7 +341,6 @@ Connect Microsoft Sentinel M365 data connector, or use Defender XDR > Settings >
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-4, AU-9 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.1.3 |
 | CIS Controls v8.1 | 8.9, 8.10 |
 | CISA SCuBA | MS.DEFENDER.5.2v1 |
 | CMMC 2.0 | AU.L2-3.3.1 |
@@ -380,7 +372,6 @@ Purview > Roles & scopes > eDiscovery Manager. Assign eDiscovery Manager role to
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-11, IR-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.5.1 |
 | CIS Controls v8.1 | 3.14 |
 | CMMC 2.0 | IR.L2-3.6.1 |
 | ISO/IEC 27001:2022 | A.5.33 |
@@ -411,7 +402,6 @@ Microsoft Purview portal (purview.microsoft.com) > Compliance Manager > Improvem
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CA-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.5.2 |
 | CMMC 2.0 | CA.L2-3.12.3 |
 | ISO/IEC 27001:2022 | A.5.36 |
 | SOC 2 | CC4.1, CC4.2 |
@@ -441,7 +431,6 @@ Purview > DLP > Create or edit policies > Add conditions using sensitive informa
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-28, AC-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.3.1 |
 | CIS Controls v8.1 | 3.13, 3.7 |
 | CMMC 2.0 | MP.L2-3.8.1 |
 | ISO/IEC 27001:2022 | A.8.12 |
@@ -472,7 +461,6 @@ Assign Microsoft 365 E5 or E5 Compliance license to users, then enable Audit Pre
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-2, AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.1.4 |
 | CIS Controls v8.1 | 8.5 |
 | CISA SCuBA | MS.DEFENDER.6.1v1 |
 | CMMC 2.0 | AU.L2-3.3.1 |
@@ -504,7 +492,6 @@ Purview > Audit > Audit log retention policies > New retention policy. Priority:
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-11 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.1.5 |
 | CIS Controls v8.1 | 8.10 |
 | CISA SCuBA | MS.DEFENDER.6.3v1 |
 | CMMC 2.0 | AU.L2-3.3.2 |
@@ -536,7 +523,7 @@ Purview > Information protection > Sensitivity labels > Create label hierarchy (
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-16, SC-28 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.4.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 3.3.1 |
 | CIS Controls v8.1 | 3.7 |
 | CMMC 2.0 | MP.L2-3.8.1 |
 | ISO/IEC 27001:2022 | A.8.11 |
@@ -567,7 +554,6 @@ Purview > Records management > File plan > Create a label that marks items as a 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-11, IR-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.3.3 |
 | CIS Controls v8.1 | 3.4 |
 | CMMC 2.0 | IR.L2-3.6.1 |
 | ISO/IEC 27001:2022 | A.5.33, A.8.13 |

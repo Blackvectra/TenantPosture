@@ -37,7 +37,7 @@ Set-OrganizationConfig -AuditDisabled $false
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-2, AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 6.1.1 |
 | CIS Controls v8.1 | 8.2, 8.5 |
 | CISA SCuBA | MS.EXO.13.1v1 |
 | CMMC 2.0 | AU.L2-3.3.1 |
@@ -69,7 +69,7 @@ Set-TransportConfig -SmtpClientAuthenticationDisabled $true
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-8, IA-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.4 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 6.5.4 |
 | CIS Controls v8.1 | 4.8 |
 | CISA SCuBA | MS.EXO.5.1v1 |
 | CMMC 2.0 | SC.L2-3.13.8 |
@@ -101,7 +101,7 @@ Set-HostedOutboundSpamFilterPolicy -Identity Default -AutoForwardingMode Off. Se
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-7, SI-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 6.2.1 |
 | CIS Controls v8.1 | 3.13 |
 | CISA SCuBA | MS.EXO.1.1v2 |
 | CMMC 2.0 | SC.L1-3.13.1 |
@@ -133,7 +133,6 @@ Enable-DkimSigningConfig -Identity domain.com. Publish the CNAME records from M3
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-8, SC-13 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.2.1 |
 | CIS Controls v8.1 | 9.5 |
 | CISA SCuBA | MS.EXO.3.1v1 |
 | CMMC 2.0 | SC.L2-3.13.8 |
@@ -165,7 +164,6 @@ Set-AntiPhishPolicy -Identity "Office365 AntiPhish Default" -EnableTargetedUserP
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3, SI-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.7 |
 | CIS Controls v8.1 | 9.7, 10.1 |
 | CISA SCuBA | MS.DEFENDER.2.1v1 |
 | CMMC 2.0 | SI.L1-3.14.2 |
@@ -197,7 +195,7 @@ Set-OrganizationConfig -OAuth2ClientProfileEnabled $true
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2, SC-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.5 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 6.5.1 |
 | CIS Controls v8.1 | 9.1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
 | ISO/IEC 27001:2022 | A.5.17 |
@@ -228,7 +226,7 @@ Set-AntiPhishPolicy -Identity "Office365 AntiPhish Default" -HonorDmarcPolicy $t
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.7 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.7 |
 | CIS Controls v8.1 | 9.5 |
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.23 |
@@ -259,7 +257,6 @@ Disable for newly licensed mailboxes: Get-CASMailboxPlan -Filter {PopEnabled -eq
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-8, IA-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.6 |
 | CIS Controls v8.1 | 4.8 |
 | CMMC 2.0 | SC.L2-3.13.8 |
 | ISO/IEC 27001:2022 | A.8.24 |
@@ -290,7 +287,6 @@ Disable for newly licensed mailboxes: Get-CASMailboxPlan -Filter {ImapEnabled -e
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-8, IA-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.6 |
 | CIS Controls v8.1 | 4.8 |
 | CMMC 2.0 | SC.L2-3.13.8 |
 | ISO/IEC 27001:2022 | A.8.24 |
@@ -321,7 +317,7 @@ Enable in M365 admin center > Settings > Security & privacy > Customer Lockbox. 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3, PE-18 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 1.3.6 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 1.3.6 |
 | CIS Controls v8.1 | 3.3 |
 | CMMC 2.0 | PE.L1-3.10.1 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.16 |
@@ -352,7 +348,6 @@ Get-Mailbox -ResultSize Unlimited -RecipientTypeDetails SharedMailbox | ForEach-
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-2, IA-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 1.1.3 |
 | CIS Controls v8.1 | 5.3 |
 | CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.16, A.8.5 |
@@ -383,7 +378,7 @@ Set-HostedConnectionFilterPolicy -Identity Default -EnableSafeList $false
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.13 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.13 |
 | CIS Controls v8.1 | 9.7 |
 | CMMC 2.0 | SI.L2-3.14.7 |
 | ISO/IEC 27001:2022 | A.8.7 |
@@ -414,7 +409,6 @@ Set-HostedOutboundSpamFilterPolicy: configure RecipientLimitInternalPerHour, Rec
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8, AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.14 |
 | CIS Controls v8.1 | 9.7 |
 | CMMC 2.0 | SI.L2-3.14.7 |
 | ISO/IEC 27001:2022 | A.8.7, A.8.16 |
@@ -445,7 +439,6 @@ Defender portal > Policies > Alert policies > Enable: Email forwarding activitie
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-12, SI-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.15 |
 | CIS Controls v8.1 | 8.11, 13.1 |
 | CISA SCuBA | MS.DEFENDER.5.1v1 |
 | CMMC 2.0 | AU.L2-3.3.1 |
@@ -477,7 +470,6 @@ Defender portal > Policies > Alert policies > Enable: Unusual increase in email 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-4, AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.16 |
 | CIS Controls v8.1 | 13.1, 8.11 |
 | CISA SCuBA | MS.DEFENDER.5.1v1 |
 | CMMC 2.0 | SI.L2-3.14.6 |
@@ -509,7 +501,7 @@ Set-OrganizationConfig -AuditDisabled $false
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-2, AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.1.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 3.1.1 |
 | CIS Controls v8.1 | 8.2, 8.5 |
 | CISA SCuBA | MS.DEFENDER.6.1v1 |
 | CMMC 2.0 | AU.L2-3.3.1 |
@@ -541,7 +533,6 @@ Get-Mailbox -ResultSize Unlimited | Set-Mailbox -AuditLogAgeLimit 180
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-11 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.3 |
 | CIS Controls v8.1 | 8.10 |
 | CISA SCuBA | MS.DEFENDER.6.3v1 |
 | CMMC 2.0 | AU.L2-3.3.2 |
@@ -573,7 +564,6 @@ Set-AdminAuditLogConfig -AdminAuditLogEnabled $true
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-2, AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.1.1 |
 | CIS Controls v8.1 | 8.2, 8.5 |
 | CISA SCuBA | MS.DEFENDER.6.1v1 |
 | CMMC 2.0 | AU.L2-3.3.1 |
@@ -605,7 +595,7 @@ Defender portal > Policies > Safe Attachments > Global settings > Enable Defende
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.3.4 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.5 |
 | CIS Controls v8.1 | 9.7, 10.1 |
 | CISA SCuBA | MS.DEFENDER.1.1v1 |
 | CMMC 2.0 | SI.L1-3.14.2 |
@@ -637,7 +627,6 @@ Set-HostedContentFilterPolicy -Identity Default -SpamAction MoveToJmf -BulkThres
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.7 |
 | CIS Controls v8.1 | 9.7 |
 | CISA SCuBA | MS.DEFENDER.1.2v1 |
 | CMMC 2.0 | SI.L1-3.14.2 |
@@ -669,7 +658,7 @@ Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-2, AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.1.2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 6.1.1 |
 | CIS Controls v8.1 | 8.2, 8.5 |
 | CISA SCuBA | MS.EXO.13.1v1 |
 | CMMC 2.0 | AU.L2-3.3.1 |
@@ -701,7 +690,6 @@ Set-AntiPhishPolicy > TargetedUsersToProtect — add executive UPNs. Enable Enab
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.6 |
 | CIS Controls v8.1 | 9.7, 10.1 |
 | CISA SCuBA | MS.DEFENDER.2.1v1 |
 | CMMC 2.0 | SI.L1-3.14.2 |
@@ -733,7 +721,7 @@ Set-HostedContentFilterPolicy -Identity Default -AllowedSenderDomains @() — re
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.13 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.14 |
 | CIS Controls v8.1 | 9.7 |
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.7 |
@@ -764,7 +752,6 @@ For each listed mailbox: verify the forwarding is intentional and business-justi
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.2 |
 | CIS Controls v8.1 | 3.13, 8.11 |
 | CISA SCuBA | MS.EXO.1.1v2 |
 | CMMC 2.0 | AC.L1-3.1.2 |
@@ -796,7 +783,7 @@ Update-MgUser -UserId <guid> -AccountEnabled:$false for each shared mailbox acco
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-5 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.5 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 1.2.2 |
 | CIS Controls v8.1 | 5.3 |
 | CMMC 2.0 | IA.L1-3.5.1 |
 | ISO/IEC 27001:2022 | A.5.16 |
@@ -827,7 +814,7 @@ Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 6.1.3 |
 | CIS Controls v8.1 | 8.2, 8.5 |
 | CISA SCuBA | MS.EXO.13.1v1 |
 | CMMC 2.0 | AU.L2-3.3.1 |
@@ -859,7 +846,6 @@ For each listed user: Set-CASMailbox -Identity <upn> -SmtpClientAuthenticationDi
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.1 |
 | CIS Controls v8.1 | 4.8 |
 | CISA SCuBA | MS.EXO.5.1v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
@@ -891,7 +877,6 @@ Get-Mailbox -ResultSize Unlimited -Filter "ForwardingSmtpAddress -ne `$null" | S
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-6, IR-4, SI-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 6.2.1 |
 | CIS Controls v8.1 | 3.13, 8.11 |
 | CISA SCuBA | MS.EXO.1.1v2 |
 | CMMC 2.0 | AU.L2-3.3.5, IR.L2-3.6.1, SI.L2-3.14.6 |
@@ -923,7 +908,6 @@ Audit: foreach ($m in Get-Mailbox -ResultSize Unlimited) { Get-InboxRule -Mailbo
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-6, IR-4, SI-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 6.2.1 |
 | CIS Controls v8.1 | 3.13, 8.11 |
 | CISA SCuBA | MS.EXO.1.1v2 |
 | CMMC 2.0 | AU.L2-3.3.5, IR.L2-3.6.1, SI.L2-3.14.6 |
@@ -955,7 +939,7 @@ Get-Mailbox -ResultSize Unlimited | Where-Object { $_.AuditEnabled -eq $false } 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-2, AU-3, AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.1.2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 6.1.3 |
 | CIS Controls v8.1 | 8.2, 8.5 |
 | CISA SCuBA | MS.EXO.13.1v1 |
 | CMMC 2.0 | AU.L2-3.3.1, AU.L2-3.3.2 |
@@ -987,7 +971,6 @@ For each affected mailbox: Set-CASMailbox -Identity <UPN> -SmtpClientAuthenticat
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2, SC-8, SI-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 6.2.2 |
 | CIS Controls v8.1 | 4.8 |
 | CISA SCuBA | MS.EXO.5.1v1 |
 | CMMC 2.0 | IA.L2-3.5.3, SC.L2-3.13.8, SI.L2-3.14.6 |
@@ -1017,7 +1000,6 @@ Exchange admin center > Mail flow > Connectors. Review every enabled connector a
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-4, SC-7, SC-8, SI-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 6.2.2 |
 | CIS Controls v8.1 | 4.1, 13.4 |
 | CMMC 2.0 | SC.L1-3.13.1, SC.L2-3.13.8 |
 | MITRE ATT&CK | T1071.003, T1114.003, T1090 |
@@ -1046,7 +1028,7 @@ Exchange admin center > Mail flow > Rules. Inspect every enabled rule for Redire
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-4, AC-20, SC-7, SI-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 6.2.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 6.2.1 |
 | CIS Controls v8.1 | 3.3, 13.4 |
 | CMMC 2.0 | AC.L1-3.1.3, SC.L1-3.13.1 |
 | MITRE ATT&CK | T1114.003, T1020, T1537 |
@@ -1075,7 +1057,6 @@ Apply a Purview retention policy scoped to all Exchange mailboxes (Purview > Dat
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CP-9, CP-10, AU-11, SI-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 6.1.4 |
 | CIS Controls v8.1 | 11.1, 11.2 |
 | CMMC 2.0 | AU.L2-3.3.1, MP.L2-3.8.9 |
 | MITRE ATT&CK | T1485, T1486, T1070.008 |
@@ -1104,7 +1085,6 @@ Set-Mailbox -Identity <UPN> -RetainDeletedItemsFor 30. Apply tenant-wide with: G
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CP-10, AU-11, SI-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 6.1.5 |
 | CIS Controls v8.1 | 11.1 |
 | CMMC 2.0 | AU.L2-3.3.1 |
 | MITRE ATT&CK | T1070.008, T1485 |

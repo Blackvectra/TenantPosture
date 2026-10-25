@@ -37,7 +37,6 @@ Create a CA policy: All Users, Client apps = Other clients + Exchange ActiveSync
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2, IA-5(1) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.3 |
 | CIS Controls v8.1 | 6.3, 4.1 |
 | CISA SCuBA | MS.AAD.1.1v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
@@ -69,7 +68,7 @@ CA policy: Users = All, Apps = All cloud apps, Grant = Require MFA. Without Micr
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2(1), IA-2(2) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.2.2 |
 | CIS Controls v8.1 | 6.3, 6.4 |
 | CISA SCuBA | MS.AAD.3.2v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
@@ -101,7 +100,6 @@ CA policy targeting privileged roles with Authentication Strength = Phishing-res
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2(1), IA-2(2), IA-2(6) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.2 |
 | CIS Controls v8.1 | 6.5 |
 | CISA SCuBA | MS.AAD.3.6v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
@@ -133,7 +131,6 @@ CA policy: Condition = Sign-in risk high/medium, Grant = Require MFA or Block. R
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-7, IA-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.6 |
 | CIS Controls v8.1 | 6.7 |
 | CISA SCuBA | MS.AAD.2.3v1 |
 | CMMC 2.0 | AC.L2-3.1.8 |
@@ -165,7 +162,6 @@ CA policy: Condition = User risk high, Grant = Require password change. Requires
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-7, IA-5 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.7 |
 | CIS Controls v8.1 | 6.7 |
 | CISA SCuBA | MS.AAD.2.1v1 |
 | CMMC 2.0 | AC.L2-3.1.8 |
@@ -197,7 +193,6 @@ Deploy at minimum: (1) block legacy auth, (2) require MFA all users, (3) phishin
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-17, IA-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2 |
 | CIS Controls v8.1 | 4.1, 6.5 |
 | CISA SCuBA | MS.AAD.1.1v1 |
 | CMMC 2.0 | AC.L1-3.1.2 |
@@ -229,7 +224,7 @@ Entra ID > Security > Named locations > Add IP ranges location. Mark office and 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-17 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.2.14 |
 | CMMC 2.0 | AC.L2-3.1.12 |
 | ISO/IEC 27001:2022 | A.8.3 |
 | SOC 2 | CC6.1 |
@@ -259,7 +254,6 @@ CA policy: Grant = Require device to be marked as compliant, or Require Microsof
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CM-7, AC-17 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.8 |
 | CIS Controls v8.1 | 13.5 |
 | CISA SCuBA | MS.AAD.3.7v1 |
 | CMMC 2.0 | CM.L2-3.4.1 |
@@ -291,7 +285,6 @@ Reduce GA count to 2-8 break-glass accounts. Remove GA from any on-premises sync
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6, AC-6(5) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.2.1 |
 | CIS Controls v8.1 | 5.4, 6.8 |
 | CISA SCuBA | MS.AAD.7.1v1 |
 | CMMC 2.0 | AC.L2-3.1.6 |
@@ -323,7 +316,6 @@ Convert permanent role assignments to PIM eligible. Keep only break-glass accoun
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6(5) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.2.2 |
 | CIS Controls v8.1 | 6.8, 5.4 |
 | CISA SCuBA | MS.AAD.7.3v1 |
 | CMMC 2.0 | AC.L2-3.1.6 |
@@ -355,7 +347,6 @@ PIM > Roles > Select role > Settings > Require MFA on activation.
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2(1) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.3.1 |
 | CIS Controls v8.1 | 6.5 |
 | CMMC 2.0 | IA.L2-3.5.3 |
 | ISO/IEC 27001:2022 | A.8.2, A.8.5 |
@@ -386,7 +377,6 @@ PIM > Roles > Select role > Settings > Require justification on activation.
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6(9), AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.3.2 |
 | CIS Controls v8.1 | 6.8 |
 | CMMC 2.0 | AU.L2-3.3.1 |
 | ISO/IEC 27001:2022 | A.8.2, A.8.15 |
@@ -417,7 +407,7 @@ PIM > Global Administrator > Settings > Require approval > Add approvers.
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6(5) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.3.3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.3.4 |
 | CIS Controls v8.1 | 6.8 |
 | CISA SCuBA | MS.AAD.7.6v1 |
 | CMMC 2.0 | AC.L2-3.1.5 |
@@ -449,7 +439,6 @@ PIM > Roles > Select role > Settings > Maximum activation duration = 8 hours.
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.3.4 |
 | CIS Controls v8.1 | 6.8 |
 | CMMC 2.0 | AC.L2-3.1.5 |
 | ISO/IEC 27001:2022 | A.8.2 |
@@ -480,7 +469,7 @@ Entra ID > External Identities > External collaboration settings > Guest invite 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.3.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.6.3 |
 | CIS Controls v8.1 | 6.8 |
 | CISA SCuBA | MS.AAD.8.2v1 |
 | CMMC 2.0 | AC.L1-3.1.2 |
@@ -512,7 +501,7 @@ Entra ID > User settings > Restrict non-admin users from creating tenants. Block
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CM-7, AC-6 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.3.2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.2.3 |
 | CIS Controls v8.1 | 6.8 |
 | CMMC 2.0 | CM.L2-3.4.6 |
 | ISO/IEC 27001:2022 | A.5.19, A.5.21 |
@@ -543,7 +532,7 @@ Entra ID > External Identities > External collaboration settings > Guest user ac
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.3.3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.6.2 |
 | CIS Controls v8.1 | 6.8 |
 | CISA SCuBA | MS.AAD.8.1v1 |
 | CMMC 2.0 | AC.L2-3.1.3 |
@@ -575,7 +564,7 @@ Entra ID > Password reset > Properties > Self service password reset enabled = A
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-5 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.4.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.4.1 |
 | CMMC 2.0 | IA.L2-3.5.7 |
 | ISO/IEC 27001:2022 | A.5.17 |
 | SOC 2 | CC6.1 |
@@ -605,7 +594,7 @@ Entra ID > Password reset > Authentication methods > Number of methods required 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2(1), IA-5 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.4.2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.4.2 |
 | CMMC 2.0 | IA.L2-3.5.3 |
 | ISO/IEC 27001:2022 | A.5.17 |
 | SOC 2 | CC6.1 |
@@ -635,7 +624,7 @@ Entra ID > User settings > App registrations > Users can register applications =
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CM-5, AC-6 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.5.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.2.2 |
 | CIS Controls v8.1 | 6.8 |
 | CISA SCuBA | MS.AAD.5.1v1 |
 | CMMC 2.0 | CM.L2-3.4.5 |
@@ -667,7 +656,6 @@ Entra ID > Enterprise apps > Consent and permissions > User consent settings = D
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.5.2 |
 | CIS Controls v8.1 | 6.8 |
 | CISA SCuBA | MS.AAD.5.2v1 |
 | CMMC 2.0 | AC.L1-3.1.2 |
@@ -699,7 +687,7 @@ Entra ID > Enterprise apps > Consent and permissions > Admin consent requests > 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.5.3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.5.2 |
 | CIS Controls v8.1 | 6.1 |
 | CISA SCuBA | MS.AAD.5.3v1 |
 | CMMC 2.0 | AC.L1-3.1.1 |
@@ -731,7 +719,7 @@ Entra ID > Security > Authentication methods > Password protection > Lockout thr
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.6.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.3.8 |
 | CMMC 2.0 | AC.L2-3.1.8 |
 | ISO/IEC 27001:2022 | A.5.17, A.8.5 |
 | SOC 2 | CC6.1 |
@@ -761,7 +749,7 @@ Create two cloud-only GA accounts with strong random passwords, exclude from all
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CP-2, AC-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.2.3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 1.1.2 |
 | CIS Controls v8.1 | 5.4 |
 | CMMC 2.0 | IR.L2-3.6.1 |
 | ISO/IEC 27001:2022 | A.5.30, A.8.2 |
@@ -792,7 +780,6 @@ PIM > Alerts > Review and enable: Roles assigned outside PIM, Redundant assignme
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6(9), AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.3.5 |
 | CIS Controls v8.1 | 13.1 |
 | CISA SCuBA | MS.AAD.7.7v1 |
 | CMMC 2.0 | AU.L2-3.3.1 |
@@ -824,7 +811,6 @@ PIM > Microsoft Entra roles > Access reviews > Create recurring quarterly review
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6(7) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.4.1 |
 | CIS Controls v8.1 | 6.8 |
 | CMMC 2.0 | AC.L2-3.1.5 |
 | ISO/IEC 27001:2022 | A.5.18, A.8.2 |
@@ -855,7 +841,7 @@ Entra ID > Security > Authentication methods > Microsoft Authenticator > Configu
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2(1) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.1.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.3.1 |
 | CIS Controls v8.1 | 6.3 |
 | CISA SCuBA | MS.AAD.3.3v2 |
 | CMMC 2.0 | IA.L2-3.5.3 |
@@ -887,7 +873,6 @@ Entra ID > Security > Authentication methods > FIDO2 security key > Enable. Cons
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2(1), IA-5 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.1.2 |
 | CIS Controls v8.1 | 6.5, 6.3 |
 | CISA SCuBA | MS.AAD.3.1v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
@@ -919,7 +904,6 @@ CA policy: Condition = User risk = High, Grant = Require password change. Requir
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IR-4, AC-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.7 |
 | CIS Controls v8.1 | 6.7 |
 | CISA SCuBA | MS.AAD.2.2v1 |
 | CMMC 2.0 | IR.L2-3.6.1 |
@@ -951,7 +935,6 @@ Create dedicated .admin or .onmicrosoft.com accounts for all privileged role hol
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6(5) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.1.1 |
 | CIS Controls v8.1 | 5.4 |
 | CISA SCuBA | MS.AAD.7.3v1 |
 | CMMC 2.0 | AC.L2-3.1.6 |
@@ -983,7 +966,7 @@ Create a Sentinel or Defender XDR alert rule for sign-in from break-glass accoun
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-2, IR-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.2.4 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.2.1 |
 | CIS Controls v8.1 | 13.1 |
 | CMMC 2.0 | IR.L2-3.6.1 |
 | ISO/IEC 27001:2022 | A.8.15 |
@@ -1014,7 +997,6 @@ CA policy: Session controls > Sign-in frequency > set to 1 hour for privileged u
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.3.1 |
 | CIS Controls v8.1 | 4.3 |
 | CMMC 2.0 | AC.L2-3.1.10 |
 | ISO/IEC 27001:2022 | A.5.17, A.8.3 |
@@ -1045,7 +1027,6 @@ CA policy: Conditions > Authentication flows > Device code flow, Grant = Block. 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.2.10 |
 | CIS Controls v8.1 | 4.1 |
 | CISA SCuBA | MS.AAD.3.9v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
@@ -1077,7 +1058,6 @@ Remove guest accounts from all privileged roles. Use cloud-only member accounts 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-2, AC-6(5) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.1.2 |
 | CIS Controls v8.1 | 6.8, 5.4 |
 | CMMC 2.0 | AC.L1-3.1.2 |
 | ISO/IEC 27001:2022 | A.5.18, A.8.2 |
@@ -1108,7 +1088,6 @@ Entra ID > Identity Protection > Risky workload identities. Investigate and reme
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-3, IR-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.5.1 |
 | CIS Controls v8.1 | 5.5 |
 | CMMC 2.0 | IR.L2-3.6.1 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.30 |
@@ -1139,7 +1118,6 @@ CA policy: Session controls > Token protection. Enable for Exchange Online and S
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-12, IA-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.3.2 |
 | CMMC 2.0 | AC.L2-3.1.10 |
 | ISO/IEC 27001:2022 | A.5.17 |
 | SOC 2 | CC6.1 |
@@ -1169,7 +1147,6 @@ CA policy > Session controls > Customize continuous access evaluation > Strict e
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.3.3 |
 | CIS Controls v8.1 | 6.2 |
 | CMMC 2.0 | AC.L2-3.1.11 |
 | ISO/IEC 27001:2022 | A.5.17, A.8.16 |
@@ -1200,7 +1177,6 @@ Entra ID > External Identities > Cross-tenant access settings > Default settings
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-17, IA-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.3.5 |
 | CIS Controls v8.1 | 4.1 |
 | CMMC 2.0 | AC.L1-3.1.2 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.22 |
@@ -1231,7 +1207,6 @@ CA policy: Target admin roles > Require compliant device or Hybrid AD join. Alte
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-17, CM-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.1.3 |
 | CIS Controls v8.1 | 12.8 |
 | CMMC 2.0 | AC.L1-3.1.2 |
 | ISO/IEC 27001:2022 | A.8.2 |
@@ -1262,7 +1237,6 @@ Entra ID > Security > Conditional Access > Terms of use > Create ToU document. A
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.3.6 |
 | CMMC 2.0 | AC.L2-3.1.9 |
 | ISO/IEC 27001:2022 | A.5.10 |
 | SOC 2 | CC1.4, CC6.3 |
@@ -1292,7 +1266,6 @@ CA policy > Users > Select Workload identities > Apply conditions and access con
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-3, AC-6 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.5.2 |
 | CIS Controls v8.1 | 6.8, 5.5 |
 | CMMC 2.0 | IA.L2-3.5.3 |
 | ISO/IEC 27001:2022 | A.5.16, A.8.2 |
@@ -1323,7 +1296,6 @@ Entra ID > Users > [select user] > Authentication methods > Add method. For bulk
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2(1) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.2.1 |
 | CIS Controls v8.1 | 6.3 |
 | CISA SCuBA | MS.AAD.3.1v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
@@ -1355,7 +1327,6 @@ Entra ID > External Identities > All users > Filter by guest, sort by last sign-
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-2(3) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.3.4 |
 | CIS Controls v8.1 | 5.3 |
 | CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.18, A.6.5 |
@@ -1386,7 +1357,6 @@ Verify each account represents an active user. Disable accounts for departed emp
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-2(3) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.1.6.1 |
 | CIS Controls v8.1 | 5.3 |
 | CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.18, A.6.5 |
@@ -1417,7 +1387,6 @@ Entra ID > Enterprise applications > All applications > Filter by permissions. R
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.5.4 |
 | CIS Controls v8.1 | 2.1 |
 | CISA SCuBA | MS.AAD.5.2v1 |
 | CMMC 2.0 | AC.L1-3.1.2 |
@@ -1449,7 +1418,6 @@ Review Microsoft Secure Score improvement actions at security.microsoft.com > Se
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CA-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.5.2 |
 | CMMC 2.0 | CA.L2-3.12.3 |
 | ISO/IEC 27001:2022 | A.5.36 |
 | SOC 2 | CC4.1 |
@@ -1477,7 +1445,6 @@ Entra ID > Enterprise applications > select the application > Permissions. Revie
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.5.4 |
 | CIS Controls v8.1 | 2.1, 5.4 |
 | CMMC 2.0 | AC.L2-3.1.5 |
 | MITRE ATT&CK | T1098.001, T1528, T1550.001 |
@@ -1509,7 +1476,6 @@ Entra ID > Enterprise applications > All applications > Permissions. For each ap
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 5.5.4 |
 | CIS Controls v8.1 | 2.1, 3.3 |
 | CMMC 2.0 | AC.L1-3.1.2 |
 | MITRE ATT&CK | T1528, T1114.002 |
@@ -1541,7 +1507,6 @@ Entra admin center > App registrations > Certificates and secrets. Remove expire
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-5, IA-5(1), AC-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 1.3.4 |
 | CIS Controls v8.1 | 5.4, 6.2 |
 | CMMC 2.0 | IA.L2-3.5.10, AC.L1-3.1.1 |
 | MITRE ATT&CK | T1078.004, T1550.001, T1098.001 |

@@ -17,7 +17,7 @@
           "6.3",
           "4.1"
         ],
-        "CIS": "5.2.2.3",
+        "CIS": "",
         "SCuBA": "MS.AAD.1.1v1",
         "NIST": "IA-2, IA-5(1)",
         "CMMC": "IA.L2-3.5.3",
@@ -49,7 +49,7 @@
           "6.3",
           "6.4"
         ],
-        "CIS": "5.2.2.1",
+        "CIS": "5.2.2.2",
         "SCuBA": "MS.AAD.3.2v2",
         "NIST": "IA-2(1), IA-2(2)",
         "CMMC": "IA.L2-3.5.3",
@@ -80,7 +80,7 @@
         "CISControls": [
           "6.5"
         ],
-        "CIS": "5.2.2.2",
+        "CIS": "",
         "SCuBA": "MS.AAD.3.6v1",
         "NIST": "IA-2(1), IA-2(2), IA-2(6)",
         "CMMC": "IA.L2-3.5.3",
@@ -113,7 +113,7 @@
           "4.1",
           "6.5"
         ],
-        "CIS": "5.2.2",
+        "CIS": "",
         "SCuBA": "MS.AAD.1.1v1",
         "NIST": "AC-17, IA-2",
         "CMMC": "AC.L1-3.1.2",
@@ -145,7 +145,7 @@
           "5.4",
           "6.8"
         ],
-        "CIS": "5.1.2.1",
+        "CIS": "",
         "SCuBA": "MS.AAD.7.1v1",
         "NIST": "AC-6, AC-6(5)",
         "CMMC": "AC.L2-3.1.6",
@@ -177,7 +177,7 @@
           "8.2",
           "8.5"
         ],
-        "CIS": "2.1.1",
+        "CIS": "6.1.1",
         "SCuBA": "MS.EXO.13.1v1",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
@@ -208,7 +208,7 @@
         "CISControls": [
           "4.8"
         ],
-        "CIS": "2.1.4",
+        "CIS": "6.5.4",
         "SCuBA": "MS.EXO.5.1v1",
         "NIST": "SC-8, IA-2",
         "CMMC": "SC.L2-3.13.8",
@@ -239,7 +239,7 @@
         "CISControls": [
           "3.13"
         ],
-        "CIS": "2.1.2",
+        "CIS": "6.2.1",
         "SCuBA": "MS.EXO.1.1v2",
         "NIST": "SC-7, SI-8",
         "CMMC": "SC.L1-3.13.1",
@@ -269,7 +269,7 @@
         "CISControls": [
           "9.5"
         ],
-        "CIS": "2.2.1",
+        "CIS": "",
         "SCuBA": "MS.EXO.3.1v1",
         "NIST": "SC-8, SC-13",
         "CMMC": "SC.L2-3.13.8",
@@ -301,7 +301,7 @@
           "9.7",
           "10.1"
         ],
-        "CIS": "2.1.7",
+        "CIS": "",
         "SCuBA": "MS.SECURITYSUITE.2.1v1",
         "NIST": "SI-3, SI-8",
         "CMMC": "SI.L1-3.14.2",
@@ -332,7 +332,7 @@
         "CISControls": [
           "9.1"
         ],
-        "CIS": "2.1.5",
+        "CIS": "6.5.1",
         "NIST": "IA-2, SC-8",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -392,7 +392,7 @@
         "CISControls": [
           "9.5"
         ],
-        "CIS": "2.2.2",
+        "CIS": "2.1.8",
         "SCuBA": "MS.EXO.2.2v3",
         "NIST": "SI-8, SC-8",
         "CMMC": "SI.L1-3.14.2",
@@ -423,7 +423,7 @@
         "CISControls": [
           "9.5"
         ],
-        "CIS": "2.2.1",
+        "CIS": "",
         "SCuBA": "MS.EXO.3.1v1",
         "NIST": "SC-8, SC-13",
         "CMMC": "SC.L2-3.13.8",
@@ -454,7 +454,7 @@
         "CISControls": [
           "9.5"
         ],
-        "CIS": "2.2.3",
+        "CIS": "",
         "SCuBA": "MS.EXO.4.2v1",
         "NIST": "SI-8, SC-8",
         "CMMC": "SI.L1-3.14.2",
@@ -485,7 +485,7 @@
         "CISControls": [
           "3.10"
         ],
-        "CIS": "2.2.4",
+        "CIS": "",
         "NIST": "SC-8, SC-8(1)",
         "CMMC": "SC.L2-3.13.8",
         "MITRE": [
@@ -515,7 +515,7 @@
         "CISControls": [
           "3.10"
         ],
-        "CIS": "2.2.4",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AU-2, SC-8",
         "CMMC": "AU.L2-3.3.1",
@@ -543,7 +543,7 @@
       "Remediation": "Enable DNSSEC at your registrar. GoDaddy: Domains > DNS > DNSSEC > Enable. Free for up to 5 domains.",
       "References": {
         "CISControls": [],
-        "CIS": "2.2.5",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SC-20, SC-21",
         "CMMC": "SC.L2-3.13.8",
@@ -574,7 +574,7 @@
         "CISControls": [
           "9.5"
         ],
-        "CIS": "2.2.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SC-12, SC-13, SC-17",
         "CMMC": "SC.L2-3.13.10",
@@ -605,7 +605,7 @@
         "CISControls": [
           "3.10"
         ],
-        "CIS": "2.2.5",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SC-12, SC-17, CM-7",
         "CMMC": "SC.L2-3.13.10",
@@ -636,7 +636,7 @@
         "CISControls": [
           "3.10"
         ],
-        "CIS": "2.2.5",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SC-12, SC-17",
         "CMMC": "SC.L2-3.13.10",
@@ -667,7 +667,7 @@
         "CISControls": [
           "3.10"
         ],
-        "CIS": "2.2.5",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SC-12, SC-17, AU-6",
         "CMMC": "AU.L2-3.3.5",
@@ -699,7 +699,7 @@
           "9.7",
           "10.7"
         ],
-        "CIS": "2.3.1",
+        "CIS": "2.1.4",
         "SCuBA": "MS.SECURITYSUITE.1.3v1",
         "NIST": "SI-3",
         "CMMC": "SI.L1-3.14.2",
@@ -730,7 +730,7 @@
         "CISControls": [
           "9.3"
         ],
-        "CIS": "2.3.2",
+        "CIS": "2.1.1",
         "SCuBA": "MS.SECURITYSUITE.7.1v1",
         "NIST": "SI-3",
         "CMMC": "SI.L1-3.14.2",
@@ -821,7 +821,7 @@
         "CISControls": [
           "9.7"
         ],
-        "CIS": "2.1.7",
+        "CIS": "",
         "NIST": "SI-3, SI-4",
         "CMMC": "SI.L1-3.14.2",
         "MITRE": [
@@ -880,7 +880,7 @@
           "3.3",
           "6.8"
         ],
-        "CIS": "7.2.1",
+        "CIS": "7.2.3",
         "SCuBA": "MS.SHAREPOINT.1.1v1",
         "NIST": "AC-3, AC-17",
         "CMMC": "AC.L2-3.1.3",
@@ -910,7 +910,7 @@
         "CISControls": [
           "3.3"
         ],
-        "CIS": "7.2.2",
+        "CIS": "",
         "SCuBA": "MS.SHAREPOINT.2.1v1",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.3",
@@ -938,7 +938,7 @@
       "Remediation": "Set-SPOTenant -LegacyAuthProtocolsEnabled $false",
       "References": {
         "CISControls": [],
-        "CIS": "7.3.1",
+        "CIS": "7.2.1",
         "NIST": "IA-2, SC-8",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -969,7 +969,7 @@
           "6.2",
           "3.4"
         ],
-        "CIS": "7.2.6",
+        "CIS": "",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L1-3.1.1",
         "MITRE": [
@@ -999,7 +999,7 @@
           "3.3",
           "13.5"
         ],
-        "CIS": "7.3.2",
+        "CIS": "",
         "NIST": "AC-3, AC-17",
         "CMMC": "AC.L1-3.1.2",
         "MITRE": [
@@ -1119,7 +1119,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "8.5.3",
+        "CIS": "8.5.7",
         "SCuBA": "MS.TEAMS.1.1v1",
         "NIST": "AC-3",
         "CMMC": "AC.L1-3.1.2",
@@ -1149,7 +1149,7 @@
         "CISControls": [
           "3.4"
         ],
-        "CIS": "8.6.1",
+        "CIS": "",
         "NIST": "AU-9, AU-11",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -1178,7 +1178,7 @@
         "CISControls": [
           "4.8"
         ],
-        "CIS": "8.2.3",
+        "CIS": "",
         "NIST": "AC-2, AC-3",
         "CMMC": "AC.L1-3.1.2",
         "MITRE": [
@@ -1238,7 +1238,7 @@
         "CISControls": [
           "8.10"
         ],
-        "CIS": "3.1.2",
+        "CIS": "",
         "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.2",
         "MITRE": [
@@ -1268,7 +1268,7 @@
         "CISControls": [
           "3.13"
         ],
-        "CIS": "3.3.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SC-28, AC-4",
         "CMMC": "MP.L2-3.8.1",
@@ -1299,7 +1299,7 @@
         "CISControls": [
           "3.7"
         ],
-        "CIS": "3.4.1",
+        "CIS": "3.3.1",
         "NIST": "AC-16, SC-28",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -1329,7 +1329,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "4.1.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "CM-2, CM-6",
         "CMMC": "CM.L2-3.4.1",
@@ -1360,7 +1360,7 @@
         "CISControls": [
           "13.5"
         ],
-        "CIS": "4.1.3",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-3, CM-7",
         "CMMC": "AC.L1-3.1.2",
@@ -1390,7 +1390,7 @@
         "CISControls": [
           "3.6"
         ],
-        "CIS": "4.1.2",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SC-28",
         "CMMC": "MP.L2-3.8.9",
@@ -1422,7 +1422,7 @@
           "3.3",
           "4.12"
         ],
-        "CIS": "4.3.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-19, SC-28",
         "CMMC": "AC.L2-3.1.19",
@@ -1453,7 +1453,7 @@
           "10.1",
           "10.2"
         ],
-        "CIS": "4.4.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SI-3",
         "CMMC": "SI.L1-3.14.2",
@@ -1483,7 +1483,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "9.1.1",
+        "CIS": "",
         "NIST": "AC-4, SC-7",
         "CMMC": "SC.L1-3.13.1",
         "MITRE": [
@@ -1514,7 +1514,7 @@
         "CISControls": [
           "3.13"
         ],
-        "CIS": "9.2.1",
+        "CIS": "",
         "NIST": "AC-4, SC-7",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -1544,7 +1544,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "9.3.1",
+        "CIS": "",
         "NIST": "CM-5, AC-6",
         "CMMC": "CM.L2-3.4.5",
         "MITRE": [
@@ -1574,7 +1574,7 @@
         "CISControls": [
           "4.8"
         ],
-        "CIS": "2.1.6",
+        "CIS": "",
         "NIST": "SC-8, IA-2",
         "CMMC": "SC.L2-3.13.8",
         "MITRE": [
@@ -1604,7 +1604,7 @@
         "CISControls": [
           "4.8"
         ],
-        "CIS": "2.1.6",
+        "CIS": "",
         "NIST": "SC-8, IA-2",
         "CMMC": "SC.L2-3.13.8",
         "MITRE": [
@@ -1663,7 +1663,7 @@
         "CISControls": [
           "5.3"
         ],
-        "CIS": "1.1.3",
+        "CIS": "",
         "NIST": "AC-2, IA-2",
         "CMMC": "AC.L1-3.1.1",
         "MITRE": [
@@ -1693,7 +1693,7 @@
         "CISControls": [
           "6.7"
         ],
-        "CIS": "5.2.2.6",
+        "CIS": "",
         "SCuBA": "MS.AAD.2.3v1",
         "NIST": "AC-7, IA-2",
         "CMMC": "AC.L2-3.1.8",
@@ -1724,7 +1724,7 @@
         "CISControls": [
           "6.7"
         ],
-        "CIS": "5.2.2.7",
+        "CIS": "",
         "SCuBA": "MS.AAD.2.1v1",
         "NIST": "AC-7, IA-5",
         "CMMC": "AC.L2-3.1.8",
@@ -1753,7 +1753,7 @@
       "Remediation": "Entra ID > Security > Named locations > Add IP ranges location. Mark office and VPN IP ranges as trusted.",
       "References": {
         "CISControls": [],
-        "CIS": "5.2.1",
+        "CIS": "5.2.2.14",
         "SCuBA": "",
         "NIST": "AC-17",
         "CMMC": "AC.L2-3.1.12",
@@ -1783,7 +1783,7 @@
         "CISControls": [
           "13.5"
         ],
-        "CIS": "5.2.2.8",
+        "CIS": "",
         "SCuBA": "MS.AAD.3.7v1",
         "NIST": "CM-7, AC-17",
         "CMMC": "CM.L2-3.4.1",
@@ -1814,7 +1814,7 @@
           "6.8",
           "5.4"
         ],
-        "CIS": "5.1.2.2",
+        "CIS": "",
         "SCuBA": "MS.AAD.7.3v1",
         "NIST": "AC-6(5)",
         "CMMC": "AC.L2-3.1.6",
@@ -1845,7 +1845,7 @@
         "CISControls": [
           "6.5"
         ],
-        "CIS": "5.1.3.1",
+        "CIS": "",
         "NIST": "IA-2(1)",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -1875,7 +1875,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "5.1.3.2",
+        "CIS": "",
         "NIST": "AC-6(9), AU-12",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -1904,7 +1904,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "5.1.3.3",
+        "CIS": "5.3.4",
         "SCuBA": "MS.AAD.7.6v1",
         "NIST": "AC-6(5)",
         "CMMC": "AC.L2-3.1.5",
@@ -1934,7 +1934,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "5.1.3.4",
+        "CIS": "",
         "NIST": "AC-6",
         "CMMC": "AC.L2-3.1.5",
         "MITRE": [
@@ -1963,7 +1963,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "5.3.1",
+        "CIS": "5.1.6.3",
         "SCuBA": "MS.AAD.8.2v1",
         "NIST": "AC-2",
         "CMMC": "AC.L1-3.1.2",
@@ -1993,7 +1993,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "5.3.2",
+        "CIS": "5.1.2.3",
         "NIST": "CM-7, AC-6",
         "CMMC": "CM.L2-3.4.6",
         "MITRE": [
@@ -2022,7 +2022,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "5.3.3",
+        "CIS": "5.1.6.2",
         "SCuBA": "MS.AAD.8.1v1",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.3",
@@ -2051,7 +2051,7 @@
       "Remediation": "Entra ID > Password reset > Properties > Self service password reset enabled = All or Selected.",
       "References": {
         "CISControls": [],
-        "CIS": "5.4.1",
+        "CIS": "5.2.4.1",
         "SCuBA": "",
         "NIST": "IA-5",
         "CMMC": "IA.L2-3.5.7",
@@ -2079,7 +2079,7 @@
       "Remediation": "Entra ID > Password reset > Authentication methods > Number of methods required = 2.",
       "References": {
         "CISControls": [],
-        "CIS": "5.4.2",
+        "CIS": "5.2.4.2",
         "SCuBA": "",
         "NIST": "IA-2(1), IA-5",
         "CMMC": "IA.L2-3.5.3",
@@ -2109,7 +2109,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "5.5.1",
+        "CIS": "5.1.2.2",
         "SCuBA": "MS.AAD.5.1v1",
         "NIST": "CM-5, AC-6",
         "CMMC": "CM.L2-3.4.5",
@@ -2140,7 +2140,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "5.5.2",
+        "CIS": "",
         "SCuBA": "MS.AAD.5.2v1",
         "NIST": "AC-3",
         "CMMC": "AC.L1-3.1.2",
@@ -2171,7 +2171,7 @@
         "CISControls": [
           "6.1"
         ],
-        "CIS": "5.5.3",
+        "CIS": "5.1.5.2",
         "SCuBA": "MS.AAD.5.3v1",
         "NIST": "AC-3",
         "CMMC": "AC.L1-3.1.1",
@@ -2199,7 +2199,7 @@
       "Remediation": "Entra ID > Security > Authentication methods > Password protection > Lockout threshold ≤10.",
       "References": {
         "CISControls": [],
-        "CIS": "5.6.1",
+        "CIS": "5.2.3.8",
         "SCuBA": "",
         "NIST": "AC-7",
         "CMMC": "AC.L2-3.1.8",
@@ -2229,7 +2229,7 @@
         "CISControls": [
           "5.4"
         ],
-        "CIS": "5.1.2.3",
+        "CIS": "1.1.2",
         "NIST": "CP-2, AC-2",
         "CMMC": "IR.L2-3.6.1",
         "MITRE": [
@@ -2258,7 +2258,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "2.3.3",
+        "CIS": "",
         "NIST": "SI-3",
         "CMMC": "SI.L1-3.14.2",
         "MITRE": [
@@ -2288,7 +2288,7 @@
           "9.7",
           "10.7"
         ],
-        "CIS": "2.1.8",
+        "CIS": "",
         "SCuBA": "MS.SECURITYSUITE.1.2v1",
         "NIST": "SI-3",
         "CMMC": "SI.L1-3.14.2",
@@ -2318,7 +2318,7 @@
         "CISControls": [
           "9.6"
         ],
-        "CIS": "2.1.9",
+        "CIS": "2.1.2",
         "SCuBA": "MS.SECURITYSUITE.1.1v1",
         "NIST": "SI-3",
         "CMMC": "SI.L1-3.14.2",
@@ -2349,7 +2349,7 @@
         "CISControls": [
           "9.7"
         ],
-        "CIS": "2.1.10",
+        "CIS": "",
         "NIST": "SI-8",
         "CMMC": "SI.L1-3.14.2",
         "MITRE": [
@@ -2378,7 +2378,7 @@
         "CISControls": [
           "9.7"
         ],
-        "CIS": "2.1.11",
+        "CIS": "",
         "SCuBA": "MS.SECURITYSUITE.6.1v1",
         "NIST": "SI-8",
         "CMMC": "SI.L2-3.14.7",
@@ -2408,7 +2408,7 @@
         "CISControls": [
           "9.7"
         ],
-        "CIS": "2.1.12",
+        "CIS": "",
         "NIST": "SI-8",
         "CMMC": "SI.L2-3.14.7",
         "MITRE": [
@@ -2467,7 +2467,7 @@
         "CISControls": [
           "9.7"
         ],
-        "CIS": "2.1.14",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SI-8, AU-12",
         "CMMC": "SI.L2-3.14.7",
@@ -2499,7 +2499,7 @@
           "8.11",
           "13.1"
         ],
-        "CIS": "2.1.15",
+        "CIS": "",
         "SCuBA": "MS.SECURITYSUITE.4.1v1",
         "NIST": "AU-12, SI-4",
         "CMMC": "AU.L2-3.3.1",
@@ -2530,7 +2530,7 @@
           "13.1",
           "8.11"
         ],
-        "CIS": "2.1.16",
+        "CIS": "",
         "NIST": "SI-4, AU-12",
         "CMMC": "SI.L2-3.14.6",
         "MITRE": [
@@ -2592,7 +2592,7 @@
           "3.3",
           "13.5"
         ],
-        "CIS": "7.2.7",
+        "CIS": "",
         "NIST": "SC-28, AC-19",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -2621,7 +2621,7 @@
         "CISControls": [
           "3.4"
         ],
-        "CIS": "7.2.3",
+        "CIS": "",
         "SCuBA": "MS.SHAREPOINT.3.1v1",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.3",
@@ -2651,7 +2651,7 @@
         "CISControls": [
           "2.5"
         ],
-        "CIS": "7.3.3",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "CM-7",
         "CMMC": "CM.L2-3.4.6",
@@ -2681,7 +2681,7 @@
         "CISControls": [
           "2.7"
         ],
-        "CIS": "7.3.4",
+        "CIS": "",
         "NIST": "SC-18, SI-3",
         "CMMC": "SI.L1-3.14.2",
         "MITRE": [
@@ -2710,7 +2710,7 @@
         "CISControls": [
           "3.3"
         ],
-        "CIS": "7.3.5",
+        "CIS": "8.1.1",
         "SCuBA": "",
         "NIST": "AC-4",
         "CMMC": "MP.L2-3.8.1",
@@ -2741,7 +2741,7 @@
         "CISControls": [
           "3.3"
         ],
-        "CIS": "7.2.4",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "IA-3, AC-3",
         "CMMC": "IA.L1-3.5.2",
@@ -2771,7 +2771,7 @@
         "CISControls": [
           "6.2"
         ],
-        "CIS": "7.2.5",
+        "CIS": "",
         "NIST": "AC-12",
         "CMMC": "AC.L2-3.1.11",
         "MITRE": [
@@ -2802,7 +2802,7 @@
           "3.3",
           "13.5"
         ],
-        "CIS": "7.2.8",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-4, SC-28",
         "CMMC": "MP.L2-3.8.1",
@@ -2832,7 +2832,7 @@
         "CISControls": [
           "4.8"
         ],
-        "CIS": "8.2.4",
+        "CIS": "",
         "NIST": "AC-17",
         "CMMC": "AC.L2-3.1.12",
         "MITRE": [
@@ -2862,7 +2862,7 @@
         "CISControls": [
           "2.5"
         ],
-        "CIS": "8.3.1",
+        "CIS": "8.4.1",
         "SCuBA": "MS.TEAMS.5.2v2",
         "NIST": "CM-7",
         "CMMC": "CM.L2-3.4.6",
@@ -2892,7 +2892,7 @@
         "CISControls": [
           "4.8"
         ],
-        "CIS": "8.3.2",
+        "CIS": "8.1.1",
         "SCuBA": "",
         "NIST": "AC-4",
         "CMMC": "MP.L2-3.8.1",
@@ -2923,7 +2923,7 @@
         "CISControls": [
           "4.8"
         ],
-        "CIS": "8.3.3",
+        "CIS": "8.1.2",
         "NIST": "SI-8",
         "CMMC": "SI.L2-3.14.7",
         "MITRE": [
@@ -2953,7 +2953,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "8.5.4",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AU-9",
         "CMMC": "AU.L2-3.3.8",
@@ -2983,7 +2983,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "8.5.5",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-3",
         "CMMC": "AC.L1-3.1.1",
@@ -3013,7 +3013,7 @@
         "CISControls": [
           "4.8"
         ],
-        "CIS": "8.2.5",
+        "CIS": "8.2.1",
         "SCuBA": "MS.TEAMS.2.3v2",
         "NIST": "AC-17",
         "CMMC": "AC.L2-3.1.12",
@@ -3044,7 +3044,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "8.5.6",
+        "CIS": "8.5.4",
         "NIST": "AC-3, IA-3",
         "CMMC": "AC.L1-3.1.1",
         "MITRE": [
@@ -3104,7 +3104,7 @@
         "CISControls": [
           "3.14"
         ],
-        "CIS": "3.2.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AU-12",
         "CMMC": "AU.L2-3.3.1",
@@ -3134,7 +3134,7 @@
         "CISControls": [
           "3.12"
         ],
-        "CIS": "3.2.2",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-4",
         "CMMC": "AC.L2-3.1.3",
@@ -3164,7 +3164,7 @@
         "CISControls": [
           "3.14"
         ],
-        "CIS": "3.2.3",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SI-4",
         "CMMC": "SI.L2-3.14.7",
@@ -3195,7 +3195,7 @@
         "CISControls": [
           "3.4"
         ],
-        "CIS": "3.3.2",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.2",
@@ -3225,7 +3225,7 @@
         "CISControls": [
           "3.7"
         ],
-        "CIS": "3.4.2",
+        "CIS": "",
         "NIST": "AC-16, SC-28",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -3255,7 +3255,7 @@
           "10.7",
           "13.2"
         ],
-        "CIS": "4.4.2",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SI-3, SI-4",
         "CMMC": "SI.L2-3.14.7",
@@ -3286,7 +3286,7 @@
         "CISControls": [
           "10.5"
         ],
-        "CIS": "4.4.3",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SI-3, CM-7",
         "CMMC": "SI.L1-3.14.2",
@@ -3317,7 +3317,7 @@
         "CISControls": [
           "4.5"
         ],
-        "CIS": "4.4.4",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SC-7",
         "CMMC": "SC.L1-3.13.1",
@@ -3348,7 +3348,7 @@
         "CISControls": [
           "3.6"
         ],
-        "CIS": "4.2.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SC-28",
         "CMMC": "MP.L2-3.8.9",
@@ -3379,7 +3379,7 @@
         "CISControls": [
           "7.3"
         ],
-        "CIS": "4.5.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SI-2",
         "CMMC": "SI.L1-3.14.1",
@@ -3410,7 +3410,7 @@
         "CISControls": [
           "13.1"
         ],
-        "CIS": "5.1.3.5",
+        "CIS": "",
         "SCuBA": "MS.AAD.7.7v1",
         "NIST": "AC-6(9), AU-12",
         "CMMC": "AU.L2-3.3.1",
@@ -3440,7 +3440,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "5.1.4.1",
+        "CIS": "",
         "NIST": "AC-6(7)",
         "CMMC": "AC.L2-3.1.5",
         "MITRE": [
@@ -3469,7 +3469,7 @@
         "CISControls": [
           "6.3"
         ],
-        "CIS": "5.2.1.1",
+        "CIS": "5.2.3.1",
         "SCuBA": "MS.AAD.3.3v2",
         "NIST": "IA-2(1)",
         "CMMC": "IA.L2-3.5.3",
@@ -3500,7 +3500,7 @@
           "6.5",
           "6.3"
         ],
-        "CIS": "5.2.1.2",
+        "CIS": "",
         "NIST": "IA-2(1), IA-5",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -3531,7 +3531,7 @@
         "CISControls": [
           "6.7"
         ],
-        "CIS": "5.2.2.7",
+        "CIS": "",
         "SCuBA": "MS.AAD.2.2v1",
         "NIST": "IR-4, AC-7",
         "CMMC": "IR.L2-3.6.1",
@@ -3562,7 +3562,7 @@
         "CISControls": [
           "5.4"
         ],
-        "CIS": "5.1.1.1",
+        "CIS": "",
         "SCuBA": "MS.AAD.7.3v1",
         "NIST": "AC-6(5)",
         "CMMC": "AC.L2-3.1.6",
@@ -3592,7 +3592,7 @@
         "CISControls": [
           "13.1"
         ],
-        "CIS": "5.1.2.4",
+        "CIS": "2.2.1",
         "NIST": "AU-2, IR-4",
         "CMMC": "IR.L2-3.6.1",
         "MITRE": [
@@ -3621,7 +3621,7 @@
         "CISControls": [
           "4.3"
         ],
-        "CIS": "5.2.3.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-12",
         "CMMC": "AC.L2-3.1.10",
@@ -3652,7 +3652,7 @@
         "CISControls": [
           "8.10"
         ],
-        "CIS": "2.1.3",
+        "CIS": "",
         "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.2",
         "MITRE": [
@@ -3682,7 +3682,7 @@
           "8.2",
           "8.5"
         ],
-        "CIS": "3.1.1",
+        "CIS": "",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -3713,7 +3713,7 @@
           "9.7",
           "10.1"
         ],
-        "CIS": "2.3.4",
+        "CIS": "2.1.5",
         "SCuBA": "MS.SECURITYSUITE.1.4v1",
         "NIST": "SI-3",
         "CMMC": "SI.L1-3.14.2",
@@ -3744,7 +3744,7 @@
         "CISControls": [
           "9.7"
         ],
-        "CIS": "2.1.7",
+        "CIS": "",
         "NIST": "SI-8",
         "CMMC": "SI.L1-3.14.2",
         "MITRE": [
@@ -3773,7 +3773,7 @@
         "CISControls": [
           "9.7"
         ],
-        "CIS": "2.1.7",
+        "CIS": "",
         "NIST": "SI-3",
         "CMMC": "SI.L1-3.14.2",
         "MITRE": [
@@ -3803,7 +3803,7 @@
         "CISControls": [
           "9.7"
         ],
-        "CIS": "2.1.7",
+        "CIS": "",
         "NIST": "SI-8",
         "CMMC": "SI.L2-3.14.7",
         "MITRE": [
@@ -3833,7 +3833,7 @@
         "CISControls": [
           "13.1"
         ],
-        "CIS": "2.4.1",
+        "CIS": "2.4.3",
         "SCuBA": "",
         "NIST": "SI-4",
         "CMMC": "SI.L2-3.14.7",
@@ -3865,7 +3865,7 @@
           "13.1",
           "8.11"
         ],
-        "CIS": "3.1.3",
+        "CIS": "",
         "NIST": "IR-6, AU-6",
         "CMMC": "IR.L2-3.6.1",
         "MITRE": [
@@ -3896,7 +3896,7 @@
           "5.4",
           "6.8"
         ],
-        "CIS": "7.1.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-6(7)",
         "CMMC": "AC.L2-3.1.5",
@@ -3926,7 +3926,7 @@
         "CISControls": [
           "3.14"
         ],
-        "CIS": "7.2.9",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-3, AU-12",
         "CMMC": "AC.L1-3.1.1",
@@ -3957,7 +3957,7 @@
           "11.1",
           "11.2"
         ],
-        "CIS": "7.3.6",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "CP-9, CP-10",
         "CMMC": "CM.L2-3.4.2",
@@ -3988,7 +3988,7 @@
           "6.2",
           "3.4"
         ],
-        "CIS": "7.2.6",
+        "CIS": "",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L1-3.1.1",
         "MITRE": [
@@ -4017,7 +4017,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "8.5.7",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-4",
         "CMMC": "AC.L2-3.1.3",
@@ -4047,7 +4047,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "8.5.2",
+        "CIS": "8.5.3",
         "SCuBA": "MS.TEAMS.1.3v1",
         "NIST": "AC-3, IA-3",
         "CMMC": "AC.L1-3.1.2",
@@ -4077,7 +4077,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "8.5.8",
+        "CIS": "8.5.5",
         "SCuBA": "",
         "NIST": "AC-3",
         "CMMC": "AC.L1-3.1.2",
@@ -4107,7 +4107,7 @@
         "CISControls": [
           "3.13"
         ],
-        "CIS": "8.3.4",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-4, SC-28",
         "CMMC": "AC.L2-3.1.3",
@@ -4138,7 +4138,7 @@
           "8.9",
           "8.10"
         ],
-        "CIS": "3.1.3",
+        "CIS": "",
         "NIST": "AU-4, AU-9",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -4168,7 +4168,7 @@
         "CISControls": [
           "3.14"
         ],
-        "CIS": "3.5.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AU-11, IR-4",
         "CMMC": "IR.L2-3.6.1",
@@ -4196,7 +4196,7 @@
       "Remediation": "Microsoft Purview portal (purview.microsoft.com) > Compliance Manager > Improvement actions > Assign to owners and set target dates.",
       "References": {
         "CISControls": [],
-        "CIS": "3.5.2",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "CA-7",
         "CMMC": "CA.L2-3.12.3",
@@ -4227,7 +4227,7 @@
           "3.13",
           "3.7"
         ],
-        "CIS": "3.3.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SC-28, AC-4",
         "CMMC": "MP.L2-3.8.1",
@@ -4258,7 +4258,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "4.1.4",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "CM-7, AC-3",
         "CMMC": "CM.L2-3.4.1",
@@ -4288,7 +4288,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "4.3.2",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "CM-6, AC-19",
         "CMMC": "CM.L2-3.4.2",
@@ -4318,7 +4318,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "4.3.3",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SC-28, CM-7",
         "CMMC": "CM.L2-3.4.1",
@@ -4348,7 +4348,7 @@
         "CISControls": [
           "3.13"
         ],
-        "CIS": "9.2.2",
+        "CIS": "",
         "NIST": "AC-4",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -4378,7 +4378,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "9.3.2",
+        "CIS": "",
         "NIST": "CM-5, AC-3",
         "CMMC": "AC.L1-3.1.2",
         "MITRE": [
@@ -4409,7 +4409,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "9.3.3",
+        "CIS": "",
         "NIST": "CM-5, AC-6",
         "CMMC": "CM.L2-3.4.5",
         "MITRE": [
@@ -4441,7 +4441,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "5.2.2.10",
+        "CIS": "",
         "SCuBA": "MS.AAD.3.9v1",
         "NIST": "IA-2",
         "CMMC": "IA.L2-3.5.3",
@@ -4473,7 +4473,7 @@
           "6.8",
           "5.4"
         ],
-        "CIS": "5.1.1.2",
+        "CIS": "",
         "NIST": "AC-2, AC-6(5)",
         "CMMC": "AC.L1-3.1.2",
         "MITRE": [
@@ -4503,7 +4503,7 @@
         "CISControls": [
           "5.5"
         ],
-        "CIS": "5.1.5.1",
+        "CIS": "",
         "NIST": "IA-3, IR-4",
         "CMMC": "IR.L2-3.6.1",
         "MITRE": [
@@ -4531,7 +4531,7 @@
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
         "CISControls": [],
-        "CIS": "5.2.3.2",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-12, IA-2",
         "CMMC": "AC.L2-3.1.10",
@@ -4562,7 +4562,7 @@
         "CISControls": [
           "6.2"
         ],
-        "CIS": "5.2.3.3",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-12",
         "CMMC": "AC.L2-3.1.11",
@@ -4592,7 +4592,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "5.3.5",
+        "CIS": "",
         "NIST": "AC-17, IA-2",
         "CMMC": "AC.L1-3.1.2",
         "MITRE": [
@@ -4622,7 +4622,7 @@
         "CISControls": [
           "12.8"
         ],
-        "CIS": "5.1.1.3",
+        "CIS": "",
         "NIST": "AC-17, CM-7",
         "CMMC": "AC.L1-3.1.2",
         "MITRE": [
@@ -4649,7 +4649,7 @@
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
         "CISControls": [],
-        "CIS": "5.3.6",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-8",
         "CMMC": "AC.L2-3.1.9",
@@ -4680,7 +4680,7 @@
           "6.8",
           "5.5"
         ],
-        "CIS": "5.1.5.2",
+        "CIS": "",
         "NIST": "IA-3, AC-6",
         "CMMC": "IA.L2-3.5.3",
         "MITRE": [
@@ -4710,7 +4710,7 @@
         "CISControls": [
           "3.13"
         ],
-        "CIS": "3.3.4",
+        "CIS": "3.2.1",
         "SCuBA": "MS.SECURITYSUITE.3.2v1",
         "NIST": "SC-28, AC-4",
         "CMMC": "MP.L2-3.8.1",
@@ -4741,7 +4741,7 @@
         "CISControls": [
           "3.13"
         ],
-        "CIS": "3.3.5",
+        "CIS": "",
         "SCuBA": "MS.SECURITYSUITE.3.1v1",
         "NIST": "SC-28",
         "CMMC": "MP.L2-3.8.1",
@@ -4772,7 +4772,7 @@
         "CISControls": [
           "13.1"
         ],
-        "CIS": "2.4.2",
+        "CIS": "",
         "NIST": "SI-4, AU-12",
         "CMMC": "SI.L2-3.14.7",
         "MITRE": [
@@ -4800,7 +4800,7 @@
       "LicenseRequirement": "Defender for Office 365 Plan 2 (M365 E5 or add-on)",
       "References": {
         "CISControls": [],
-        "CIS": "2.3.5",
+        "CIS": "2.4.1",
         "NIST": "SI-3, IR-4",
         "CMMC": "SI.L1-3.14.2",
         "MITRE": [
@@ -4830,7 +4830,7 @@
         "CISControls": [
           "3.13"
         ],
-        "CIS": "3.3.6",
+        "CIS": "",
         "NIST": "SC-28, MP-7",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -4861,7 +4861,7 @@
         "CISControls": [
           "14.2"
         ],
-        "CIS": "2.3.6",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AT-2, AT-3",
         "CMMC": "AT.L2-3.2.1",
@@ -4891,7 +4891,7 @@
         "CISControls": [
           "9.3"
         ],
-        "CIS": "2.3.2",
+        "CIS": "2.1.1",
         "SCuBA": "MS.SECURITYSUITE.7.1v1",
         "NIST": "SI-3",
         "CMMC": "SI.L1-3.14.2",
@@ -4923,7 +4923,7 @@
           "8.2",
           "8.5"
         ],
-        "CIS": "3.1.2",
+        "CIS": "6.1.1",
         "SCuBA": "MS.EXO.13.1v1",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
@@ -4955,7 +4955,7 @@
           "9.7",
           "10.1"
         ],
-        "CIS": "2.1.6",
+        "CIS": "",
         "SCuBA": "MS.SECURITYSUITE.2.1v1",
         "NIST": "SI-3",
         "CMMC": "SI.L1-3.14.2",
@@ -4986,7 +4986,7 @@
         "CISControls": [
           "9.7"
         ],
-        "CIS": "2.1.13",
+        "CIS": "2.1.14",
         "SCuBA": "",
         "NIST": "SI-8",
         "CMMC": "SI.L1-3.14.2",
@@ -5016,7 +5016,7 @@
         "CISControls": [
           "3.4"
         ],
-        "CIS": "8.5.9",
+        "CIS": "",
         "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -5045,7 +5045,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "8.5.3",
+        "CIS": "8.5.2",
         "SCuBA": "MS.TEAMS.1.2v2",
         "NIST": "AC-3, IA-3",
         "CMMC": "AC.L1-3.1.2",
@@ -5076,7 +5076,7 @@
           "4.8",
           "6.7"
         ],
-        "CIS": "8.2.6",
+        "CIS": "8.2.1",
         "SCuBA": "MS.TEAMS.2.1v2",
         "NIST": "AC-17",
         "CMMC": "AC.L1-3.1.2",
@@ -5107,7 +5107,7 @@
         "CISControls": [
           "4.1"
         ],
-        "CIS": "8.5.10",
+        "CIS": "",
         "NIST": "AC-3",
         "CMMC": "AC.L1-3.1.1",
         "MITRE": [
@@ -5137,7 +5137,7 @@
           "5.4",
           "4.7"
         ],
-        "CIS": "4.1.5",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-2, IA-5",
         "CMMC": "IA.L1-3.5.1",
@@ -5166,7 +5166,7 @@
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1",
       "References": {
         "CISControls": [],
-        "CIS": "4.1.6",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "IA-2(1)",
         "CMMC": "IA.L2-3.5.3",
@@ -5197,7 +5197,7 @@
         "CISControls": [
           "7.3"
         ],
-        "CIS": "4.5.5",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SI-2",
         "CMMC": "SI.L1-3.14.1",
@@ -5229,7 +5229,7 @@
           "4.3",
           "4.10"
         ],
-        "CIS": "4.2.2",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "IA-5, AC-11",
         "CMMC": "IA.L1-3.5.1",
@@ -5260,7 +5260,7 @@
         "CISControls": [
           "8.5"
         ],
-        "CIS": "3.1.4",
+        "CIS": "",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [
@@ -5290,7 +5290,7 @@
         "CISControls": [
           "8.10"
         ],
-        "CIS": "3.1.5",
+        "CIS": "",
         "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.2",
         "MITRE": [
@@ -5321,7 +5321,7 @@
         "CISControls": [
           "3.7"
         ],
-        "CIS": "3.4.1",
+        "CIS": "3.3.1",
         "NIST": "AC-16, SC-28",
         "CMMC": "MP.L2-3.8.1",
         "MITRE": [
@@ -5351,7 +5351,7 @@
         "CISControls": [
           "3.4"
         ],
-        "CIS": "3.3.3",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AU-11, IR-4",
         "CMMC": "IR.L2-3.6.1",
@@ -5381,7 +5381,7 @@
         "CISControls": [
           "3.7"
         ],
-        "CIS": "3.4.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-16, SC-28",
         "CMMC": "MP.L2-3.8.4",
@@ -5411,7 +5411,7 @@
         "CISControls": [
           "3.13"
         ],
-        "CIS": "3.3.4",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "SC-28, AC-4",
         "CMMC": "SC.L2-3.13.16",
@@ -5442,7 +5442,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "5.5.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-2",
         "CMMC": "AC.L1-3.1.1",
@@ -5472,7 +5472,7 @@
         "CISControls": [
           "6.8"
         ],
-        "CIS": "9.3.4",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "CM-7, AC-6",
         "CMMC": "CM.L2-3.4.6",
@@ -5535,7 +5535,7 @@
         "CISControls": [
           "6.3"
         ],
-        "CIS": "5.2.1",
+        "CIS": "",
         "SCuBA": "MS.AAD.3.1v1",
         "NIST": "IA-2(1)",
         "CMMC": "IA.L2-3.5.3",
@@ -5566,7 +5566,7 @@
         "CISControls": [
           "5.3"
         ],
-        "CIS": "5.3.4",
+        "CIS": "",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L1-3.1.1",
         "ISO27001": "A.5.18, A.6.5",
@@ -5595,7 +5595,7 @@
         "CISControls": [
           "5.3"
         ],
-        "CIS": "5.1.6.1",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L1-3.1.1",
@@ -5625,7 +5625,7 @@
         "CISControls": [
           "2.1"
         ],
-        "CIS": "5.5.4",
+        "CIS": "",
         "NIST": "AC-3",
         "CMMC": "AC.L1-3.1.2",
         "ISO27001": "A.5.23, A.8.4",
@@ -5657,7 +5657,7 @@
           "3.13",
           "8.11"
         ],
-        "CIS": "2.1.2",
+        "CIS": "",
         "SCuBA": "MS.EXO.1.1v2",
         "NIST": "AC-4",
         "CMMC": "AC.L1-3.1.2",
@@ -5687,7 +5687,7 @@
         "CISControls": [
           "5.3"
         ],
-        "CIS": "2.1.5",
+        "CIS": "1.2.2",
         "NIST": "IA-5",
         "CMMC": "IA.L1-3.5.1",
         "ISO27001": "A.5.16",
@@ -5717,7 +5717,7 @@
           "8.2",
           "8.5"
         ],
-        "CIS": "2.1.3",
+        "CIS": "6.1.3",
         "SCuBA": "MS.EXO.13.1v1",
         "NIST": "AU-2",
         "CMMC": "AU.L2-3.3.1",
@@ -5748,7 +5748,7 @@
         "CISControls": [
           "4.8"
         ],
-        "CIS": "2.1.1",
+        "CIS": "",
         "NIST": "IA-2",
         "CMMC": "IA.L2-3.5.3",
         "ISO27001": "A.8.24",
@@ -5777,7 +5777,7 @@
       "LicenseRequirement": "Included (all plans)",
       "References": {
         "CISControls": [],
-        "CIS": "3.5.2",
+        "CIS": "",
         "SCuBA": "",
         "NIST": "CA-7",
         "CMMC": "CA.L2-3.12.3",
@@ -5808,7 +5808,7 @@
           "3.13",
           "8.11"
         ],
-        "CIS": "6.2.1",
+        "CIS": "",
         "SCuBA": "MS.EXO.1.1v2",
         "NIST": "AU-6, IR-4, SI-4",
         "CMMC": "AU.L2-3.3.5, IR.L2-3.6.1, SI.L2-3.14.6",
@@ -5839,7 +5839,7 @@
           "3.13",
           "8.11"
         ],
-        "CIS": "6.2.1",
+        "CIS": "",
         "SCuBA": "MS.EXO.1.1v2",
         "NIST": "AU-6, IR-4, SI-4",
         "CMMC": "AU.L2-3.3.5, IR.L2-3.6.1, SI.L2-3.14.6",
@@ -5870,7 +5870,7 @@
           "8.2",
           "8.5"
         ],
-        "CIS": "3.1.2",
+        "CIS": "6.1.3",
         "SCuBA": "MS.EXO.13.1v1",
         "NIST": "AU-2, AU-3, AU-12",
         "CMMC": "AU.L2-3.3.1, AU.L2-3.3.2",
@@ -5900,7 +5900,7 @@
         "CISControls": [
           "4.8"
         ],
-        "CIS": "6.2.2",
+        "CIS": "",
         "SCuBA": "MS.EXO.5.1v1",
         "NIST": "IA-2, SC-8, SI-4",
         "CMMC": "IA.L2-3.5.3, SC.L2-3.13.8, SI.L2-3.14.6",
@@ -5927,7 +5927,7 @@
       "EvaluatorFunction": "Test-TPControlEXOMailFlowConnectors",
       "Remediation": "Exchange admin center > Mail flow > Connectors. Review every enabled connector against a known list. Delete any nobody recognizes. On inbound connectors set RequireTls $true and scope to specific SenderIPAddresses or SenderDomains. On outbound connectors set TlsSettings to EncryptionOnly or better and avoid a * recipient domain unless a smart host genuinely handles all mail.",
       "References": {
-        "CIS": "6.2.2",
+        "CIS": "",
         "CISControls": [
           "4.1",
           "13.4"
@@ -5991,7 +5991,7 @@
       "EvaluatorFunction": "Test-TPControlAADAppCredentialExpiry",
       "Remediation": "Entra admin center > App registrations > Certificates and secrets. Remove expired credentials rather than leaving them in place. Reissue anything with a lifetime beyond 180 days at a shorter term and record the rotation date. Prefer certificate credentials or workload identity federation over client secrets where the application supports them.",
       "References": {
-        "CIS": "1.3.4",
+        "CIS": "",
         "CISControls": [
           "5.4",
           "6.2"
@@ -6028,7 +6028,7 @@
           "2.1",
           "5.4"
         ],
-        "CIS": "5.5.4",
+        "CIS": "",
         "NIST": "AC-6",
         "CMMC": "AC.L2-3.1.5",
         "ISO27001": "A.5.15, A.8.2",
@@ -6061,7 +6061,7 @@
           "2.1",
           "3.3"
         ],
-        "CIS": "5.5.4",
+        "CIS": "",
         "NIST": "AC-3",
         "CMMC": "AC.L1-3.1.2",
         "ISO27001": "A.5.23, A.8.4",
@@ -6088,7 +6088,7 @@
       "EvaluatorFunction": "Test-TPControlDefenderTenantAllowBlockList",
       "Remediation": "Defender portal > Policies & rules > Threat policies > Tenant Allow/Block Lists. Review every allow entry on the Domains & addresses, URLs and Files tabs; remove any whose reason no longer applies and set an expiry on the rest (an allow expires 45 days after last use by default, or on a date up to 30 days out). Spoofed-sender allow entries never expire by design: review that each still names a sending service in use and remove the rest. Block entries may remain permanent.",
       "References": {
-        "CIS": "2.1.6",
+        "CIS": "",
         "CISControls": [
           "9.6",
           "13.4"
@@ -6120,7 +6120,7 @@
       "EvaluatorFunction": "Test-TPControlEXOMailboxHoldCoverage",
       "Remediation": "Apply a Purview retention policy scoped to all Exchange mailboxes (Purview > Data lifecycle management > Retention policies), or enable litigation hold per mailbox: Set-Mailbox -Identity <UPN> -LitigationHoldEnabled $true -LitigationHoldDuration <days>. A tenant-wide retention policy is the maintainable option; per-mailbox litigation hold does not follow new starters.",
       "References": {
-        "CIS": "6.1.4",
+        "CIS": "",
         "CISControls": [
           "11.1",
           "11.2"
@@ -6152,7 +6152,7 @@
       "EvaluatorFunction": "Test-TPControlEXODeletedItemRetention",
       "Remediation": "Set-Mailbox -Identity <UPN> -RetainDeletedItemsFor 30. Apply tenant-wide with: Get-Mailbox -ResultSize Unlimited | Set-Mailbox -RetainDeletedItemsFor 30. 30 days is the maximum; beyond it requires a hold (EXO-9.1).",
       "References": {
-        "CIS": "6.1.5",
+        "CIS": "",
         "CISControls": [
           "11.1"
         ],
@@ -6182,7 +6182,7 @@
       "EvaluatorFunction": "Test-TPControlSPODepartedUserRetention",
       "Remediation": "Set-SPOTenant -DeletedUserPersonalSiteRetentionPeriodInDays 365 (maximum 3650). Pair it with an offboarding step that reassigns ownership of the OneDrive before the account is deleted, so retention is a safety net rather than the plan.",
       "References": {
-        "CIS": "7.2.10",
+        "CIS": "",
         "CISControls": [
           "11.1",
           "3.4"
