@@ -8,19 +8,19 @@ Every control carried a CIS number, because the coverage test required one. The 
 
 ## The rule
 
-A control cites recommendation R only when (1) its evaluator judges the setting R audits, or some of the settings R lists, and (2) every state the evaluator scores Satisfied also passes R's audit for those settings. A looser threshold (2 to 8 Global Administrators against R's 2 to 4), a different setting with a similar name, or a pass that R's audit would fail leaves the control uncited, with the reason recorded. A control that only ever reports not assessed may cite R when R is its subject, because it can never credit the client with R.
+A control cites recommendation R only when (1) its evaluator judges the setting R audits, or some of the settings R lists, and (2) every state the evaluator scores Satisfied also passes R's audit for those settings. A looser threshold (anti-phishing level 2 against R's 3, before the change below), a different setting with a similar name, or a pass that R's audit would fail leaves the control uncited, with the reason recorded. A control that only ever reports not assessed may cite R when R is its subject, because it can never credit the client with R.
 
 | Relation | Meaning | Controls |
 |---|---|---|
-| Equivalent | The evaluator checks what R audits, and every pass meets R. | 50 |
+| Equivalent | The evaluator checks what R audits, and every pass meets R. | 51 |
 | Subset | The evaluator checks some of the settings R lists, and every pass meets R for those settings. R can still fail on a setting the tool does not read. | 19 |
-| Not cited | No v7.0.0 recommendation describes the check, or the evaluator passes something R fails. | 135 |
+| Not cited | No v7.0.0 recommendation describes the check, or the evaluator passes something R fails. | 134 |
 
-69 controls cite 51 of the 160 recommendations. The CIS card in the report scores only those controls, so it is a narrower number than before, and an honest one: it covers what the tool verified against this benchmark.
+70 controls cite 52 of the 160 recommendations. The CIS card in the report scores only those controls, so it is a narrower number than before, and an honest one: it covers what the tool verified against this benchmark.
 
 **Scope differences kept as citations.** EXO-1.3, EXO-5.3, EXO-8.2 and DEF-2.3 judge the policies and rules in force (`Get-TPInForcePolicies`; enabled transport rules), while the CIS audit reads every policy, or only the Default malware policy. A disabled rule or a policy no recipient falls under changes nothing about what happens to mail, so the judgment is the same requirement; it is recorded here because a CIS audit run by hand can disagree with the tool on such a tenant.
 
-**Evaluators tightened to earn a citation (2026-10-25).** DEF-1.5 requires phishing threshold 3 (it accepted 2); AAD-12.1 judges `isMfaCapable` (it read `isMfaRegistered`); EXO-1.4 requires DKIM `Status = Valid` on every accepted domain, relay domains included (it judged authoritative domains on `Enabled` alone); SPO-1.4 and SPO-3.4 require guest expiry of 30 days (any expiry passed); SPO-2.6 and SPO-2.7 require re-verification within 15 days (any period, and 30, passed); PVW-1.3 requires the enforced DLP policy to cover Exchange, SharePoint, OneDrive or Teams (an Endpoint-only policy passed). Each changes verdicts: a tenant that passed before can now fail.
+**Evaluators tightened to earn a citation (2026-10-25).** DEF-1.5 requires phishing threshold 3 (it accepted 2); AAD-12.1 judges `isMfaCapable` (it read `isMfaRegistered`); EXO-1.4 requires DKIM `Status = Valid` on every accepted domain, relay domains included (it judged authoritative domains on `Enabled` alone); SPO-1.4 and SPO-3.4 require guest expiry of 30 days (any expiry passed); SPO-2.6 and SPO-2.7 require re-verification within 15 days (any period, and 30, passed); PVW-1.3 requires the enforced DLP policy to cover Exchange, SharePoint, OneDrive or Teams (an Endpoint-only policy passed); AAD-3.1 allows two to four Global Administrators (it allowed eight; the NRG baseline moved to v1.1 with it, by the owner's decision). Each changes verdicts: a tenant that passed before can now fail.
 
 ## Cited controls
 
@@ -28,6 +28,7 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 |---|---|---|---|---|
 | AAD-1.2 MFA Required for All Users | 5.2.2.2 | Ensure multifactor authentication is enabled for all users (Automated) | Equivalent | Satisfied only via an enabled CA policy with IncludeUsers All, Include All applications and no application exclusions (Test-TPCAAllUsers/Test-TPCAAllApps/Get-TPCANarrowing), grant necessarily requiring mfa or authStrength, plus every enabled member registered; Security Defaults scores Partial, never Satisfied, so every pass meets 5.2.2.2 (IncludeUsers All, IncludeApplications All, mfa OR authenticationStrength, state enabled). |
 | AAD-2.2 Named Locations Defined | 5.2.2.14 | Ensure trusted 'named locations' are defined (Automated) | Equivalent | Satisfied when at least one named location has isTrusted true; only ipNamedLocation carries isTrusted and Graph requires at least one ipRange on it, which is exactly 5.2.2.14 (isTrusted true, ipRanges contains at least one range). |
+| AAD-3.1 Global Administrator Count 2-4, Cloud-Only | 1.1.3 | Ensure that between two and four global admins are designated (Automated) | Equivalent | Satisfied requires two to four Global Administrators, permanent and eligible together, all cloud-only, and reports a group holding the role as not assessed rather than counting it, so every pass meets 1.1.3's two to four (since NRG baseline v1.1, 2026-10-25; it allowed eight before). |
 | AAD-3.5 PIM GA Activation Requires Approval | 5.3.4 | Ensure approval is required for Global Administrator role activation (Automated) | Subset | Satisfied when the Global Administrator role management policy's Approval rule has isApprovalRequired true, which is 5.3.4 step 3; the evaluator does not check step 4 (approvalStages.primaryApprovers contains at least one user). |
 | AAD-4.1 Guest Invite Permissions Restricted | 5.1.6.3 | Ensure guest user invitations are limited (Automated) | Equivalent | Satisfied for allowInvitesFrom adminsAndGuestInviters, admins or none; 'admins' is not a Graph allowInvitesFrom value, so in practice this is exactly R's "adminsAndGuestInviters or none". |
 | AAD-4.2 External Collaboration Settings Restricted | 5.1.2.3 | Ensure 'Restrict non-admin users from creating tenants' is set to 'Yes' (Automated) | Equivalent | The only thing judged is defaultUserRolePermissions.allowedToCreateTenants (Satisfied when not true), which is 5.1.2.3; note the tool also scores Satisfied when the property was not returned ($null), a not-read value R could not pass. |
@@ -100,7 +101,6 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 
 The reasons are in `Config/cis-m365-uncited-controls.json`. Several are one change away from a citation, and each needs a decision first:
 
-- AAD-3.1 (1.1.3): CIS allows 2 to 4 Global Administrators; the tool allows 8, which is also what CISA SCuBA MS.AAD.7.1v1 and the NRG baseline v1.0 expected state say. Tightening it is the owner's call.
 - AAD-1.1 (5.2.2.3): CIS audits a Conditional Access policy blocking `exchangeActiveSync` and `other`; the tool also passes Security Defaults, an owner decision recorded in CLAUDE.md.
 - AAD-6.2 (5.1.5.1): CIS requires "Do not allow user consent"; the tool passes `microsoft-user-default-low` by design.
 - AAD-1.3 (5.2.2.5) and AAD-10.2 (1.1.1): the shared privileged-role list lacks Global Reader and Password Administrator, which 5.2.2.5 names; changing it moves several controls at once.
@@ -108,12 +108,11 @@ The reasons are in `Config/cis-m365-uncited-controls.json`. Several are one chan
 
 ## Recommendations no control checks
 
-109 of the 160 recommendations have no citing control. Some are settings the collectors already read and no evaluator scores (5.2.3.2 banned passwords, 5.2.3.3 on-premises password protection, 5.2.3.9 lockout duration, 2.1.12 the connection filter IP allow list); the rest need a new read. Section 9 (Microsoft Fabric) is outside what the tool assesses.
+108 of the 160 recommendations have no citing control. Some are settings the collectors already read and no evaluator scores (5.2.3.2 banned passwords, 5.2.3.3 on-premises password protection, 5.2.3.9 lockout duration, 2.1.12 the connection filter IP allow list); the rest need a new read. Section 9 (Microsoft Fabric) is outside what the tool assesses.
 
-**1. Microsoft 365 admin center** (12)
+**1. Microsoft 365 admin center** (11)
 
 - 1.1.1 Ensure Administrative accounts are cloud-only (Automated)
-- 1.1.3 Ensure that between two and four global admins are designated (Automated)
 - 1.1.4 Ensure administrative accounts use licenses with a reduced application footprint (Automated)
 - 1.2.1 Ensure that only organizationally managed/approved public groups exist (Automated)
 - 1.3.1 Ensure the 'Password expiration policy' is set to 'Set passwords to never expire (recommended)' (Automated)

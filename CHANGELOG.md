@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **[Baseline v1.1] AAD-3.1 allows two to four Global Administrators, not eight (owner's decision, 2026-10-25).**
+  CIS Microsoft 365 Foundations v7.0.0 1.1.3 sets two to four; the tool and the NRG baseline v1.0 allowed eight, as
+  CISA SCuBA MS.AAD.7.1v1 does. The count includes eligible assignments, the break-glass pair included. A tenant with
+  five to eight Global Administrators now fails AAD-3.1 while still meeting SCuBA, whose alignment becomes Partial
+  (stricter). `Config/tp-baseline.json` is version 1.1, so a run compared against a v1.0 run reports that the standard
+  changed instead of counting a regression. AAD-3.1 now cites CIS 1.1.3; 70 controls cite 52 recommendations.
+
 - **[Accuracy] Eight checks tightened to CIS Microsoft 365 Foundations v7.0.0, each now citing it.** The v7.0.0
   re-map left these uncited because each passed something the benchmark's audit fails. They now judge what the
   benchmark audits, so client verdicts change: DEF-1.5 requires anti-phishing threshold 3, Microsoft's Standard preset
@@ -11,9 +18,8 @@
   to expire after 30 days (any expiry passed; a longer one is now Partial); SPO-2.6 and SPO-2.7 require re-verification
   within 15 days (SPO-2.6 accepted any period and SPO-2.7 accepted 30; longer is Partial); PVW-1.3 counts only an
   enforced DLP policy that covers Exchange, SharePoint, OneDrive or Teams. A results file that lacks the value a check
-  now needs (MFA capability, DKIM Status, DLP workloads) reports that check not assessed, never a pass. 69 controls
-  now cite 51 recommendations. AAD-3.1 still allows eight Global Administrators, as CISA SCuBA and the NRG baseline
-  do; CIS allows four, and changing it is the owner's decision. `TP.CisV7Thresholds.Tests.ps1` pins every boundary.
+  now needs (MFA capability, DKIM Status, DLP workloads) reports that check not assessed, never a pass.
+  `TP.CisV7Thresholds.Tests.ps1` pins every boundary.
 
 - **[Accuracy] CIS Microsoft 365 Foundations citations moved to v7.0.0, and only where the check matches.** Every
   control carried a CIS number because a test required one; 78 of the 159 distinct numbers do not exist in v7.0.0,

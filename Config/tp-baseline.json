@@ -1,7 +1,7 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "title": "NRG Security Baseline",
-  "status": "v1.0 — locked 2026-09-29 after live validation on one tenant (PR #104). Changes to tiers go through docs/TP-SECURITY-BASELINE-CANDIDATES.md first; the test fails if the two differ.",
+  "status": "v1.1 — v1.0 was locked 2026-09-29 after live validation on one tenant (PR #104); v1.1 (2026-10-25, owner's decision) changes one expected state: AAD-3.1 allows two to four Global Administrators (CIS Microsoft 365 Foundations v7.0.0 1.1.3), not eight. Changes to tiers go through docs/TP-SECURITY-BASELINE-CANDIDATES.md first; the test fails if the two differ.",
   "purpose": "The controls NRG requires of every managed client, by tier. A desired-state layer over the assessment: it reads findings and never changes them, creates none, and moves no framework score. Assessment-only controls are absent from this file on purpose; absence means not required.",
   "note": "Governance only. Nothing tenant-specific lives here: licensing comes from the tenant SKUs (license gating), the EDR from clients.json or -ThirdPartyEDR, skipped collectors from the assessment scope, and approved deviations from Config/baseline-exceptions/<tenant-domain>.psd1.",
   "tiers": {
@@ -134,14 +134,14 @@
     },
     {
       "ControlId": "AAD-3.1",
-      "Title": "Global Administrator Count 2-8, Cloud-Only",
+      "Title": "Global Administrator Count 2-4, Cloud-Only",
       "Tier": "Minimum",
       "Owner": "Identity",
       "RawDataKeys": [
         "AAD-DirectoryRoles"
       ],
       "EvidenceSource": "Graph: directory role members (Invoke-TPCollectAADRoles)",
-      "ExpectedState": "Two to eight Global Administrators, all cloud-only, including the break-glass pair.",
+      "ExpectedState": "Two to four Global Administrators (permanent and eligible together), all cloud-only, including the break-glass pair.",
       "SlaClass": "Critical",
       "DependsOn": [],
       "FreshnessClass": "Weekly",

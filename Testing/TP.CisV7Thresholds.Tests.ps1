@@ -29,9 +29,28 @@ Describe 'Evaluators tightened to CIS Microsoft 365 Foundations v7.0.0' {
         It '<Cid> cites CIS <Rec>' -TestCases @(
             @{ Cid = 'DEF-1.5'; Rec = '2.1.7' }, @{ Cid = 'AAD-12.1'; Rec = '5.2.3.4' }, @{ Cid = 'EXO-1.4'; Rec = '2.1.9' },
             @{ Cid = 'SPO-1.4'; Rec = '7.2.9' }, @{ Cid = 'SPO-3.4'; Rec = '7.2.9' }, @{ Cid = 'SPO-2.6'; Rec = '7.2.10' },
-            @{ Cid = 'SPO-2.7'; Rec = '7.2.10' }, @{ Cid = 'PVW-1.3'; Rec = '3.2.1' }) {
+            @{ Cid = 'SPO-2.7'; Rec = '7.2.10' }, @{ Cid = 'PVW-1.3'; Rec = '3.2.1' }, @{ Cid = 'AAD-3.1'; Rec = '1.1.3' }) {
             param($Cid, $Rec)
             ($script:Controls | Where-Object ControlId -eq $Cid).References.CIS | Should -Be $Rec
+        }
+    }
+
+    Context 'AAD-3.1 allows two to four Global Administrators (1.1.3, NRG baseline v1.1)' {
+        BeforeAll {
+            function script:Ga([int] $Count) {
+                Clear-TPState
+                $ga = @(1..$Count | ForEach-Object { @{ RoleDefinitionId = '62e90394-69f5-4237-9190-012177145e10'; PrincipalId = "id$_"; PrincipalUPN = "admin$_@corp.example"; PrincipalType = 'User'; OnPremisesSyncEnabled = $false } })
+                Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{ RoleAssignments = $ga; SectionStatus = @{ RoleAssignments = 'Collected' } })
+                Verdict 'Test-TPControlAADPrivAccess' 'AAD-3.1'
+            }
+        }
+        It 'four passes'      { (Ga 4).State | Should -Be 'Satisfied' }
+        It 'five is a Gap'    { (Ga 5).State | Should -Be 'Gap' }
+        It 'eight is a Gap, though CISA SCuBA allows it' { (Ga 8).State | Should -Be 'Gap' }
+        It 'the baseline expected state says four' {
+            $b = Get-Content (Join-Path $script:RepoRoot 'Config/tp-baseline.json') -Raw | ConvertFrom-Json
+            $b.version | Should -Be '1.1'
+            ($b | ConvertTo-Json -Depth 20) | Should -Match 'Two to four Global Administrators'
         }
     }
 
