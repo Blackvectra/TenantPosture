@@ -409,7 +409,7 @@ Describe 'Tenant comparison: any tier may be compared' {
         $def = Get-TPBaselineDefinition -Force
         $noExc = [ordered]@{ Available = $false; Path = ''; Entries = @(); Approved = @{}; Rejected = @() }
         $f = @(foreach ($id in $def.Controls.Keys) {
-            if ($id -ne 'VM-VERIFY-01') { [pscustomobject]@{ ControlId = $id; State = 'Satisfied'; Category = 'x'; Title = $id; Severity = 'High'; Detail = 'observed'; Timestamp = (Get-Date).ToString('o') } }
+            if ($def.Controls[$id].Automated) { [pscustomobject]@{ ControlId = $id; State = 'Satisfied'; Category = 'x'; Title = $id; Severity = 'High'; Detail = 'observed'; Timestamp = (Get-Date).ToString('o') } }
         })
         $bcMin = Get-TPBaselineCompliance -Findings $f -TargetTier Minimum  -Exceptions $noExc -RawData @{} -Coverage @{}
         $bcStd = Get-TPBaselineCompliance -Findings $f -TargetTier Standard -Exceptions $noExc -RawData @{} -Coverage @{}
@@ -420,10 +420,11 @@ Describe 'Tenant comparison: any tier may be compared' {
         $c.Counts.Compared | Should -Be $minCount
         $c.Counts.RequiredOnlyAtB | Should -Be $stdCount
         @($c.NotCompared | Where-Object { $_.RequiredTierB -ne 'Standard' }) | Should -BeNullOrEmpty
-        # VM-VERIFY-01 is manual: required at both, verified at neither.
-        (& $script:One $c 'VM-VERIFY-01').Classification | Should -Be 'NotComparable'
-        (& $script:One $c 'VM-VERIFY-01').ReasonCodeA | Should -Be 'ManualVerificationRequired'
-        $c.Counts.SamePosture | Should -Be ($minCount - 1)
+        # A manual CIS row is required at both and verified at neither.
+        (& $script:One $c 'CIS-1.1.2').Classification | Should -Be 'NotComparable'
+        (& $script:One $c 'CIS-1.1.2').ReasonCodeA | Should -Be 'ManualVerificationRequired'
+        $manualMin = @($def.Controls.Values | Where-Object { $_.Tier -eq 'Minimum' -and -not $_.Automated }).Count
+        $c.Counts.SamePosture | Should -Be ($minCount - $manualMin)
     }
 }
 

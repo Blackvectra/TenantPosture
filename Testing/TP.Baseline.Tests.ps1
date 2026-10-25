@@ -29,10 +29,36 @@ Describe 'NRG Security Baseline — definition and tiers' {
         @($script:Def.TierOrder) | Should -Be @('Minimum', 'Standard', 'Hardened')
     }
 
-    It 'every automated baseline control exists in controls.json; VM-VERIFY-01 is the one manual item' {
+    It 'every row is a CIS v7.0.0 recommendation: an automated row is a control citing it, a manual row is CIS-<number>' {
+        $cis = @{}; foreach ($c in (Get-TPControlDefinitions)) { $cis[$c.ControlId] = [string]$c.References.CIS }
+        $recs = @(Get-Content (Join-Path $script:RepoRoot 'Config/framework-baselines/cis-m365-v7.0.0.txt') | Where-Object { $_ -match '^\d' } | ForEach-Object { ($_ -split "`t", 2)[0] })
         foreach ($c in $script:Def.Controls.Values) {
-            if ($c.Automated) { $script:ControlIds | Should -Contain $c.ControlId }
-            else { $c.ControlId | Should -Be 'VM-VERIFY-01' }
+            $c.Cis | Should -BeIn $recs -Because "$($c.ControlId) must name a v7.0.0 recommendation"
+            if ($c.Automated) {
+                $script:ControlIds | Should -Contain $c.ControlId
+                $cis[$c.ControlId] | Should -Be $c.Cis -Because "$($c.ControlId)'s row and its controls.json citation must name the same recommendation"
+            } else { $c.ControlId | Should -Be "CIS-$($c.Cis)" }
+        }
+    }
+
+    It 'covers every v7.0.0 recommendation, each at the tier of its CIS profile' {
+        $recs = @(Get-Content (Join-Path $script:RepoRoot 'Config/framework-baselines/cis-m365-v7.0.0.txt') | Where-Object { $_ -match '^\d' } | ForEach-Object { ($_ -split "`t", 2)[0] })
+        $covered = @($script:Def.Controls.Values | ForEach-Object { $_.Cis } | Select-Object -Unique)
+        @($recs | Where-Object { $_ -notin $covered }) | Should -BeNullOrEmpty
+        $expect = @{ 'E3 Level 1' = 'Minimum'; 'E5 Level 1' = 'Standard' }
+        foreach ($c in $script:Def.Controls.Values) {
+            $want = if ($c.CisProfile -match 'E3 Level 1') { 'Minimum' } elseif ($c.CisProfile -match 'E5 Level 1') { 'Standard' } else { 'Hardened' }
+            $c.Tier | Should -Be $want -Because "$($c.ControlId) is CIS $($c.Cis) ($($c.CisProfile))"
+        }
+    }
+
+    It 'a recommendation the tool checks only in part keeps a manual row for the rest, so a partial check never reads as the whole' {
+        $byRec = $script:Def.Controls.Values | Group-Object { $_.Cis }
+        foreach ($g in $byRec) {
+            $auto = @($g.Group | Where-Object { $_.Automated })
+            if ($auto.Count -gt 0 -and @($auto | Where-Object { $_.CisRelation -ne 'Subset' }).Count -eq 0) {
+                @($g.Group | Where-Object { -not $_.Automated }).Count | Should -Be 1 -Because "CIS $($g.Name) is checked only in part"
+            }
         }
     }
 
@@ -90,8 +116,8 @@ Describe 'NRG Security Baseline — definition and tiers' {
         }
         It 'an assessment-only control is never required at any tier' {
             $required = @(Get-TPBaselineRequiredControls -TargetTier Hardened -Definition $script:Def | ForEach-Object { $_.ControlId })
-            $required | Should -Not -Contain 'AAD-13.1'   # Secure Score, assessment-only by decision
-            $required | Should -Not -Contain 'AAD-12.1'   # named-list twin of AAD-1.2
+            $required | Should -Not -Contain 'AAD-13.1'   # Secure Score: no CIS recommendation
+            $required | Should -Not -Contain 'INT-1.5'    # NRG-only before v2.0: no CIS M365 recommendation
         }
         It 'rejects an unknown tier' {
             { Get-TPBaselineRequiredControls -TargetTier 'Platinum' -Definition $script:Def } | Should -Throw
@@ -491,20 +517,20 @@ Describe 'NRG Security Baseline — report rendering' {
         Clear-TPState
         # AAD-1.2 reads both collectors; without the second it is (correctly) not verified.
         foreach ($k in @('AAD-CAPolicies', 'AAD-AuthPolicies')) { Set-TPRawData -Key $k -Data @{ CollectorId = $k; CollectedAt = (Get-Date).ToString('o'); Success = $true; Data = @{} } }
-        Add-TPFinding -ControlId 'AAD-1.1' -State 'Satisfied' -Category 'Identity' -Title 'Legacy Authentication Blocked' -Severity 'Critical' -Detail 'Blocked for all users.' -FrameworkIds @('NIST:IA-2')
+        Add-TPFinding -ControlId 'AAD-7.1' -State 'Satisfied' -Category 'Identity' -Title 'Password Protection Lockout Configured' -Severity 'Medium' -Detail 'Lockout threshold 10.' -FrameworkIds @('NIST:AC-7')
         Add-TPFinding -ControlId 'AAD-1.2' -State 'Gap' -Category 'Identity' -Title 'MFA Required for All Users' -Severity 'Critical' -Detail 'No enforcing policy.' -FrameworkIds @('NIST:IA-2(1)')
         $script:findings = Get-TPFindings
         $script:metadata = @{
             TenantDomain = 'contoso.onmicrosoft.com'; TenantId = '00000000-0000-0000-0000-000000000000'
             Operator = 'assessor@nrgtechservices.com'; AssessmentDate = 'September 29, 2026'
             AssessmentTime = '2026-09-29T00:00:00.0000000+00:00'; ToolVersion = '4.14.3'; QuickScan = $false
-            BaselineVersion = '1.1'; TargetTier = 'Minimum'
+            BaselineVersion = '2.0'; TargetTier = 'Minimum'
         }
         $script:conn = @{ Graph = $true; EXO = $true; IPPSSession = $true; Teams = $true; SharePoint = $true }
         $script:regs = [ordered]@{
             Available = $true; Comparable = $false; BaselineVersionChanged = $true; TargetTierChanged = $false
-            PriorBaselineVersion = '1.0'; PriorTargetTier = 'Minimum'; CurrentBaselineVersion = '1.1'; CurrentTargetTier = 'Minimum'
-            Note = 'The baseline context changed (v1.0 Minimum -> v1.1 Minimum). A lower result does not mean the client got worse; only controls required in both runs at the same tier are compared.'
+            PriorBaselineVersion = '1.1'; PriorTargetTier = 'Minimum'; CurrentBaselineVersion = '2.0'; CurrentTargetTier = 'Minimum'
+            Note = 'The baseline context changed (v1.1 Minimum -> v2.0 Minimum). A lower result does not mean the client got worse; only controls required in both runs at the same tier are compared.'
             Regressions = @([pscustomobject]@{ ControlId = 'AAD-1.2'; Title = 'MFA Required for All Users'; RequiredTier = 'Minimum'; Previous = 'Satisfied'; Current = 'Failed'; Reason = 'Gap: No enforcing policy.' })
             Improvements = @()
         }
@@ -525,8 +551,8 @@ Describe 'NRG Security Baseline — report rendering' {
 
     It 'renders the section in both reports with the version and tier from the metadata' {
         $script:html | Should -Match "id='tp-baseline'"
-        $script:html | Should -Match 'NRG Security Baseline v1\.1 — Minimum tier'
-        $script:md   | Should -Match '## NRG Security Baseline v1\.1 — Minimum tier'
+        $script:html | Should -Match 'NRG Security Baseline v2\.0 — Minimum tier'
+        $script:md   | Should -Match '## NRG Security Baseline v2\.0 — Minimum tier'
     }
     It 'keeps configuration compliance and effectiveness visibility as separate blocks' {
         $script:html | Should -Match 'Configuration compliance'
@@ -575,32 +601,33 @@ Describe 'NRG Security Baseline — defects found by the first live validation' 
         $script:Entry | Should -Match 'if \(-not \$SkipDNS -and \(\$conn\.Graph -or \$conn\.EXO\)\)'
     }
 
-    It '"was not read" is a collection gap in the scope classifier, never "not applicable to this tenant" (SPO-1.2)' {
+    It '"was not read" is a collection gap in the scope classifier, never "not applicable to this tenant" (SPO-1.1)' {
         Set-TPRawData -Key 'SharePoint' -Data @{ CollectorId = 'x'; CollectedAt = (Get-Date).ToString('o'); Success = $true; Data = @{} }
-        Add-TPFinding -ControlId 'SPO-1.2' -State 'NotApplicable' -Category 'SharePoint' -Title 'Default link' -Severity 'Medium' `
-            -Detail 'Anyone links are enabled tenant-wide; the default link type was not read. Requires the SharePoint Online Management Shell (re-run with -IncludeSharePointShell).'
+        Add-TPFinding -ControlId 'SPO-1.1' -State 'NotApplicable' -Category 'SharePoint' -Title 'External sharing' -Severity 'Medium' `
+            -Detail 'The external sharing level was not read. Requires the SharePoint Online Management Shell (re-run with -IncludeSharePointShell).'
         $scope = Get-TPAssessmentScope -Findings (Get-TPFindings) -RawData (Get-TPRawData) -Coverage @{}
-        @($scope.NotApplicableToTenant | ForEach-Object { $_.ControlId }) | Should -Not -Contain 'SPO-1.2'
-        @($scope.CollectionIncomplete | ForEach-Object { $_.ControlId }) | Should -Contain 'SPO-1.2'
+        @($scope.NotApplicableToTenant | ForEach-Object { $_.ControlId }) | Should -Not -Contain 'SPO-1.1'
+        @($scope.CollectionIncomplete | ForEach-Object { $_.ControlId }) | Should -Contain 'SPO-1.1'
         $c = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -Definition $script:Def -Exceptions ([ordered]@{ Available = $false; Path = ''; Entries = @(); Approved = @{}; Rejected = @() })
-        $row = @($c.Controls | Where-Object { $_.ControlId -eq 'SPO-1.2' })[0]
+        $row = @($c.Controls | Where-Object { $_.ControlId -eq 'SPO-1.1' })[0]
         $row.ObservedState | Should -Be 'NotVerified'
         $row.NotVerifiedCause | Should -Be 'Evidence not read'
     }
 
-    It 'INT-2.2 no longer depends on INT-2.1 (ASR is enforced by Defender Antivirus beside a third-party EDR)' {
-        @($script:Def.Controls['INT-2.2'].DependsOn).Count | Should -Be 0
+    It 'no row depends on a control outside the baseline (v2.0 dropped every NRG-only row, INT-2.1 and INT-2.2 among them)' {
+        $script:Def.Controls.Contains('INT-2.2') | Should -BeFalse
+        foreach ($c in $script:Def.Controls.Values) { foreach ($d in @($c.DependsOn)) { $script:Def.Controls.Contains($d) | Should -BeTrue } }
     }
 
     It 'splits NotVerified by cause so the number reads as an engineering list' {
-        # Exchange absent, Purview absent, one manual item, one quick-scan omission.
+        # Exchange absent, Purview absent, the manual CIS rows, one quick-scan omission.
         Set-TPRawData -Key 'AAD-CAPolicies' -Data @{ CollectorId = 'x'; CollectedAt = (Get-Date).ToString('o'); Success = $true; Data = @{} }
         Add-TPFinding -ControlId 'EXO-1.3' -State 'NotApplicable' -Category 'Email' -Title 'x' -Severity 'High' -Detail 'EXO data not collected.'
         $c = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Minimum -Definition $script:Def -Exceptions ([ordered]@{ Available = $false; Path = ''; Entries = @(); Approved = @{}; Rejected = @() })
         $causes = $c.Summary.NotVerifiedByCause
         $causes.Keys | Should -Contain 'Collector unavailable: EXO-MailboxConfig'
         $causes.Keys | Should -Contain 'Manual control'
-        $causes['Manual control'] | Should -Be 1
+        $causes['Manual control'] | Should -Be @($script:Def.Controls.Values | Where-Object { -not $_.Automated -and $_.Tier -eq 'Minimum' }).Count
         ([int]($causes.Values | Measure-Object -Sum).Sum) | Should -Be $c.Summary.NotVerified -Because 'every NotVerified row has exactly one cause'
         @($c.Controls | Where-Object { $_.ObservedState -eq 'NotVerified' -and -not $_.NotVerifiedCause }).Count | Should -Be 0
     }

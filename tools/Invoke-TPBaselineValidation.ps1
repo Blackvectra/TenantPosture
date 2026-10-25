@@ -160,7 +160,8 @@ foreach ($r in $asRun.Controls) {
         if ($ss -is [System.Collections.IDictionary]) { foreach ($name in @($ss.Keys)) { if ([string]$ss[$name] -eq 'Failed') { "$k/$name" } } }
         elseif ($null -ne $ss) { foreach ($p in $ss.PSObject.Properties) { if ([string]$p.Value -eq 'Failed') { "$k/$($p.Name)" } } }
     })
-    $licStatus = if ($cid -eq 'VM-VERIFY-01') { 'n/a' } else { try { Get-TPControlLicenseStatus -ControlId $cid } catch { 'n/a' } }
+    $manualRow = ($cid -eq 'VM-VERIFY-01' -or $cid -like 'CIS-*')
+    $licStatus = if ($manualRow) { 'n/a' } else { try { Get-TPControlLicenseStatus -ControlId $cid } catch { 'n/a' } }
     $bucket = if ($bucketOf.ContainsKey($cid)) { $bucketOf[$cid] } else { '' }
     $group = if ($links.ContainsKey($cid)) { [string]$links[$cid].Primary } else { '' }
     $emb = if ($embeddedById.ContainsKey($cid)) { [string](Get-TPObjectField -Item $embeddedById[$cid] -Key 'BaselineStatus' -Default '') } else { '' }
@@ -170,8 +171,8 @@ foreach ($r in $asRun.Controls) {
     $class = 'ExpectedBehavior'; $checks = [System.Collections.Generic.List[string]]::new()
     $st = [string]$r.ObservedState; $bs = [string]$r.BaselineStatus
     if ($emb -and $emb -ne $bs) { $class = 'ImplementationBugCandidate'; $checks.Add("embedded BaselineStatus '$emb' differs from recomputed '$bs'") }
-    if ($cid -eq 'VM-VERIFY-01') {
-        $checks.Add('manual requirement; NotVerified until a Defender VM collector exists')
+    if ($manualRow) {
+        $checks.Add('manual requirement; NotVerified until the tool reads its evidence')
     } elseif ($st -eq 'Satisfied') {
         if ($anyCollectorFailed) { $class = 'ImplementationBugCandidate'; $checks.Add('Satisfied while a collector did not succeed') }
         # Note only: most failed sections belong to other controls sharing the
@@ -302,7 +303,7 @@ foreach ($cls in ($order.Keys | Sort-Object { $order[$_] })) {
 }
 $null = $sb.AppendLine('## Operator review of the required set')
 $null = $sb.AppendLine()
-$null = $sb.AppendLine('For every Minimum and Standard control below, answer one question: if a new client signed tomorrow, would NRG tell its technicians this is what to implement? Record No as a tier change in docs/TP-SECURITY-BASELINE-CANDIDATES.md before v1.0 is locked.')
+$null = $sb.AppendLine('For every Minimum and Standard row below, answer one question: does the finding match what the CIS v7.0.0 audit procedure for its recommendation would say on this tenant? Tiers are CIS profiles (baseline v2.0) and are not edited here; record a disagreement as a citation issue in docs/TP-CIS-M365-ALIGNMENT.md.')
 $null = $sb.AppendLine()
 $null = $sb.AppendLine('| Control | Tier | Owner | Expected state | Keep tier? (Y/N) | Note |'); $null = $sb.AppendLine('|---|---|---|---|---|---|')
 foreach ($r in ($asRun.Controls | Where-Object { $_.RequiredTier -in @('Minimum', 'Standard') } | Sort-Object RequiredTier, ControlId)) {

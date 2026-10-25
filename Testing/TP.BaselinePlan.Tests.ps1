@@ -36,9 +36,9 @@ Describe 'NRG baseline plan — predictive, never a verdict' {
         foreach ($r in $script:Plan.Controls) { $r.Expected | Should -BeIn $script:Buckets -Because "$($r.ControlId) must land in a known bucket" }
     }
 
-    It 'keeps BaselineVersion 1.1 and names the tier' {
-        $script:Plan.BaselineVersion | Should -Be '1.1'
-        $script:Plan.Summary.BaselineVersion | Should -Be '1.1'
+    It 'keeps BaselineVersion 2.0 and names the tier' {
+        $script:Plan.BaselineVersion | Should -Be '2.0'
+        $script:Plan.Summary.BaselineVersion | Should -Be '2.0'
         $script:Plan.TargetTier | Should -Be 'Standard'
     }
 
@@ -88,16 +88,18 @@ Describe 'NRG baseline plan — predictive, never a verdict' {
         $p2 = @($p.Controls | Where-Object { $_.LicenseRequirement -match 'P2' })
         $p2.Count | Should -BeGreaterThan 0 -Because 'Hardened carries Entra ID P2 controls'
         foreach ($r in $p2) { $r.Expected | Should -Be 'LicenseBlockedExpected' -Because "$($r.ControlId) needs P2 and Business Premium lacks it" }
-        $p1 = @($p.Controls | Where-Object { $_.ControlId -eq 'AAD-1.1' })[0]
+        $p1 = @($p.Controls | Where-Object { $_.ControlId -eq 'AAD-1.2' })[0]
         $p1.Expected | Should -Be 'Automatic'
         $p1.LicenseStatus | Should -Be 'Met'
     }
 
-    It 'a declared third-party EDR moves exactly the Defender endpoint checks to ThirdPartyHandled, attested and not verified' {
-        $p = Get-TPBaselinePlan -TargetTier Standard -ThirdPartyEDR 'Cortex XDR'
+    It 'a declared third-party EDR moves only Defender endpoint checks to ThirdPartyHandled, and v2.0 requires none of them' {
+        $p = Get-TPBaselinePlan -TargetTier Hardened -ThirdPartyEDR 'Cortex XDR'
         $ids = @(& (Get-Module 'TenantPosture') { Get-TPDefenderEndpointCheckIds })
         $handled = @($p.Controls | Where-Object { $_.Expected -eq 'ThirdPartyHandled' })
-        $handled.Count | Should -BeGreaterThan 0
+        # No CIS Microsoft 365 recommendation is a Defender endpoint check, so
+        # the CIS-built baseline requires none and a declaration moves nothing.
+        $handled.Count | Should -Be 0
         foreach ($r in $handled) {
             $r.ControlId | Should -BeIn $ids
             $r.Reason | Should -Match 'attested and not verified'
@@ -138,10 +140,10 @@ Describe 'NRG baseline plan — predictive, never a verdict' {
         }
     }
 
-    It 'the manual control is Manual and expected NotVerified' {
-        $vm = @($script:Plan.Controls | Where-Object { $_.ControlId -eq 'VM-VERIFY-01' })[0]
-        $vm.Expected | Should -Be 'Manual'
-        $vm.ExpectedNotVerified | Should -BeTrue
+    It 'every manual CIS row is Manual and expected NotVerified' {
+        $manual = @($script:Plan.Controls | Where-Object { $_.ControlId -like 'CIS-*' })
+        $manual.Count | Should -BeGreaterThan 0
+        foreach ($m in $manual) { $m.Expected | Should -Be 'Manual'; $m.ExpectedNotVerified | Should -BeTrue }
     }
 
     It 'lists every connection the required controls need' {
@@ -152,11 +154,11 @@ Describe 'NRG baseline plan — predictive, never a verdict' {
     }
 
     It 'an approved exception is a disposition and changes no expected state' {
-        $exc = @{ Available = $true; Approved = @{ 'AAD-1.1' = @{ ControlId = 'AAD-1.1' } }; Rejected = @() }
+        $exc = @{ Available = $true; Approved = @{ 'AAD-1.2' = @{ ControlId = 'AAD-1.2' } }; Rejected = @() }
         $p = Get-TPBaselinePlan -TargetTier Standard -Exceptions $exc
-        $row = @($p.Controls | Where-Object { $_.ControlId -eq 'AAD-1.1' })[0]
+        $row = @($p.Controls | Where-Object { $_.ControlId -eq 'AAD-1.2' })[0]
         $row.Disposition | Should -Match '^ApprovedException'
-        $row.Expected | Should -Be (@($script:Plan.Controls | Where-Object { $_.ControlId -eq 'AAD-1.1' })[0].Expected)
+        $row.Expected | Should -Be (@($script:Plan.Controls | Where-Object { $_.ControlId -eq 'AAD-1.2' })[0].Expected)
         $p.Summary.ApprovedExceptions | Should -Be 1
     }
 
@@ -202,10 +204,10 @@ Describe 'NRG baseline plan — comparison with the run that followed' {
     It 'a control the plan expected to assess but the run did not verify is named, with its cause' {
         $states = @{}
         foreach ($r in $script:Plan.Controls) { $states[$r.ControlId] = $(if ($r.ExpectedNotVerified) { 'NotVerified' } else { 'Satisfied' }) }
-        $states['EXO-7.2'] = 'NotVerified'
+        $states['EXO-1.3'] = 'NotVerified'
         $c = Compare-TPBaselinePlan -Plan $script:Plan -Compliance (& $script:Compliance $states)
         @($c.UnexpectedNotVerified).Count | Should -Be 1
-        $c.UnexpectedNotVerified[0].ControlId | Should -Be 'EXO-7.2'
+        $c.UnexpectedNotVerified[0].ControlId | Should -Be 'EXO-1.3'
         $c.UnexpectedNotVerified[0].Cause | Should -Be 'Evidence not read'
         $c.Note | Should -Match '1 not expected'
     }
@@ -213,10 +215,10 @@ Describe 'NRG baseline plan — comparison with the run that followed' {
     It 'a control the plan expected NotVerified that the run verified is named, and one the plan never knew is listed, not compared' {
         $states = @{}
         foreach ($r in $script:Plan.Controls) { $states[$r.ControlId] = $(if ($r.ExpectedNotVerified) { 'NotVerified' } else { 'Satisfied' }) }
-        $states['VM-VERIFY-01'] = 'Satisfied'
+        $states['CIS-1.1.2'] = 'Satisfied'
         $states['SPO-3.3'] = 'NotVerified'
         $c = Compare-TPBaselinePlan -Plan $script:Plan -Compliance (& $script:Compliance $states)
-        @($c.ExpectedButVerified | ForEach-Object { $_.ControlId }) | Should -Contain 'VM-VERIFY-01'
+        @($c.ExpectedButVerified | ForEach-Object { $_.ControlId }) | Should -Contain 'CIS-1.1.2'
         @($c.NotInPlan) | Should -Contain 'SPO-3.3'
         @($c.UnexpectedNotVerified | ForEach-Object { $_.ControlId }) | Should -Not -Contain 'SPO-3.3'
     }
@@ -237,7 +239,7 @@ Describe 'NRG baseline plan — rendered beside the compliance view' {
         New-Item -ItemType Directory -Path $script:Tmp -Force | Out-Null
         $script:Plan = Get-TPBaselinePlan -TargetTier Standard
         # One finding so the compliance view has a row; everything else NotVerified.
-        Add-TPFinding -ControlId 'AAD-1.1' -State 'Satisfied' -Category 'Identity' -Title 'Legacy auth blocked' -Severity 'High' -Detail 'blocked'
+        Add-TPFinding -ControlId 'AAD-7.1' -State 'Satisfied' -Category 'Identity' -Title 'Lockout' -Severity 'Medium' -Detail 'threshold 10'
         $script:Findings = @(Get-TPFindings)
         $script:Compliance = Get-TPBaselineCompliance -Findings $script:Findings -TargetTier Standard -RawData @{} -Coverage @{}
         $script:Cmp = Compare-TPBaselinePlan -Plan $script:Plan -Compliance $script:Compliance
@@ -257,7 +259,7 @@ Describe 'NRG baseline plan — rendered beside the compliance view' {
     It 'the comparison names the rows the plan expected to assess that the run did not verify' {
         $script:Cmp.Available | Should -BeTrue
         @($script:Cmp.UnexpectedNotVerified).Count | Should -BeGreaterThan 0 -Because 'nothing was collected, so every automatic control is an unexpected NotVerified'
-        @($script:Cmp.UnexpectedNotVerified | ForEach-Object { $_.ControlId }) | Should -Not -Contain 'AAD-1.1'
+        @($script:Cmp.UnexpectedNotVerified | ForEach-Object { $_.ControlId }) | Should -Not -Contain 'AAD-7.1'
     }
 
     It 'the Markdown summary renders the plan-versus-run block without reassuring' {
@@ -392,14 +394,14 @@ Describe 'Per-client collector flags (clients.json Collectors block)' {
         # The declaration is an expectation: with the shell "enabled" but its
         # value unread on the day, the compliance view still says not verified.
         Clear-TPState
-        Add-TPFinding -ControlId 'SPO-1.2' -State 'NotApplicable' -Category 'SharePoint' -Title 'Default link' -Detail 'Anyone links are enabled tenant-wide; the default link type was not read. Requires the SharePoint Online Management Shell (Get-SPOTenant); not connected. Re-run with -IncludeSharePointShell to read it.'
+        Add-TPFinding -ControlId 'SPO-1.4' -State 'NotApplicable' -Category 'SharePoint' -Title 'Guest expiry' -Detail 'Requires the SharePoint Online Management Shell (Get-SPOTenant); not connected. Not exposed by Graph. Re-run with -IncludeSharePointShell to read it.'
         $raw = @{ 'SharePoint' = @{ CollectorId = 'SharePoint'; CollectedAt = (Get-Date).ToString('o'); Success = $true; Data = @{} } }
         $c = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -RawData $raw -Coverage @{}
-        $row = @($c.Controls | Where-Object { $_.ControlId -eq 'SPO-1.2' })[0]
+        $row = @($c.Controls | Where-Object { $_.ControlId -eq 'SPO-1.4' })[0]
         $row.ObservedState | Should -Be 'NotVerified'
         $row.ReasonCode | Should -Be 'OptionalCollectorRequired'
         $cmp = Compare-TPBaselinePlan -Plan $p -Compliance $c
-        @($cmp.UnexpectedNotVerified | ForEach-Object { $_.ControlId }) | Should -Contain 'SPO-1.2' -Because 'the plan expected it assessable and the run did not read it'
+        @($cmp.UnexpectedNotVerified | ForEach-Object { $_.ControlId }) | Should -Contain 'SPO-1.4' -Because 'the plan expected it assessable and the run did not read it'
         Clear-TPState
     }
 

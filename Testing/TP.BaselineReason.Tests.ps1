@@ -74,8 +74,18 @@ Describe 'Baseline reason contract — resolution and precedence' {
         $script:Codes = Get-TPBaselineReasonCodes
         $script:Now = Get-Date
         $script:Raw = { param([string] $Key, [bool] $Ok = $true) @{ CollectorId = $Key; CollectedAt = $script:Now.ToString('o'); Success = $Ok; Data = @{} } }
+        # v2.0 requires no Defender endpoint check (no CIS Microsoft 365
+        # recommendation is one), so the third-party EDR resolution is tested
+        # against the shipped definition plus one INT-2.1 row.
+        $script:EdrDef = [ordered]@{}
+        foreach ($k in $script:Def.Keys) { $script:EdrDef[$k] = $script:Def[$k] }
+        $ctl = [ordered]@{}; foreach ($k in $script:Def.Controls.Keys) { $ctl[$k] = $script:Def.Controls[$k] }
+        $ctl['INT-2.1'] = [ordered]@{ ControlId = 'INT-2.1'; Title = 'EDR'; Tier = 'Minimum'; Owner = 'Endpoint'; RawDataKeys = @('Intune-EndpointSecurity')
+            EvidenceSource = 'x'; ExpectedState = 'x'; SlaClass = 'High'; DependsOn = @(); FreshnessClass = 'Weekly'; EffectivenessCheck = 'x'
+            EffectivenessCapability = 'NotCollected'; EffectivenessEvidence = $null; Automated = $true; Reason = 'x'; Cis = ''; CisProfile = ''; CisRelation = '' }
+        $script:EdrDef['Controls'] = $ctl
         $script:Row = {
-            param([string] $State, [string] $Cause = '', [string] $Constraint = 'None', [string] $Prose = '', [string] $FState = '', [string] $Cid = 'AAD-1.1')
+            param([string] $State, [string] $Cause = '', [string] $Constraint = 'None', [string] $Prose = '', [string] $FState = '', [string] $Cid = 'AAD-7.1')
             [ordered]@{ ControlId = $Cid; ObservedState = $State; Constraint = $Constraint; NotVerifiedCause = $Cause; Reason = $Prose; ObservedFindingState = $FState }
         }
     }
@@ -83,7 +93,7 @@ Describe 'Baseline reason contract — resolution and precedence' {
     BeforeEach { Clear-TPState }
 
     It 'a compliance view carries a catalog code and a non-empty reason on every row, and the codes sum to the required count' {
-        Add-TPFinding -ControlId 'AAD-1.1' -State 'Satisfied' -Category 'Identity' -Title 'Legacy auth' -Severity 'High' -Detail 'Blocked for all users.'
+        Add-TPFinding -ControlId 'AAD-7.1' -State 'Satisfied' -Category 'Identity' -Title 'Lockout' -Severity 'Medium' -Detail 'Lockout threshold is 10.'
         Add-TPFinding -ControlId 'AAD-1.2' -State 'Gap' -Category 'Identity' -Title 'MFA' -Severity 'High' -Detail '48 of 99 enabled members have no registered MFA method. A second sentence.'
         $c = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -RawData @{ 'AAD-AuthPolicies' = (& $script:Raw 'AAD-AuthPolicies'); 'AAD-CAPolicies' = (& $script:Raw 'AAD-CAPolicies'); 'AAD-Users' = (& $script:Raw 'AAD-Users') } -Coverage @{}
         foreach ($r in $c.Controls) {
@@ -98,7 +108,7 @@ Describe 'Baseline reason contract — resolution and precedence' {
         $mfa = @($c.Controls | Where-Object { $_.ControlId -eq 'AAD-1.2' })[0]
         $mfa.ReasonCode | Should -Be 'ControlFailed'
         $mfa.Reason | Should -Be '48 of 99 enabled members have no registered MFA method.'
-        $ok = @($c.Controls | Where-Object { $_.ControlId -eq 'AAD-1.1' })[0]
+        $ok = @($c.Controls | Where-Object { $_.ControlId -eq 'AAD-7.1' })[0]
         $ok.ReasonCode | Should -Be 'Satisfied'
     }
 
@@ -116,7 +126,7 @@ Describe 'Baseline reason contract — resolution and precedence' {
     It 'a third-party declaration resolves ThirdPartyHandled, never ManualVerificationRequired or NotApplicable' {
         Add-TPFinding -ControlId 'INT-2.1' -State 'Gap' -Category 'Endpoint' -Title 'EDR' -Severity 'High' -Detail 'No EDR policy assigned.'
         $null = Set-TPThirdPartyEdr -Product 'Cortex XDR'
-        $c = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -RawData @{ 'Intune-EndpointSecurity' = (& $script:Raw 'Intune-EndpointSecurity') } -Coverage @{}
+        $c = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -Definition $script:EdrDef -RawData @{ 'Intune-EndpointSecurity' = (& $script:Raw 'Intune-EndpointSecurity') } -Coverage @{}
         $row = @($c.Controls | Where-Object { $_.ControlId -eq 'INT-2.1' })[0]
         $row.ObservedState | Should -Be 'NotApplicable'
         $row.ReasonCode | Should -Be 'ThirdPartyHandled'
@@ -127,18 +137,18 @@ Describe 'Baseline reason contract — resolution and precedence' {
     It 'a passing Defender check keeps Satisfied beside a third-party declaration' {
         Add-TPFinding -ControlId 'INT-2.1' -State 'Satisfied' -Category 'Endpoint' -Title 'EDR' -Severity 'High' -Detail 'EDR policy assigned to all devices.'
         $null = Set-TPThirdPartyEdr -Product 'Cortex XDR'
-        $c = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -RawData @{ 'Intune-EndpointSecurity' = (& $script:Raw 'Intune-EndpointSecurity') } -Coverage @{}
+        $c = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -Definition $script:EdrDef -RawData @{ 'Intune-EndpointSecurity' = (& $script:Raw 'Intune-EndpointSecurity') } -Coverage @{}
         (@($c.Controls | Where-Object { $_.ControlId -eq 'INT-2.1' })[0]).ReasonCode | Should -Be 'Satisfied'
     }
 
     It 'an unread SharePoint shell value resolves OptionalCollectorRequired; other unread evidence resolves EvidenceNotRead' {
-        Add-TPFinding -ControlId 'SPO-1.2' -State 'NotApplicable' -Category 'SharePoint' -Title 'Default link' -Detail 'Anyone links are enabled tenant-wide; the default link type was not read. Requires the SharePoint Online Management Shell (Get-SPOTenant); not connected. Re-run with -IncludeSharePointShell to read it.'
-        Add-TPFinding -ControlId 'EXO-7.2' -State 'NotApplicable' -Category 'Email' -Title 'Forwarding rules' -Detail 'Not assessed. 2 rule(s) forward to a recipient that could not be resolved to an address; the recipient was not read.'
+        Add-TPFinding -ControlId 'SPO-1.4' -State 'NotApplicable' -Category 'SharePoint' -Title 'Guest expiry' -Detail 'Requires the SharePoint Online Management Shell (Get-SPOTenant); not connected. Not exposed by Graph. Re-run with -IncludeSharePointShell to read it.'
+        Add-TPFinding -ControlId 'EXO-8.2' -State 'NotApplicable' -Category 'Email' -Title 'Forwarding rules' -Detail 'Not assessed. 2 rule(s) forward to a recipient that could not be resolved to an address; the recipient was not read.'
         $c = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -RawData @{ 'SharePoint' = (& $script:Raw 'SharePoint'); 'EXO-Inventory' = (& $script:Raw 'EXO-Inventory') } -Coverage @{}
-        $spo = @($c.Controls | Where-Object { $_.ControlId -eq 'SPO-1.2' })[0]
+        $spo = @($c.Controls | Where-Object { $_.ControlId -eq 'SPO-1.4' })[0]
         $spo.ReasonCode | Should -Be 'OptionalCollectorRequired'
         $spo.Reason | Should -Match 'IncludeSharePointShell'
-        $exo = @($c.Controls | Where-Object { $_.ControlId -eq 'EXO-7.2' })[0]
+        $exo = @($c.Controls | Where-Object { $_.ControlId -eq 'EXO-8.2' })[0]
         $exo.ReasonCode | Should -Be 'EvidenceNotRead'
         $exo.Reason | Should -Match 'could not be resolved'
     }
@@ -153,11 +163,11 @@ Describe 'Baseline reason contract — resolution and precedence' {
     }
 
     It 'stale evidence resolves EvidenceStale; the manual control resolves ManualVerificationRequired' {
-        Add-TPFinding -ControlId 'AAD-1.1' -State 'Satisfied' -Category 'Identity' -Title 'Legacy auth' -Severity 'High' -Detail 'Blocked.'
+        Add-TPFinding -ControlId 'AAD-7.1' -State 'Satisfied' -Category 'Identity' -Title 'Lockout' -Severity 'Medium' -Detail 'Threshold 10.'
         $old = @{ CollectorId = 'AAD-AuthPolicies'; CollectedAt = $script:Now.AddDays(-400).ToString('o'); Success = $true; Data = @{} }
         $c = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -RawData @{ 'AAD-AuthPolicies' = $old; 'AAD-CAPolicies' = $old } -Coverage @{} -AsOf $script:Now
-        (@($c.Controls | Where-Object { $_.ControlId -eq 'AAD-1.1' })[0]).ReasonCode | Should -Be 'EvidenceStale'
-        (@($c.Controls | Where-Object { $_.ControlId -eq 'VM-VERIFY-01' })[0]).ReasonCode | Should -Be 'ManualVerificationRequired'
+        (@($c.Controls | Where-Object { $_.ControlId -eq 'AAD-7.1' })[0]).ReasonCode | Should -Be 'EvidenceStale'
+        (@($c.Controls | Where-Object { $_.ControlId -eq 'CIS-1.1.2' })[0]).ReasonCode | Should -Be 'ManualVerificationRequired'
     }
 
     It 'license gating resolves LicenseBlocked and names the requirement' {
@@ -180,23 +190,23 @@ Describe 'Baseline reason contract — resolution and precedence' {
         $plan = Get-TPBaselinePlan -TargetTier Standard
         foreach ($r in $plan.Controls) { $script:Codes.Contains([string]$r.ReasonCode) | Should -BeTrue }
         @($plan.ReasonCodes | ForEach-Object { $_.Code }) | Should -Be @($script:Codes.Keys)
-        Add-TPFinding -ControlId 'EXO-7.2' -State 'NotApplicable' -Category 'Email' -Title 'Forwarding rules' -Detail 'Not assessed. 2 rule(s) forward to a recipient that could not be resolved; not read.'
+        Add-TPFinding -ControlId 'EXO-8.2' -State 'NotApplicable' -Category 'Email' -Title 'Redirect rules' -Detail 'Not assessed. 2 rule(s) redirect to a recipient that could not be resolved; not read.'
         $c = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -RawData @{ 'EXO-Inventory' = (& $script:Raw 'EXO-Inventory') } -Coverage @{}
         $cmp = Compare-TPBaselinePlan -Plan $plan -Compliance $c
-        $u = @($cmp.UnexpectedNotVerified | Where-Object { $_.ControlId -eq 'EXO-7.2' })[0]
+        $u = @($cmp.UnexpectedNotVerified | Where-Object { $_.ControlId -eq 'EXO-8.2' })[0]
         $u.ReasonCode | Should -Be 'EvidenceNotRead'
         $u.Reason | Should -Match 'could not be resolved'
     }
 
     It 'regression rows carry the current reason code' {
-        Add-TPFinding -ControlId 'AAD-1.1' -State 'Satisfied' -Category 'Identity' -Title 'Legacy auth' -Severity 'High' -Detail 'Blocked.'
+        Add-TPFinding -ControlId 'AAD-7.1' -State 'Satisfied' -Category 'Identity' -Title 'Lockout' -Severity 'Medium' -Detail 'Threshold 10.'
         $raw = @{ 'AAD-AuthPolicies' = (& $script:Raw 'AAD-AuthPolicies'); 'AAD-CAPolicies' = (& $script:Raw 'AAD-CAPolicies') }
         $prior = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -RawData $raw -Coverage @{}
         Clear-TPState
-        Add-TPFinding -ControlId 'AAD-1.1' -State 'Gap' -Category 'Identity' -Title 'Legacy auth' -Severity 'High' -Detail 'Legacy authentication is allowed.'
+        Add-TPFinding -ControlId 'AAD-7.1' -State 'Gap' -Category 'Identity' -Title 'Lockout' -Severity 'Medium' -Detail 'Lockout threshold is 50.'
         $cur = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -RawData $raw -Coverage @{}
         $reg = Get-TPBaselineRegressions -Current $cur -Prior $prior -PriorRunTime 'x'
-        $row = @($reg.Regressions | Where-Object { $_.ControlId -eq 'AAD-1.1' })[0]
+        $row = @($reg.Regressions | Where-Object { $_.ControlId -eq 'AAD-7.1' })[0]
         $row.Kind | Should -Be 'ConfigurationRegressed'
         $row.CurrentReasonCode | Should -Be 'ControlFailed'
     }
@@ -278,9 +288,10 @@ Describe 'Baseline coverage — evidence and effectiveness, apart from each othe
         }
         $comp = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -RawData $script:AllRaw -Coverage @{}
         $comp.Summary.Satisfied | Should -Be 0
-        $comp.EvidenceCoverage.Known | Should -Be ($comp.EvidenceCoverage.Applicable - 1) -Because 'only the manual control lacks evidence'
-        $comp.EvidenceCoverage.Gaps['ManualVerificationRequired'] | Should -Be 1
-        $comp.EvidenceCoverage.Percent | Should -BeGreaterThan 95
+        $manual = @(Get-TPBaselineRequiredControls -TargetTier Standard -Definition (Get-TPBaselineDefinition) | Where-Object { -not $_.Automated }).Count
+        $manual | Should -BeGreaterThan 0
+        $comp.EvidenceCoverage.Known | Should -Be ($comp.EvidenceCoverage.Applicable - $manual) -Because 'only the manual CIS rows lack evidence'
+        $comp.EvidenceCoverage.Gaps['ManualVerificationRequired'] | Should -Be $manual
     }
 
     It 'perfect configuration evidence gives zero effectiveness coverage while nothing reads effectiveness' {
@@ -289,7 +300,8 @@ Describe 'Baseline coverage — evidence and effectiveness, apart from each othe
             Add-TPFinding -ControlId $c.ControlId -State 'Satisfied' -Category 'Identity' -Title $c.Title -Severity 'High' -Detail 'At the expected state.'
         }
         $comp = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -RawData $script:AllRaw -Coverage @{}
-        $comp.EvidenceCoverage.Percent | Should -BeGreaterThan 95
+        $manual = @(Get-TPBaselineRequiredControls -TargetTier Standard -Definition (Get-TPBaselineDefinition) | Where-Object { -not $_.Automated }).Count
+        $comp.EvidenceCoverage.Known | Should -Be ($comp.EvidenceCoverage.Applicable - $manual)
         $comp.EffectivenessCoverage.Known | Should -Be 0
         $comp.EffectivenessCoverage.Percent | Should -Be 0
         $comp.EffectivenessCoverage.Unknown | Should -Be $comp.EffectivenessCoverage.Required

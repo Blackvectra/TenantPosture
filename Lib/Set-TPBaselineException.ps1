@@ -138,7 +138,7 @@ function Get-TPBaselineException {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $TenantDomain,
-        [ValidatePattern('^(?:[A-Z]{2,4}-\d+\.\d+|VM-VERIFY-\d+)$')] [string] $ControlId = '',
+        [ValidatePattern('^(?:[A-Z]{2,4}-\d+\.\d+|CIS-\d{1,2}(?:\.\d{1,2}){1,3}|VM-VERIFY-\d+)$')] [string] $ControlId = '',
         [AllowNull()] [AllowEmptyString()] [string] $Path = '',
         [datetime] $AsOf = (Get-Date)
     )
@@ -189,7 +189,7 @@ function New-TPBaselineException {
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param(
         [Parameter(Mandatory)] [string] $TenantDomain,
-        [Parameter(Mandatory)] [ValidatePattern('^(?:[A-Z]{2,4}-\d+\.\d+|VM-VERIFY-\d+)$')] [string] $ControlId,
+        [Parameter(Mandatory)] [ValidatePattern('^(?:[A-Z]{2,4}-\d+\.\d+|CIS-\d{1,2}(?:\.\d{1,2}){1,3}|VM-VERIFY-\d+)$')] [string] $ControlId,
         [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $Reason,
         [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $CompensatingControl,
         [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $Approver,
@@ -256,7 +256,7 @@ function Set-TPBaselineException {
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param(
         [Parameter(Mandatory)] [string] $TenantDomain,
-        [Parameter(Mandatory)] [ValidatePattern('^(?:[A-Z]{2,4}-\d+\.\d+|VM-VERIFY-\d+)$')] [string] $ControlId,
+        [Parameter(Mandatory)] [ValidatePattern('^(?:[A-Z]{2,4}-\d+\.\d+|CIS-\d{1,2}(?:\.\d{1,2}){1,3}|VM-VERIFY-\d+)$')] [string] $ControlId,
         [AllowNull()] [AllowEmptyString()] [string] $Reason,
         [AllowNull()] [AllowEmptyString()] [string] $CompensatingControl,
         [AllowNull()] [AllowEmptyString()] [string] $Approver,
@@ -336,7 +336,7 @@ function Remove-TPBaselineException {
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param(
         [Parameter(Mandatory)] [string] $TenantDomain,
-        [Parameter(Mandatory)] [ValidatePattern('^(?:[A-Z]{2,4}-\d+\.\d+|VM-VERIFY-\d+)$')] [string] $ControlId,
+        [Parameter(Mandatory)] [ValidatePattern('^(?:[A-Z]{2,4}-\d+\.\d+|CIS-\d{1,2}(?:\.\d{1,2}){1,3}|VM-VERIFY-\d+)$')] [string] $ControlId,
         [AllowNull()] [AllowEmptyString()] [string] $Path = ''
     )
     Set-StrictMode -Version Latest
