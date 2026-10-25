@@ -187,32 +187,75 @@ Describe 'Expected state: every mandatory component, each half kept visible' {
             $v.State  | Should -Be 'NotApplicable'
             $v.Detail | Should -Match 'could not be read'
         }
-        It 'approved list, every required rule in Block: Satisfied' {
+        It 'approved list, every Block-only rule in Block: Satisfied' {
             Mock -ModuleName 'TenantPosture' Get-TPAsrRequiredRules { @([pscustomobject]@{ Id = 'a'; Name = 'Rule A' }, [pscustomobject]@{ Id = 'b'; Name = 'Rule B' }) }
             Set-TPRawData -Key 'Intune-EndpointSecurity' -Data (& $script:Es 'Read' ([ordered]@{ rule_a = 'Block'; rule_b = 'Block' }))
             (& $script:Verdict 'Test-TPControlIntuneASR' 'INT-2.2').State | Should -Be 'Satisfied'
         }
-        It 'approved list, some required rules not in Block: Partial, naming each rule and its mode' {
+        It 'approved list, some required rules not in their required mode: Partial, naming each rule, its mode and what it requires' {
             Mock -ModuleName 'TenantPosture' Get-TPAsrRequiredRules { @([pscustomobject]@{ Id = 'a'; Name = 'Rule A' }, [pscustomobject]@{ Id = 'b'; Name = 'Rule B' }, [pscustomobject]@{ Id = 'c'; Name = 'Rule C' }) }
             Set-TPRawData -Key 'Intune-EndpointSecurity' -Data (& $script:Es 'Read' ([ordered]@{ rule_a = 'Block'; rule_b = 'Audit' }))
             $v = & $script:Verdict 'Test-TPControlIntuneASR' 'INT-2.2'
             $v.State  | Should -Be 'Partial'
-            $v.Detail | Should -Match 'Rule B \(Audit\)'
-            $v.Detail | Should -Match 'Rule C \(NotConfigured\)'
+            $v.Detail | Should -Match 'Rule B \(Audit; requires Block\)'
+            $v.Detail | Should -Match 'Rule C \(NotConfigured; requires Block\)'
         }
-        It 'approved list, none in Block: Gap' {
+        It 'approved list, none in its required mode: Gap' {
             Mock -ModuleName 'TenantPosture' Get-TPAsrRequiredRules { @([pscustomobject]@{ Id = 'a'; Name = 'Rule A' }) }
             Set-TPRawData -Key 'Intune-EndpointSecurity' -Data (& $script:Es 'Read' ([ordered]@{ rule_a = 'Audit' }))
             (& $script:Verdict 'Test-TPControlIntuneASR' 'INT-2.2').State | Should -Be 'Gap'
         }
-        It 'the shipped required-rule list is the approved one: Microsoft''s three standard protection rules, keyed as the Settings Catalog reports them' {
+        It 'a rule whose entry accepts Audit is met in Audit or Warn; a Block-only rule in Audit is not' {
+            Mock -ModuleName 'TenantPosture' Get-TPAsrRequiredRules { @(
+                [pscustomobject]@{ Id = 'a'; Name = 'Rule A'; Accept = @('Block', 'Warn', 'Audit') },
+                [pscustomobject]@{ Id = 'w'; Name = 'Rule W'; Accept = @('Block', 'Warn', 'Audit') },
+                [pscustomobject]@{ Id = 'b'; Name = 'Rule B'; Accept = @('Block') }) }
+            Set-TPRawData -Key 'Intune-EndpointSecurity' -Data (& $script:Es 'Read' ([ordered]@{ rule_a = 'Audit'; rule_w = 'Warn'; rule_b = 'Audit' }))
+            $v = & $script:Verdict 'Test-TPControlIntuneASR' 'INT-2.2'
+            $v.State  | Should -Be 'Partial'
+            $v.Detail | Should -Match '1 of 3 required ASR rule\(s\) are not in their required mode: Rule B \(Audit; requires Block\)'
+            $v.Detail | Should -Not -Match 'Rule A \('
+            @($v.AffectedObjects | ForEach-Object { $_.Requires }) | Should -Be @('Block')
+        }
+        It 'audit-accepting rules all in Audit, Block-only rules in Block: Satisfied, and the Audit rules are named' {
+            Mock -ModuleName 'TenantPosture' Get-TPAsrRequiredRules { @(
+                [pscustomobject]@{ Id = 'a'; Name = 'Rule A'; Accept = @('Block', 'Warn', 'Audit') },
+                [pscustomobject]@{ Id = 'b'; Name = 'Rule B'; Accept = @('Block') }) }
+            Set-TPRawData -Key 'Intune-EndpointSecurity' -Data (& $script:Es 'Read' ([ordered]@{ rule_a = 'Audit'; rule_b = 'Block' }))
+            $v = & $script:Verdict 'Test-TPControlIntuneASR' 'INT-2.2'
+            $v.State  | Should -Be 'Satisfied'
+            $v.Detail | Should -Match 'Audit mode, which their approved entry accepts: Rule A'
+        }
+        It 'Off or not configured never meets an audit-accepting rule' {
+            Mock -ModuleName 'TenantPosture' Get-TPAsrRequiredRules { @(
+                [pscustomobject]@{ Id = 'a'; Name = 'Rule A'; Accept = @('Block', 'Warn', 'Audit') },
+                [pscustomobject]@{ Id = 'c'; Name = 'Rule C'; Accept = @('Block', 'Warn', 'Audit') }) }
+            Set-TPRawData -Key 'Intune-EndpointSecurity' -Data (& $script:Es 'Read' ([ordered]@{ rule_a = 'Off' }))
+            $v = & $script:Verdict 'Test-TPControlIntuneASR' 'INT-2.2'
+            $v.State  | Should -Be 'Gap'
+            $v.Detail | Should -Match 'Rule A \(Off; requires Block or Warn or Audit\)'
+            $v.Detail | Should -Match 'Rule C \(NotConfigured;'
+        }
+        It 'the shipped required-rule list is the approved one: the 17 CIS Intune for Defender AV Level 1 ASR rules, each with the benchmark''s mode' {
             $j = Get-Content -LiteralPath (Join-Path $script:Root 'Config/asr-required-rules.json') -Raw | ConvertFrom-Json
-            @($j.Rules).Count | Should -Be 3
-            @($j.Rules | ForEach-Object { $_.Id }) | Should -Be @(
-                'blockabuseofexploitedvulnerablesigneddrivers',
-                'blockcredentialstealingfromwindowslocalsecurityauthoritysubsystem',
-                'blockpersistencethroughwmieventsubscription')
-            foreach ($r in @($j.Rules)) { $r.Id | Should -MatchExactly '^[a-z0-9]+$'; $r.Name | Should -Not -BeNullOrEmpty }
+            @($j.Rules).Count | Should -Be 17
+            @($j.Rules.Cis) | Should -Be @(10..26 | ForEach-Object { "2.$_" })
+            # The three ids seen in a real tenant read are kept exactly.
+            foreach ($id in 'blockabuseofexploitedvulnerablesigneddrivers', 'blockcredentialstealingfromwindowslocalsecurityauthoritysubsystem', 'blockpersistencethroughwmieventsubscription') {
+                @($j.Rules.Id) | Should -Contain $id
+            }
+            # Audit or higher only where the benchmark says so; Block everywhere else.
+            $auditOk = @($j.Rules | Where-Object { @($_.Accept) -contains 'Audit' }).Cis
+            $auditOk | Should -Be @('2.12', '2.15', '2.16', '2.20', '2.22', '2.26')
+            foreach ($r in @($j.Rules)) {
+                $r.Id | Should -MatchExactly '^[a-z0-9]+$'; $r.Name | Should -Not -BeNullOrEmpty
+                @($r.Accept) | Should -Contain 'Block'
+                if ($r.Cis -notin $auditOk) { @($r.Accept) | Should -Be @('Block') -Because "$($r.Cis) is Block-only in the benchmark" }
+            }
+            # Each id fragment selects one rule: no fragment is contained in another rule's id.
+            foreach ($r in @($j.Rules)) {
+                @($j.Rules | Where-Object { $_.Id -like "*$($r.Id)*" }).Count | Should -Be 1 -Because "$($r.Id) must match only its own rule"
+            }
         }
     }
 

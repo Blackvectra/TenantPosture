@@ -216,7 +216,7 @@ ASR rules are deployed via Intune endpoint security policy to block common malwa
 ASR rules block Office macro abuse, credential theft from LSASS, and script-based attacks. Without them, commodity malware delivery succeeds.
 
 **Remediation:**
-Intune > Endpoint security > Attack surface reduction > Create ASR rules policy. Enable at minimum: Block Office macros, Block credential stealing, Block JS/VBS launching executables.
+In Intune, open Endpoint security > Attack surface reduction and create (or edit) an Attack Surface Reduction Rules policy assigned to every Windows device. Set the 17 rules of the CIS Microsoft Intune for Microsoft Defender Antivirus Benchmark v1.0.0, Level 1 (2.10 to 2.26). Set these 11 to Block: abuse of exploited vulnerable signed drivers, Adobe Reader child processes, credential stealing from LSASS, executable content from email and webmail, JavaScript or VBScript launching downloaded executables, Office applications creating executable content, Office applications injecting code into other processes, persistence through WMI event subscription, rebooting in Safe Mode, untrusted and unsigned processes from USB, and Win32 API calls from Office macros. Set these 6 to Audit or higher: all Office applications creating child processes, executables that do not meet a prevalence, age or trusted-list criterion, potentially obfuscated scripts, Office communication applications creating child processes, process creation from PSExec and WMI commands (it conflicts with Configuration Manager), and advanced ransomware protection. Run a rule in Audit first where line-of-business software might trip it, then move it to Block. The finding names each rule that is missing or in the wrong mode.
 
 **Framework mappings:**
 

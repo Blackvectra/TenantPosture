@@ -199,6 +199,11 @@ tenant following Microsoft's pattern.
   `Get-TPAvSettingValues`) follow the documented Settings Catalog structure and are unverified
   against a live tenant. The first live run should confirm `AvSettingValues` in the results file
   holds the definition ids of the Defender CSP settings (Configuration nodes).
+- INT-2.2 judges the 17 ASR rules of the CIS Intune for Defender Antivirus benchmark (Level 1,
+  2.10 to 2.26) in the mode the benchmark requires (11 Block only, 6 Audit or higher). Fourteen
+  of the rule ids in `Config/asr-required-rules.json` are distinctive fragments of the rule names
+  rather than ids seen in a tenant read; a fragment that matches nothing reports the rule
+  NotConfigured, a false shortfall, never a false pass.
 - The approved NRG lists in `Config/tp-standards.json` and `Config/asr-required-rules.json`
   are empty; each affected control reports that component not assessed until NRG approves it.
 - The 2026-09-30 baseline reference predates the changes above; regenerate it from a fresh
