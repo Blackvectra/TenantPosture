@@ -1,0 +1,11 @@
+# Reviewed Trivy findings for the OSS Scanner image and its Dockerfile
+# (.github/workflows/oss-scanner-image.yml). Every entry carries a statement a
+# reviewer can check; Testing/TP.RuntimeScans.Tests.ps1 fails one without.
+# A CVE goes here only when it cannot be acted on in this image and the reason
+# says why; a fixable finding is fixed, never listed.
+misconfigurations:
+  - id: DS-0026
+    paths:
+      - ".oss-scanner/Dockerfile"
+    statement: "HEALTHCHECK is for a long-running service an orchestrator restarts. This image runs once per scan and exits; nothing would read a health check."
+vulnerabilities: []

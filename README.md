@@ -395,13 +395,13 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA (ScubaGear v2.0.0) + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          122 Pester suites — the FULL suite gates every PR
+Testing/                          123 Pester suites — the FULL suite gates every PR
   TP.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   TP.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   TP.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
   ...                             coverage-score, license, maturity-tier, report, helper suites
 
-.github/workflows/                6 workflows: ci, secret-scan, codeql, dependency-review, scorecard, release
+.github/workflows/                9 workflows: ci, secret-scan, codeql, dependency-review, scorecard, zizmor, oss-scanner-image, dast, release
 ```
 
 ---
@@ -650,7 +650,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **122 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **123 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite through the same gate CI uses. The gate parses every
@@ -704,17 +704,18 @@ GDAP relationships must be active in Partner Center before the batch runner can 
 
 ## CI/CD
 
-Eight GitHub Actions workflows cover the repository. All run automatically on push and pull request to `main` (the OSS Scanner image only when its inputs change) (plus the scheduled sweeps noted below), and each also accepts a manual `workflow_dispatch`. Every job carries a `timeout-minutes` bound so a hung job cannot run to the six-hour default and burn a month of Actions minutes:
+Nine GitHub Actions workflows cover the repository. All run automatically on push and pull request to `main` (the OSS Scanner image and the DAST scan only when their inputs change) (plus the scheduled sweeps noted below), and each also accepts a manual `workflow_dispatch`. Every job carries a `timeout-minutes` bound so a hung job cannot run to the six-hour default and burn a month of Actions minutes:
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (122 suites) · PSScriptAnalyzer with SARIF upload · PowerShell security rules and InjectionHunter (any unreviewed finding fails) · CI modules installed by exact version and SHA-256 · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (123 suites) · PSScriptAnalyzer with SARIF upload · PowerShell security rules and InjectionHunter (any unreviewed finding fails) · CI modules installed by exact version and SHA-256 · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
 | **Scorecard** | OpenSSF Scorecard supply-chain posture, weekly |
 | **zizmor** | Static security analysis of the workflows themselves at the strictest persona; any finding fails; hash-locked install; weekly sweep |
-| **OSS Scanner image** | Builds `.oss-scanner/Dockerfile` (pinned base image plus Ubuntu security updates, pinned packages, module import, full suite through the test gate inside the image), fails on any test failure recorded in the image, and starts it with no network; on changes to its inputs and weekly, when it also checks every pinned PowerShell module against the gallery |
+| **OSS Scanner image** | Builds `.oss-scanner/Dockerfile` (pinned base image plus Ubuntu security updates, pinned packages, module import, full suite through the test gate inside the image), fails on any test failure recorded in the image, starts it with no network, then scans the built image with Trivy (HIGH/CRITICAL vulnerabilities, SARIF to Code Scanning) and checks the Dockerfile against Trivy's rules at every severity; any finding fails unless reviewed into `.trivyignore.yaml` with a statement; on changes to its inputs and weekly, when it also checks every pinned PowerShell module against the gallery |
+| **DAST** | OWASP ZAP baseline scan against the real `-Web` GUI running on loopback over a data-only fixture, with the AJAX spider driving the page; every alert not reviewed in `.zap/rules.tsv` (with its reason) fails; scanner image pinned by digest and tracked by Dependabot; on changes to the GUI and weekly |
 | **Release** | On `v*` tags: CycloneDX SBOM generation + Authenticode signature/integrity verification |
 
 The framework-accuracy suite validates every SCuBA citation against the bundled ScubaGear v2.0.0 policy list, every CIS Controls citation against the v8.1 safeguard list, CMMC domain/level correctness, and ISO 27001:2022 Annex-A ranges — a wrong citation fails the PR, not the client report.
@@ -738,4 +739,4 @@ You may use, modify and redistribute it under that license, including commercial
 
 ---
 
-*TenantPosture v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 422 exported functions · full Pester suite (122 suites) gating CI*
+*TenantPosture v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 422 exported functions · full Pester suite (123 suites) gating CI*
