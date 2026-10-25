@@ -1,0 +1,170 @@
+# Dynamic scan of the -Web GUI — OWASP ZAP against the running server.
+#
+# Every other scan here reads code. This one talks to the application the
+# way a browser does: Lib/Start-TPWebServer.ps1 is started on loopback over a
+# data-only fixture (tools/New-TPWebScanFixture.ps1: a flat run, its report
+# and report site, a tenant-folder run, a clients.json), and ZAP's baseline
+# scan spiders it, drives the page in a browser (the AJAX spider, so app.js
+# runs, /api/runs is read and the framed report is opened) and passively
+# checks every response: headers, Content-Security-Policy, cookies, cache
+# directives, information disclosure, cross-domain configuration.
+#
+# Gate: every rule not reviewed in .zap/rules.tsv is a WARN, and a WARN or
+# FAIL fails the job (zap-baseline exits 2 and 1). A reviewed exception
+# carries its reason on the same line; Testing/TP.RuntimeScans.Tests.ps1
+# fails one without. Passive only: the baseline scan sends no attack
+# payloads, so this is a scan of what the server says, not a penetration
+# test of what it does (docs/security/TESTING-METHODOLOGY.md).
+#
+# ZAP runs from the image .github/scanners/zap/Dockerfile pins by tag and
+# digest (Dependabot moves both); the job reads the FROM line and runs it
+# with --network host so the container reaches the loopback server and
+# sends the Host header the request policy requires. The passive rules are
+# the ones that image ships (-silent: no add-on download at start), so the
+# same commit gets the same verdict until the pin moves.
+
+name: DAST
+
+on:
+  # Manual runs stay available alongside the automatic triggers.
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'Lib/Start-TPWebServer.ps1'
+      - 'Lib/*TPWeb*.ps1'
+      - 'Lib/Test-TPDomainName.ps1'
+      - 'Web/**'
+      - '.zap/**'
+      - '.github/scanners/zap/**'
+      - 'tools/New-TPWebScanFixture.ps1'
+      - 'tools/Install-TPPinnedModule.ps1'
+      - 'tools/pinned-modules.psd1'
+      - '.github/workflows/dast.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Lib/Start-TPWebServer.ps1'
+      - 'Lib/*TPWeb*.ps1'
+      - 'Lib/Test-TPDomainName.ps1'
+      - 'Web/**'
+      - '.zap/**'
+      - '.github/scanners/zap/**'
+      - 'tools/New-TPWebScanFixture.ps1'
+      - 'tools/Install-TPPinnedModule.ps1'
+      - 'tools/pinned-modules.psd1'
+      - '.github/workflows/dast.yml'
+  schedule:
+    # Weekly, so a new ZAP rule or a moved Pode release is reported even
+    # when nothing in the GUI changed.
+    - cron: '41 6 * * 2'
+permissions:
+  contents: read
+
+# One run per workflow and pull request (or branch). A newer push to the same
+# pull request cancels the older run; runs on main and scheduled runs are
+# never cancelled, so every commit on main keeps a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  zap-baseline:
+    name: Dynamic scan of the web GUI (ZAP)
+    runs-on: ubuntu-latest
+    # The AJAX spider drives a browser for up to two minutes; ZAP itself
+    # starts in under one. The ceiling leaves room for the image pull.
+    timeout-minutes: 25
+    permissions:
+      contents: read  # read the repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Pode (pinned, hash-verified)
+        shell: pwsh
+        run: |
+          ./tools/Install-TPPinnedModule.ps1 -Name Pode -Destination "$env:RUNNER_TEMP/tp-modules" -ExportToGitHubEnv
+          Write-Host ('pwsh {0} on {1}' -f $PSVersionTable.PSVersion, $PSVersionTable.OS)
+
+      - name: Build the scan fixture
+        shell: pwsh
+        run: |
+          $out = ./tools/New-TPWebScanFixture.ps1 -Path "$env:RUNNER_TEMP/scan"
+          "TP_SCAN_OUTPUT=$out" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Get-ChildItem -LiteralPath $out -Recurse -File | ForEach-Object { $_.FullName.Substring($out.Length) }
+
+      - name: Start the web GUI on loopback
+        run: |
+          set -euo pipefail
+          # The server is the real one, dot-sourced as the test suite does, bound
+          # to 127.0.0.1 by its own code; -NoBrowser skips the browser launch.
+          nohup pwsh -NoProfile -Command '. ./Lib/Start-TPWebServer.ps1; Start-TPWebServer -Port 8765 -ScriptDir (Get-Location).Path -OutputRoot $env:TP_SCAN_OUTPUT -NoBrowser' > "$RUNNER_TEMP/web.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/web.pid"
+          for _ in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8765/; then break; fi
+            sleep 1
+          done
+          if ! curl -fsS -o /dev/null http://127.0.0.1:8765/; then
+            cat "$RUNNER_TEMP/web.log"
+            echo "::error title=The web GUI did not start::Nothing answered on 127.0.0.1:8765 within 60 seconds; the server log is above."
+            exit 1
+          fi
+          # The scan is only worth running if the routes have something to serve.
+          if ! curl -fsS http://127.0.0.1:8765/api/runs | grep -q SCANTENANT; then
+            echo "::error title=The run index is empty::/api/runs does not list the fixture run, so the report routes would not be scanned."
+            exit 1
+          fi
+
+      - name: Scan with ZAP (baseline + AJAX spider)
+        run: |
+          set -euo pipefail
+          image="$(awk '/^FROM /{print $2}' .github/scanners/zap/Dockerfile)"
+          echo "ZAP image: ${image}"
+          # -z "-silent": without it zap-baseline.py runs ZAP with -addonupdate and
+          # -addoninstall pscanrulesBeta, fetching rule add-ons from the internet at
+          # start, so the rules that judge a pull request would be whatever was
+          # published that morning, not what the pinned image ships (the first run
+          # here reported three alerts the same image never raised offline). The
+          # rule set now changes only when the image pin does, through Dependabot
+          # and review. -silent also stops ZAP's own update check and telemetry.
+          # ZAP runs as its own user inside the image; the work folder must let
+          # it write the reports, and it lives in the workspace so the upload
+          # step can find it.
+          mkdir -p zap-wrk
+          cp .zap/rules.tsv zap-wrk/rules.tsv
+          chmod 777 zap-wrk
+          set +e
+          docker run --rm --network host -v "${PWD}/zap-wrk:/zap/wrk:rw" "${image}" \
+            zap-baseline.py -t http://127.0.0.1:8765 -j -m 2 -T 10 -c rules.tsv -z "-silent" \
+            -r zap-report.html -J zap-report.json -w zap-report.md
+          rc=$?
+          set -e
+          if [ -f zap-wrk/zap-report.md ]; then
+            { echo "## ZAP baseline scan"; echo; cat zap-wrk/zap-report.md; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # zap-baseline: 0 clean, 1 a FAIL-level alert, 2 a WARN-level alert,
+          # anything else its own failure. Only 0 passes: a new alert is reviewed
+          # (fixed, or added to .zap/rules.tsv with its reason), never waved on.
+          case "${rc}" in
+            0) echo "ZAP reported no alert outside the reviewed rules." ;;
+            1) echo "::error title=ZAP FAIL::A FAIL-level alert was reported. Fix it; the report is in the zap-reports artifact."; exit 1 ;;
+            2) echo "::error title=ZAP WARN::An alert not reviewed in .zap/rules.tsv was reported. Fix it, or review it into the rules file with its reason; the report is in the zap-reports artifact."; exit 1 ;;
+            *) echo "::error title=zap-baseline failed::zap-baseline.py exited ${rc} (not a scan result)."; exit 1 ;;
+          esac
+
+      - name: Upload the ZAP reports
+        # Run even when the scan failed, so the alerts can be read.
+        if: always() && hashFiles('zap-wrk/zap-report.*') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: zap-reports
+          path: zap-wrk/zap-report.*
+          if-no-files-found: warn
+
+      - name: Stop the web GUI
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/web.pid" ]; then kill "$(cat "$RUNNER_TEMP/web.pid")" 2>/dev/null || true; fi
