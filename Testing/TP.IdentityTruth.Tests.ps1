@@ -157,15 +157,21 @@ Describe 'Identity controls report what the tenant is configured to do' {
             Ca @(Pol -AuthFlows $flow -Grant @('block')); (V 'Test-TPControlAADDeviceCode' 'AAD-11.1').State | Should -Be 'Satisfied'
         }
         It 'AAD-11.7: judged on configuration, not on a policy name containing "PAW"' {
-            Ca @(Pol -Name 'Block legacy auth (PAW accounts excluded)' -ClientApps @('other') -Grant @('block')); (V 'Test-TPControlAADPrivilegedWorkstation' 'AAD-11.7').State | Should -Be 'Gap'
-            Ca @(Pol -Users @() -Roles @($script:GA) -Grant @('compliantDevice'));                              (V 'Test-TPControlAADPrivilegedWorkstation' 'AAD-11.7').State | Should -Be 'Satisfied'
+            $roles = { Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{ RoleDefinitions = @(@{ Id = $script:GA; DisplayName = 'Global Administrator'; IsPriv = $true }) }) }
+            Ca @(Pol -Name 'Block legacy auth (PAW accounts excluded)' -ClientApps @('other') -Grant @('block')); & $roles; (V 'Test-TPControlAADPrivilegedWorkstation' 'AAD-11.7').State | Should -Be 'Gap'
+            # One half (compliant device) is Partial; both halves (Microsoft's PAW check) are needed for Satisfied.
+            Ca @(Pol -Users @() -Roles @($script:GA) -Grant @('compliantDevice'));                              & $roles; (V 'Test-TPControlAADPrivilegedWorkstation' 'AAD-11.7').State | Should -Be 'Partial'
+            $paw = Pol -Name 'PAW only' -Users @() -Roles @($script:GA) -Grant @('block') -DeviceRule 'device.extensionAttribute1 -eq "PAW"'
+            $paw.Conditions.Devices.FilterMode = 'exclude'
+            Ca @((Pol -Users @() -Roles @($script:GA) -Grant @('compliantDevice')), $paw);                    & $roles; (V 'Test-TPControlAADPrivilegedWorkstation' 'AAD-11.7').State | Should -Be 'Satisfied'
         }
         It 'AAD-10.4: a risk-only "every time" re-prompt is not a periodic sign-in frequency' {
             Ca @(Pol -SignInRisk @('high') -Grant @('mfa') -Session @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'everyTime' } })
             (V 'Test-TPControlAADSignInFrequency' 'AAD-10.4').State | Should -Be 'Gap'
         }
         It 'AAD-11.4 / 11.5: token protection and CAE strict mode read their real values' {
-            Ca @(Pol -Session @{ SecureSignInSession = $true });                    (V 'Test-TPControlAADTokenProtection' 'AAD-11.4').State | Should -Be 'Satisfied'
+            $tp = Pol -Session @{ SecureSignInSession = $true }; $tp.Conditions.Platforms = @('windows')
+            Ca @($tp);                                                              (V 'Test-TPControlAADTokenProtection' 'AAD-11.4').State | Should -Be 'Satisfied'
             Ca @(Pol -Session @{ ContinuousAccessEvaluation = 'strictEnforcement' }); (V 'Test-TPControlAADContinuousAccess' 'AAD-11.5').State | Should -Be 'Satisfied'
         }
     }
@@ -501,7 +507,7 @@ Describe 'Security Defaults: Conditional Access controls account for it' {
                 param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
                 if ($Uri -match "userType eq 'Guest'") { $Uri | Should -Match 'signInActivity'; return @{ value = @(
                     @{ id = 'g1'; displayName = 'Guest One'; userPrincipalName = 'g1_x#EXT#@corp.example'; accountEnabled = $true; userType = 'Guest'; createdDateTime = '2024-01-01T00:00:00Z'; signInActivity = @{ lastSignInDateTime = '2024-02-01T00:00:00Z' } },
-                    @{ id = 'g2'; displayName = 'Guest Two'; userPrincipalName = 'g2_x#EXT#@corp.example'; accountEnabled = $true; userType = 'Guest'; createdDateTime = '2024-01-01T00:00:00Z'; signInActivity = @{ lastSignInDateTime = [datetime]::UtcNow.AddDays(-1).ToString('o') } }) } }
+                    @{ id = 'g2'; displayName = 'Guest Two'; userPrincipalName = 'g2_x#EXT#@corp.example'; accountEnabled = $true; userType = 'Guest'; createdDateTime = '2024-01-01T00:00:00Z'; signInActivity = @{ lastSignInDateTime = [datetime]::UtcNow.AddDays(-1).ToString('o'); lastSuccessfulSignInDateTime = [datetime]::UtcNow.AddDays(-1).ToString('o') } }) } }
                 return @{ value = @() }
             }
             Invoke-TPCollectAADInventory 3>$null | Out-Null
@@ -1448,6 +1454,351 @@ Describe 'Security Defaults: Conditional Access controls account for it' {
                     }
                 }
             }
+        }
+    }
+}
+
+# ── Benchmark gap fixes (2026-10-26) ─────────────────────────────────────────
+
+# Pins the identity verdicts tightened so each Satisfied is true for what the
+# control (and the benchmark item it is mapped to) claims. Real collectors are
+# driven with raw Graph shapes wherever a collector changed.
+#   AAD-7.1   lockout threshold 10 or fewer AND lockout duration 60 s or more
+#             (CIS 5.2.3.8 / 5.2.3.9); setting values are strings.
+#   AAD-11.2  a guest is userType Guest (or #EXT#); a privileged role is the
+#             tool's list or Microsoft's isPrivileged flag (beta); eligible
+#             assignments count; anything unread is not assessed.
+#   AAD-11.4  token protection counts only on Windows, for users, on Exchange
+#             Online and SharePoint Online (or All resources).
+#   AAD-11.7  both halves of Microsoft's PAW check: compliant device for a
+#             privileged role AND a device-filter (exclude) block.
+#   AAD-11.9  a workload identity policy must block on service principal risk.
+#   AAD-12.2  enabled guests, judged on the last SUCCESSFUL sign-in, else the
+#             creation date; disabled guests are reported, not scored.
+#   AAD-14.1  the tenant application management policy is a component.
+
+Describe 'Benchmark gap fixes (AAD)' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
+        $script:Mod = Get-Module 'TenantPosture'
+        $script:GA  = '62e90394-69f5-4237-9190-012177145e10'
+        $script:HIA = '8ac3fc64-6eca-42ea-9e69-59f4c7b60eb2'   # Hybrid Identity Administrator: privileged per Microsoft, not in the tool's list
+        $script:EXO = '00000002-0000-0ff1-ce00-000000000000'
+        $script:SPO = '00000003-0000-0ff1-ce00-000000000000'
+
+        function script:Bag([hashtable] $Data, [bool] $Success = $true) { [ordered]@{ CollectorId = 'x'; CollectedAt = '2026-10-26T00:00:00Z'; Success = $Success; Data = $Data } }
+        function script:V([string] $Fn, [string] $Cid) { & $Fn 3>$null | Out-Null; @(Get-TPFindings | Where-Object ControlId -eq $Cid)[-1] }
+        $script:OrigGraph = & $script:Mod { ${function:Invoke-TPGraphRequest} }
+        function script:Set-Graph([scriptblock] $Body) {
+            & $script:Mod { param($b) Set-Item -Path 'function:script:Invoke-TPGraphRequest' -Value $b } $Body
+        }
+        function script:Pol {
+            param([string] $Name = 'p', [string] $State = 'enabled', [string[]] $Users = @('All'), [string[]] $Roles = @(),
+                  [string[]] $Apps = @('All'), [string[]] $Platforms = @(), [string[]] $Grant = @(), [hashtable] $Session = @{},
+                  [string] $FilterMode = '', [string] $FilterRule = '', [string[]] $Sps = @(), $SpRisk = 'absent')
+            $cond = @{ ClientAppTypes = @('all'); SignInRiskLevels = @(); UserRiskLevels = @(); Platforms = $Platforms; ExcludePlatforms = @()
+                       Users = @{ IncludeUsers = $Users; IncludeGroups = @(); IncludeRoles = $Roles; ExcludeUsers = @(); ExcludeGroups = @(); ExcludeRoles = @() }
+                       Applications = @{ Include = $Apps; Exclude = @() }
+                       Locations = @{ Include = @(); Exclude = @() }
+                       Devices = @{ FilterMode = $FilterMode; FilterRule = $FilterRule }
+                       ClientApplications = @{ IncludeServicePrincipals = $Sps } }
+            if ($PSBoundParameters.ContainsKey('SpRisk')) { $cond.ServicePrincipalRiskLevels = @($SpRisk) }
+            @{ DisplayName = $Name; State = $State; Conditions = $cond
+               GrantControls = @{ Operator = 'OR'; BuiltInControls = $Grant; AuthStrengthId = ''; TermsOfUse = @() }
+               SessionControls = $Session }
+        }
+        function script:Ca([object[]] $Policies) {
+            Set-TPRawData -Key 'AAD-CAPolicies' -Data (Bag @{ Policies = @($Policies); SectionStatus = @{ TokenProtection = 'Collected'; PolicyCompleteness = 'Collected' } })
+        }
+        function script:PrivCatalog { Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{ RoleDefinitions = @(@{ Id = $script:GA; DisplayName = 'Global Administrator'; IsPriv = $true }, @{ Id = 'reader'; DisplayName = 'Reports Reader'; IsPriv = $false }) }) }
+    }
+
+    BeforeEach { Clear-TPState }
+    AfterEach  { & $script:Mod { param($o) Set-Item -Path 'function:script:Invoke-TPGraphRequest' -Value $o } $script:OrigGraph }
+    AfterAll   { Clear-TPState }
+
+    Context 'AAD-7.1 lockout threshold and lockout duration (real collector)' {
+        BeforeAll {
+            function script:Run-Lockout([object[]] $Values, [bool] $Instantiated = $true) {
+                Clear-TPState
+                $script:T_Lock = $Values; $script:T_Inst = $Instantiated
+                Set-Graph {
+                    param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                    if ($Uri -match 'groupSettings') {
+                        if (-not $script:T_Inst) { return @{ value = @() } }
+                        return @{ value = @(@{ templateId = '5cf42378-d67d-4f36-ba46-e8b86229381d'; values = @($script:T_Lock) }) }
+                    }
+                    return @{ value = @() }
+                }
+                Invoke-TPCollectAADAuthPolicies 3>$null | Out-Null
+                V 'Test-TPControlAADPasswordProtection' 'AAD-7.1'
+            }
+            function script:Lk([string] $T, [string] $D) { @(@{ name = 'LockoutThreshold'; value = $T }, @{ name = 'LockoutDurationInSeconds'; value = $D }) }
+        }
+        It 'threshold 10 and duration "60" (strings, as Graph returns them) is Satisfied' {
+            $f = Run-Lockout (Lk '10' '60')
+            $f.State | Should -Be 'Satisfied'
+            $f.CurrentValue | Should -Match 'LockoutDurationInSeconds = 60 s'
+            (Get-TPRawData -Key 'AAD-AuthPolicies').Data.PasswordProtection.LockoutDurationSeconds | Should -BeExactly 60
+        }
+        It 'a duration of 59 seconds is a shortfall beside a met threshold (Partial)' {
+            $f = Run-Lockout (Lk '10' '59')
+            $f.State | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Lockout duration is 59 seconds'
+        }
+        It 'threshold 11 with duration 59 meets nothing (Gap)' {
+            (Run-Lockout (Lk '11' '59')).State | Should -Be 'Gap'
+        }
+        It 'threshold 11 with a met duration is Partial' {
+            (Run-Lockout (Lk '11' '900')).State | Should -Be 'Partial'
+        }
+        It 'a value that is not a whole number is not read: not assessed, and the rest of the block survives' {
+            $f = Run-Lockout (Lk '10' 'sixty')
+            $f.State | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'lockout duration was not read'
+            (Get-TPRawData -Key 'AAD-AuthPolicies').Data.PasswordProtection.LockoutThreshold | Should -BeExactly 10
+        }
+        It 'an uninstantiated Password Rule Settings object is Microsoft''s defaults (10, 60): Satisfied' {
+            (Run-Lockout @() -Instantiated $false).State | Should -Be 'Satisfied'
+        }
+    }
+
+    Context 'AAD-11.2 guests in privileged roles (real roles collector)' {
+        BeforeAll {
+            function script:Run-Roles([object[]] $Assign, [object[]] $Elig = @(), [object[]] $Flags = @(), [bool] $FlagsFail = $false) {
+                Clear-TPState
+                $script:T_Asg = $Assign; $script:T_Elig = $Elig; $script:T_Flags = $Flags; $script:T_FlagsFail = $FlagsFail
+                Set-Graph {
+                    param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                    if ($Uri -match '/beta/roleManagement/directory/roleDefinitions') { if ($script:T_FlagsFail) { throw 'Graph 400 BadRequest' }; return @{ value = @($script:T_Flags) } }
+                    if ($Uri -match 'roleDefinitions') { return @{ value = @(
+                        @{ id = '62e90394-69f5-4237-9190-012177145e10'; displayName = 'Global Administrator'; isBuiltIn = $true; isEnabled = $true },
+                        @{ id = '8ac3fc64-6eca-42ea-9e69-59f4c7b60eb2'; displayName = 'Hybrid Identity Administrator'; isBuiltIn = $true; isEnabled = $true },
+                        @{ id = '4a5d8f65-41da-4de4-8968-e035b65339cf'; displayName = 'Reports Reader'; isBuiltIn = $true; isEnabled = $true }) } }
+                    if ($Uri -match 'roleAssignments') { return @{ value = @($script:T_Asg) } }
+                    if ($Uri -match 'roleEligibilitySchedules') { return @{ value = @($script:T_Elig) } }
+                    return @{ value = @() }
+                }
+                Invoke-TPCollectAADRoles 3>$null | Out-Null
+                V 'Test-TPControlAADNoGuestInPrivRoles' 'AAD-11.2'
+            }
+            # Raw Graph shape of an assignment with $expand=principal (Microsoft's list example).
+            function script:RawAsg([string] $Role, [string] $Upn, [string] $Type, [string] $Name = 'X') {
+                @{ id = "a-$Upn"; principalId = "id-$Upn"; roleDefinitionId = $Role; directoryScopeId = '/'
+                   principal = @{ '@odata.type' = '#microsoft.graph.user'; id = "id-$Upn"; displayName = $Name; userPrincipalName = $Upn; userType = $Type } }
+            }
+            $script:Flags = @(@{ id = '62e90394-69f5-4237-9190-012177145e10'; isPrivileged = $true }, @{ id = '8ac3fc64-6eca-42ea-9e69-59f4c7b60eb2'; isPrivileged = $true }, @{ id = '4a5d8f65-41da-4de4-8968-e035b65339cf'; isPrivileged = $false })
+        }
+        It 'the collector records userType and Microsoft''s isPrivileged flags' {
+            $null = Run-Roles @((RawAsg $script:GA 'admin@contoso.com' 'Member')) -Flags $script:Flags
+            $r = Get-TPRawData -Key 'AAD-DirectoryRoles'
+            $r.Data.SectionStatus.PrivilegedRoleFlags | Should -Be 'Collected'
+            @($r.Data.PrivilegedRoleIds) | Should -Contain $script:HIA
+            @($r.Data.RoleAssignments)[0].PrincipalUserType | Should -Be 'Member'
+            (@($r.Data.RoleDefinitions) | Where-Object Id -eq $script:HIA).IsPrivileged | Should -BeTrue
+        }
+        It 'only members in privileged roles, every read complete, is Satisfied' {
+            (Run-Roles @((RawAsg $script:GA 'admin@contoso.com' 'Member')) -Flags $script:Flags).State | Should -Be 'Satisfied'
+        }
+        It 'a userType Guest without #EXT# in a role Microsoft marks privileged (not in the tool''s list) is a Gap' {
+            $f = Run-Roles @((RawAsg $script:HIA 'partner@contoso.com' 'Guest' 'Converted Partner')) -Flags $script:Flags
+            $f.State | Should -Be 'Gap'
+            $f.Detail | Should -Match 'Converted Partner'
+        }
+        It 'a guest ELIGIBLE for Global Administrator is a Gap' {
+            $elig = @{ id = 'e1'; principalId = 'g'; roleDefinitionId = $script:GA; directoryScopeId = '/'; memberType = 'Direct'
+                       principal = @{ '@odata.type' = '#microsoft.graph.user'; displayName = 'Eligible Guest'; userPrincipalName = 'g_x.com#EXT#@contoso.onmicrosoft.com'; userType = 'Guest' } }
+            $f = Run-Roles @((RawAsg $script:GA 'admin@contoso.com' 'Member')) -Elig @($elig) -Flags $script:Flags
+            $f.State | Should -Be 'Gap'
+            $f.Detail | Should -Match 'eligible'
+        }
+        It 'a guest in a role Microsoft does not mark privileged is not flagged' {
+            (Run-Roles @((RawAsg $script:GA 'admin@contoso.com' 'Member'), (RawAsg '4a5d8f65-41da-4de4-8968-e035b65339cf' 'g_x#EXT#@contoso.onmicrosoft.com' 'Guest')) -Flags $script:Flags).State | Should -Be 'Satisfied'
+        }
+        It 'the privileged-role flags not read is not assessed, never Satisfied' {
+            $f = Run-Roles @((RawAsg $script:GA 'admin@contoso.com' 'Member')) -FlagsFail $true
+            $f.State | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'isPrivileged'
+        }
+        It 'a user principal with no recorded userType is not assessed' {
+            $a = RawAsg $script:GA 'admin@contoso.com' 'Member'; $a.principal.Remove('userType')
+            $f = Run-Roles @($a) -Flags $script:Flags
+            $f.State | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'user type'
+        }
+    }
+
+    Context 'AAD-11.4 token protection scope' {
+        It 'requires Windows, some users, and Exchange Online plus SharePoint Online (or All)' {
+            $tp = @{ SecureSignInSession = $true }
+            Ca @(Pol -Platforms @('windows') -Apps @($script:EXO, $script:SPO) -Session $tp); (V 'Test-TPControlAADTokenProtection' 'AAD-11.4').State | Should -Be 'Satisfied'
+            Clear-TPState; Ca @(Pol -Platforms @('windows', 'macOS') -Apps @('All') -Session $tp); (V 'Test-TPControlAADTokenProtection' 'AAD-11.4').State | Should -Be 'Satisfied'
+            Clear-TPState; Ca @(Pol -Platforms @('iOS') -Apps @('All') -Session $tp)
+            $f = V 'Test-TPControlAADTokenProtection' 'AAD-11.4'
+            $f.State | Should -Be 'Gap'; $f.Detail | Should -Match 'does not include the Windows platform'
+            Clear-TPState; Ca @(Pol -Platforms @('windows') -Apps @($script:EXO) -Session $tp)
+            $f = V 'Test-TPControlAADTokenProtection' 'AAD-11.4'
+            $f.State | Should -Be 'Gap'; $f.Detail | Should -Match 'SharePoint Online'
+            Clear-TPState; Ca @(Pol -Platforms @('windows') -Users @('None') -Session $tp); (V 'Test-TPControlAADTokenProtection' 'AAD-11.4').State | Should -Be 'Gap'
+            Clear-TPState; Ca @(Pol -Platforms @() -Session $tp); (V 'Test-TPControlAADTokenProtection' 'AAD-11.4').State | Should -Be 'Gap' -Because 'no platform condition read is not the Windows platform'
+        }
+    }
+
+    Context 'AAD-11.7 privileged access workstation: both halves' {
+        It 'compliant device for a privileged role AND a device-filter exclude block is Satisfied; each half alone is Partial' {
+            $comp = Pol -Name 'Admins compliant' -Users @() -Roles @($script:GA) -Grant @('compliantDevice')
+            $paw  = Pol -Name 'Admins PAW only' -Users @() -Roles @($script:GA) -Grant @('block') -FilterMode 'exclude' -FilterRule 'device.extensionAttribute1 -eq "PAW"'
+            Ca @($comp, $paw); PrivCatalog; (V 'Test-TPControlAADPrivilegedWorkstation' 'AAD-11.7').State | Should -Be 'Satisfied'
+            Clear-TPState; Ca @($comp); PrivCatalog; (V 'Test-TPControlAADPrivilegedWorkstation' 'AAD-11.7').State | Should -Be 'Partial'
+            Clear-TPState; Ca @($paw);  PrivCatalog; (V 'Test-TPControlAADPrivilegedWorkstation' 'AAD-11.7').State | Should -Be 'Partial'
+        }
+        It 'an include-mode filter, a hybrid-join requirement or a non-privileged role does not count' {
+            $inc  = Pol -Users @() -Roles @($script:GA) -Grant @('block') -FilterMode 'include' -FilterRule 'device.extensionAttribute1 -eq "PAW"'
+            $hyb  = Pol -Users @() -Roles @($script:GA) -Grant @('domainJoinedDevice')
+            Ca @($inc, $hyb); PrivCatalog; (V 'Test-TPControlAADPrivilegedWorkstation' 'AAD-11.7').State | Should -Be 'Gap'
+            $comp = Pol -Users @() -Roles @('reader') -Grant @('compliantDevice')
+            $paw  = Pol -Users @() -Roles @('reader') -Grant @('block') -FilterMode 'exclude' -FilterRule 'device.extensionAttribute1 -eq "PAW"'
+            Clear-TPState; Ca @($comp, $paw); PrivCatalog
+            $f = V 'Test-TPControlAADPrivilegedWorkstation' 'AAD-11.7'
+            $f.State | Should -Be 'Gap'; $f.Detail | Should -Match 'no privileged role included'
+        }
+        It 'report-only halves are shortfalls naming them; the role catalog unread is not assessed' {
+            $comp = Pol -Name 'Staged compliant' -State 'enabledForReportingButNotEnforced' -Users @() -Roles @($script:GA) -Grant @('compliantDevice')
+            Ca @($comp); PrivCatalog
+            $f = V 'Test-TPControlAADPrivilegedWorkstation' 'AAD-11.7'
+            $f.State | Should -Be 'Gap'; $f.Detail | Should -Match 'report-only.*Staged compliant'
+            Clear-TPState; Ca @(Pol -Users @() -Roles @($script:GA) -Grant @('compliantDevice'))
+            (V 'Test-TPControlAADPrivilegedWorkstation' 'AAD-11.7').State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'AAD-11.9 workload identity policy must block on service principal risk' {
+        It 'blocks at a service principal risk level: Satisfied; location-only or no block: Gap; field not recorded: not assessed' {
+            Ca @(Pol -Users @() -Sps @('ServicePrincipalsInMyTenant') -SpRisk @('high') -Grant @('block')); (V 'Test-TPControlAADWorkloadIdentityCA' 'AAD-11.9').State | Should -Be 'Satisfied'
+            Clear-TPState; Ca @(Pol -Name 'SP locations' -Users @() -Sps @('ServicePrincipalsInMyTenant') -SpRisk @() -Grant @('block'))
+            $f = V 'Test-TPControlAADWorkloadIdentityCA' 'AAD-11.9'
+            $f.State | Should -Be 'Gap'; $f.Detail | Should -Match 'SP locations'
+            Clear-TPState; Ca @(Pol -Users @() -Sps @('ServicePrincipalsInMyTenant') -SpRisk @('high') -Grant @('mfa')); (V 'Test-TPControlAADWorkloadIdentityCA' 'AAD-11.9').State | Should -Be 'Gap'
+            Clear-TPState; Ca @(Pol -Users @() -Sps @('ServicePrincipalsInMyTenant') -Grant @('block')); (V 'Test-TPControlAADWorkloadIdentityCA' 'AAD-11.9').State | Should -Be 'NotApplicable'
+        }
+        It 'the CA collector projects servicePrincipalRiskLevels and the authentication context claim values' {
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                if ($Uri -match 'conditionalAccess/policies') { return @{ value = @(
+                    @{ id = 'p1'; displayName = 'WI risk'; state = 'enabled'; conditions = @{ servicePrincipalRiskLevels = @('high', 'medium'); clientApplications = @{ includeServicePrincipals = @('ServicePrincipalsInMyTenant') }; applications = @{ includeApplications = @('All') } }; grantControls = @{ operator = 'OR'; builtInControls = @('block') } },
+                    @{ id = 'p2'; displayName = 'Ctx'; state = 'enabled'; conditions = @{ users = @{ includeUsers = @('All') }; applications = @{ includeAuthenticationContextClassReferences = @('c1') } }; grantControls = @{ operator = 'OR'; builtInControls = @('mfa') } }) } }
+                return @{ value = @() }
+            }
+            Invoke-TPCollectAADCAPolicies 3>$null | Out-Null
+            $pols = @((Get-TPRawData -Key 'AAD-CAPolicies').Data.Policies)
+            @(($pols | Where-Object { $_.Id -eq 'p1' }).Conditions.ServicePrincipalRiskLevels) | Should -Be @('high', 'medium')
+            @(($pols | Where-Object { $_.Id -eq 'p2' }).Conditions.Applications.AuthenticationContext) | Should -Be @('c1')
+            ($pols | Where-Object { $_.Id -eq 'p2' }).Conditions.Contains('ServicePrincipalRiskLevels') | Should -BeTrue -Because 'a fresh read always records the field, so an empty list means none selected'
+        }
+    }
+
+    Context 'AAD-12.2 stale guests (real inventory collector)' {
+        BeforeAll {
+            function script:Run-Guests([object[]] $Rows) {
+                Clear-TPState
+                $script:T_Guests = $Rows
+                Set-Graph {
+                    param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                    if ($Uri -match "userType eq 'Guest'") { return @{ value = @($script:T_Guests) } }
+                    return @{ value = @() }
+                }
+                Invoke-TPCollectAADInventory 3>$null | Out-Null
+                V 'Test-TPControlInventoryStaleGuests' 'AAD-12.2'
+            }
+            $script:Ago = { param([int] $d) [datetime]::UtcNow.AddDays(-$d).ToString('o') }
+            function script:G([string] $Id, [bool] $Enabled, [string] $Created, $Sia) {
+                $g = @{ id = $Id; displayName = $Id; userPrincipalName = "$Id#EXT#@contoso.onmicrosoft.com"; accountEnabled = $Enabled; userType = 'Guest'; createdDateTime = $Created }
+                if ($Sia) { $g.signInActivity = $Sia }
+                $g
+            }
+        }
+        It 'a failed interactive attempt last week does not make a guest active: the last SUCCESSFUL sign-in decides' {
+            $f = Run-Guests @((G 'sprayed' $true (& $script:Ago 800) @{ lastSignInDateTime = (& $script:Ago 7); lastSuccessfulSignInDateTime = (& $script:Ago 400) }),
+                              (G 'active' $true (& $script:Ago 800) @{ lastSignInDateTime = (& $script:Ago 300); lastSuccessfulSignInDateTime = (& $script:Ago 3) }))
+            $f.State | Should -Be 'Gap'
+            @($f.AffectedObjects) -join ' ' | Should -Match 'sprayed'
+            @($f.AffectedObjects) -join ' ' | Should -Not -Match 'active \('
+        }
+        It 'no successful sign-in recorded is judged from the creation date' {
+            (Run-Guests @((G 'new' $true (& $script:Ago 10) $null))).State | Should -Be 'Satisfied'
+            $f = Run-Guests @((G 'old' $true (& $script:Ago 200) $null))
+            $f.State | Should -Be 'Gap'
+            @($f.AffectedObjects) -join ' ' | Should -Match 'account creation'
+        }
+        It 'a stale DISABLED guest is reported, not scored' {
+            $f = Run-Guests @((G 'gone' $false (& $script:Ago 800) @{ lastSuccessfulSignInDateTime = (& $script:Ago 400) }),
+                              (G 'active' $true (& $script:Ago 800) @{ lastSuccessfulSignInDateTime = (& $script:Ago 3) }))
+            $f.State | Should -Be 'Satisfied'
+            $f.Detail | Should -Match '1 disabled guest'
+        }
+        It 'a guest with neither date readable is not assessed, and an older results file is not assessed' {
+            (Run-Guests @((G 'nodate' $true '' $null))).State | Should -Be 'NotApplicable'
+            Clear-TPState
+            Set-TPRawData -Key 'AAD-Inventory' -Data (Bag @{ GuestUsers = @(@{ DisplayName = 'Old'; UPN = 'o'; AccountEnabled = $true; LastSignIn = (& $script:Ago 3); DaysSinceSignIn = 3; IsStale = $false }); SectionStatus = @{ GuestUsers = 'Collected' } })
+            $f = V 'Test-TPControlInventoryStaleGuests' 'AAD-12.2'
+            $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'predates'
+        }
+    }
+
+    Context 'AAD-14.1 tenant application management policy (real inventory collector)' {
+        BeforeAll {
+            function script:Run-AppPolicy($Policy, [bool] $Fail = $false) {
+                Clear-TPState
+                $script:T_Amp = $Policy; $script:T_AmpFail = $Fail
+                Set-Graph {
+                    param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                    if ($Uri -match 'defaultAppManagementPolicy') { if ($script:T_AmpFail) { throw 'Graph 403 Forbidden' }; return $script:T_Amp }
+                    return @{ value = @() }
+                }
+                Invoke-TPCollectAADInventory 3>$null | Out-Null
+                V 'Test-TPControlAADAppCredentialExpiry' 'AAD-14.1'
+            }
+            # Raw shape of tenantAppManagementPolicy (Graph v1.0).
+            function script:Amp([bool] $Enabled = $true, [string] $Pw = 'P180D', [string] $Key = 'P180D', [string] $State = 'enabled', $After = $null) {
+                @{ id = '00000000-0000-0000-0000-000000000000'; isEnabled = $Enabled
+                   applicationRestrictions = @{
+                       passwordCredentials = @(@{ restrictionType = 'passwordLifetime'; state = $State; maxLifetime = $Pw; restrictForAppsCreatedAfterDateTime = $After })
+                       keyCredentials      = @(@{ restrictionType = 'asymmetricKeyLifetime'; state = $State; maxLifetime = $Key; restrictForAppsCreatedAfterDateTime = $After }) } }
+            }
+        }
+        It 'no credentials and the policy capping both at 180 days for every app is Satisfied' {
+            $f = Run-AppPolicy (Amp)
+            $f.State | Should -Be 'Satisfied'
+            (Get-TPRawData -Key 'AAD-Inventory').Data.SectionStatus.AppManagementPolicy | Should -Be 'Collected'
+        }
+        It 'a lifetime above the control''s 180 days, a disabled policy, a disabled restriction or a created-after date is a shortfall' {
+            (Run-AppPolicy (Amp -Key 'P365D')).State | Should -Be 'Partial'
+            (Run-AppPolicy (Amp -Enabled $false)).State | Should -Be 'Partial'
+            (Run-AppPolicy (Amp -State 'disabled')).State | Should -Be 'Partial'
+            $f = Run-AppPolicy (Amp -After '2025-01-01T00:00:00Z')
+            $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'created after 2025-01-01'
+            $f = Run-AppPolicy @{ id = 'x'; isEnabled = $true; applicationRestrictions = @{ passwordCredentials = @(); keyCredentials = @() } }
+            $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'no lifetime limit for client secrets'
+        }
+        It 'the policy not read, or an unreadable duration, is not assessed' {
+            (Run-AppPolicy $null -Fail $true).State | Should -Be 'NotApplicable'
+            (Run-AppPolicy (Amp -Pw 'forever')).State | Should -Be 'NotApplicable'
+            Clear-TPState
+            Set-TPRawData -Key 'AAD-Inventory' -Data (Bag @{ AppCredentials = @(); SectionStatus = @{ AppCredentials = 'Collected' } })
+            $f = V 'Test-TPControlAADAppCredentialExpiry' 'AAD-14.1'
+            $f.State | Should -Be 'NotApplicable' -Because 'a results file from before the policy was read is not a pass'
+        }
+        It 'an expired or long-lived credential stays a Gap even with the policy in place' {
+            Clear-TPState
+            Set-TPRawData -Key 'AAD-Inventory' -Data (Bag @{
+                AppCredentials = @(@{ AppDisplayName = 'Legacy'; AppId = 'a'; CredentialType = 'Secret'; DaysRemaining = 500; LifetimeDays = 730 })
+                AppManagementPolicy = @{ IsEnabled = $true
+                    PasswordRestrictions = @(@{ RestrictionType = 'passwordLifetime'; State = 'enabled'; MaxLifetime = 'P180D'; RestrictForAppsCreatedAfterDateTime = ''; ExcludedActorAttributes = 0 })
+                    KeyRestrictions      = @(@{ RestrictionType = 'asymmetricKeyLifetime'; State = 'enabled'; MaxLifetime = 'P180D'; RestrictForAppsCreatedAfterDateTime = ''; ExcludedActorAttributes = 0 }) }
+                SectionStatus = @{ AppCredentials = 'Collected'; AppManagementPolicy = 'Collected' } })
+            (V 'Test-TPControlAADAppCredentialExpiry' 'AAD-14.1').State | Should -Be 'Gap'
         }
     }
 }

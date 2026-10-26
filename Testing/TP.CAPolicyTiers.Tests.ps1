@@ -44,23 +44,31 @@ Describe 'CA policy tiers — None / Audit mode / Enabled' {
                 'AAD-10.4' { $p.SessionControls = @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'timeBased'; Value = 12; Type = 'hours' } } }
                 # Token protection is sessionControls.secureSignInSession (beta),
                 # stored as SecureSignInSession by the collector.
-                'AAD-11.4' { $p.SessionControls = @{ SecureSignInSession = $true } }
+                # ...on Windows, for some users, on Exchange Online and SharePoint Online.
+                'AAD-11.4' { $p.SessionControls = @{ SecureSignInSession = $true }
+                             $p.Conditions = @{ Users = @{ IncludeUsers = @('All'); IncludeRoles = @() }; Platforms = @('windows'); ClientApplications = @{}
+                                                Applications = @{ Include = @('00000002-0000-0ff1-ce00-000000000000', '00000003-0000-0ff1-ce00-000000000000'); Exclude = @() } } }
                 # Matched on configuration, never on the policy's NAME.
                 'AAD-11.7' { $p.Conditions = @{ Users = @{ IncludeRoles = @('62e90394-69f5-4237-9190-012177145e10') }; Devices = @{ FilterMode = 'include'; FilterRule = 'device.extensionAttribute1 -eq "PAW"' }; ClientApplications = @{} } }
                 'AAD-11.8' { $p.GrantControls = @{ BuiltInControls = @(); TermsOfUse = @('tou-1') } }
-                'AAD-11.9' { $p.Conditions = @{ Users = @{ IncludeRoles = @() }; ClientApplications = @{ IncludeServicePrincipals = @('sp-1') } } }
+                # A workload identity policy that blocks on service principal risk.
+                'AAD-11.9' { $p.Conditions = @{ Users = @{ IncludeRoles = @() }; ClientApplications = @{ IncludeServicePrincipals = @('sp-1') }; ServicePrincipalRiskLevels = @('high') }
+                             $p.GrantControls = @{ BuiltInControls = @('block'); TermsOfUse = @() } }
             }
             [pscustomobject]$p
         }
     }
 
+    # AAD-11.7 needs two policies (compliant device AND a device-filter block),
+    # so it is judged component by component (the "Benchmark gap fixes (AAD)" block of TP.IdentityTruth.Tests.ps1)
+    # and appears here only in the Security Defaults case.
     $cases = @(
         @{ Cid = 'AAD-10.4'; Fn = 'Test-TPControlAADSignInFrequency' }
         @{ Cid = 'AAD-11.4'; Fn = 'Test-TPControlAADTokenProtection' }
-        @{ Cid = 'AAD-11.7'; Fn = 'Test-TPControlAADPrivilegedWorkstation' }
         @{ Cid = 'AAD-11.8'; Fn = 'Test-TPControlAADTermsOfUse' }
         @{ Cid = 'AAD-11.9'; Fn = 'Test-TPControlAADWorkloadIdentityCA' }
     )
+    $sdCases = @($cases) + @(@{ Cid = 'AAD-11.7'; Fn = 'Test-TPControlAADPrivilegedWorkstation' })
 
     It '<Cid>: no policy is a Gap reading "None" — never half credit' -TestCases $cases {
         $f = Invoke-Case $Fn $Cid @()
@@ -86,11 +94,11 @@ Describe 'CA policy tiers — None / Audit mode / Enabled' {
         $f.CurrentValue | Should -Match '^Enabled'
     }
 
-    It '<Cid>: carries its framework citations in every tier' -TestCases $cases {
+    It '<Cid>: carries its framework citations in every tier' -TestCases $sdCases {
         (@((Invoke-Case $Fn $Cid @()).FrameworkIds) -join ' ') | Should -Match 'NIST:'
     }
 
-    It '<Cid>: missing CA data stays NotApplicable' -TestCases $cases {
+    It '<Cid>: missing CA data stays NotApplicable' -TestCases $sdCases {
         Clear-TPState
         & $Fn | Out-Null
         @(Get-TPFindings | Where-Object { $_.ControlId -eq $Cid })[0].State | Should -Be 'NotApplicable'
@@ -100,7 +108,7 @@ Describe 'CA policy tiers — None / Audit mode / Enabled' {
     # turned on, so a report-only policy is not part-way to enforcement: its
     # next step is blocked. It used to earn Partial and the advice "switch the
     # policy to On", which cannot be done with Security Defaults on.
-    It '<Cid>: Security Defaults on is a Gap naming Security Defaults, never "switch the policy to On", even beside a report-only policy' -TestCases $cases {
+    It '<Cid>: Security Defaults on is a Gap naming Security Defaults, never "switch the policy to On", even beside a report-only policy' -TestCases $sdCases {
         $null = Invoke-Case $Fn $Cid @(New-Matching $Cid 'enabledForReportingButNotEnforced')
         Clear-TPFindings
         Set-TPRawData -Key 'AAD-AuthPolicies' -Data ([ordered]@{

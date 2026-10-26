@@ -1832,7 +1832,7 @@
     {
       "ControlId": "AAD-3.3",
       "Title": "PIM Requires MFA on Activation",
-      "Description": "PIM role management policies require MFA when users activate an eligible role assignment.",
+      "Description": "PIM role management policies require MFA when users activate an eligible role assignment (Azure MFA in the activation rules, or an authentication context whose Conditional Access policy requires MFA for all users).",
       "BusinessRisk": "Without MFA on activation, a compromised account can silently elevate to Global Admin via PIM with just a password.",
       "Severity": "High",
       "Workload": "AAD",
@@ -2188,7 +2188,7 @@
     {
       "ControlId": "AAD-7.1",
       "Title": "Password Protection Lockout Configured",
-      "Description": "Account lockout threshold is configured at 10 or fewer failed attempts.",
+      "Description": "Account lockout threshold is configured at 10 or fewer failed attempts and the lockout duration at 60 seconds or more.",
       "BusinessRisk": "High lockout thresholds allow extensive brute force attempts before accounts are locked.",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -4459,7 +4459,7 @@
     {
       "ControlId": "AAD-11.2",
       "Title": "No Guest Accounts in Highly Privileged Roles",
-      "Description": "No guest accounts hold Global Administrator, Privileged Role Administrator, or other highly privileged directory roles.",
+      "Description": "No guest accounts (user type Guest, or #EXT# in the UPN) hold or are eligible for Global Administrator, Privileged Role Administrator, or any other directory role Microsoft marks privileged.",
       "BusinessRisk": "Guest accounts are outside the tenant's identity governance. A compromised guest account holding a privileged role provides tenant-wide administrative access from an uncontrolled identity.",
       "Severity": "Critical",
       "Workload": "AAD",
@@ -4520,7 +4520,7 @@
     {
       "ControlId": "AAD-11.4",
       "Title": "Token Protection (Session Binding) Enforced",
-      "Description": "CA policy enforces token protection to bind tokens to the originating device, blocking replay attacks.",
+      "Description": "CA policy enforces token protection for Exchange Online and SharePoint Online on Windows, binding tokens to the originating device and blocking replay attacks.",
       "BusinessRisk": "AiTM (adversary-in-the-middle) phishing steals authenticated session tokens. Without token binding, stolen tokens work from any device — effectively bypassing MFA entirely.",
       "Severity": "High",
       "Workload": "AAD",
@@ -4609,7 +4609,7 @@
     {
       "ControlId": "AAD-11.7",
       "Title": "Privileged Access Workstation or Device Scope for Admins",
-      "Description": "Conditional Access enforces that privileged role activations or admin operations occur from compliant or specifically designated devices.",
+      "Description": "Conditional Access requires a compliant device for privileged roles and blocks privileged roles on every device outside a designated device filter (privileged access workstations).",
       "BusinessRisk": "Admins authenticating from any arbitrary device — including personal laptops with no endpoint controls — expose privileged credentials to malware on unmanaged endpoints.",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -4666,7 +4666,7 @@
     {
       "ControlId": "AAD-11.9",
       "Title": "Workload Identity Conditional Access Policy",
-      "Description": "CA policies are applied to service principals and managed identities, not just user accounts.",
+      "Description": "A risk-based Conditional Access policy blocks service principals at selected workload identity risk levels.",
       "BusinessRisk": "Without CA policies on workload identities, compromised service principals face no access controls — no location restriction, no risk-based blocking, no session limits.",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -5554,7 +5554,7 @@
     {
       "ControlId": "AAD-12.2",
       "Title": "Stale Guest Accounts — Named List",
-      "Description": "Identifies guest accounts with no sign-in activity in 90+ days.",
+      "Description": "Identifies enabled guest accounts with no successful sign-in in 90+ days (judged from account creation when none is recorded).",
       "BusinessRisk": "Stale guest accounts from former vendors, contractors, and partners retain access to SharePoint sites, Teams channels, and any resource they were granted. Ex-partners can exfiltrate data months after their engagement ends.",
       "Severity": "High",
       "Workload": "AAD",
@@ -5983,7 +5983,7 @@
     {
       "ControlId": "AAD-14.1",
       "Title": "Application Credentials Current and Short-Lived",
-      "Description": "App registration client secrets and certificates are unexpired and issued with a bounded lifetime.",
+      "Description": "App registration client secrets and certificates are unexpired and issued with a bounded lifetime, and the tenant application management policy caps the lifetime of new ones.",
       "BusinessRisk": "A client secret is a standing bearer credential to everything its application can reach. No MFA applies to it, no Conditional Access evaluates it, and no sign-in risk is scored against it. A long-lived secret keeps working for everyone who has ever seen it — a departed administrator, a stale runbook, a CI variable, a chat message — until somebody rotates it, and nothing forces rotation. An expired credential is the other half of the same problem: the fix under outage pressure is a new secret with the longest lifetime available and no reminder set.",
       "Severity": "High",
       "Workload": "AAD",

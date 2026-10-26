@@ -306,9 +306,13 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw 'AAD' @{
                 RoleAssignments = @(
                     [pscustomobject]@{ RoleDefinitionName = 'Global Administrator'
+                                       PrincipalType = '#microsoft.graph.user'; PrincipalUserType = 'Member'
                                        PrincipalUPN = 'admin@contoso.com'
                                        PrincipalDisplayName = 'Alice Admin' }
                 )
+                # Satisfied needs every read that could hide a guest: eligible
+                # assignments and Microsoft's privileged-role flags.
+                SectionStatus = @{ RoleAssignments = 'Collected'; RoleEligibilitySchedules = 'Collected'; PrivilegedRoleFlags = 'Collected' }
             })
             (GetVerdict 'Test-TPControlAADNoGuestInPrivRoles' 'AAD-11.2').State | Should -Be 'Satisfied'
         }
@@ -330,9 +334,11 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw 'AAD' @{
                 RoleAssignments = @(
                     [pscustomobject]@{ RoleDefinitionName = 'Directory Readers'
+                                       PrincipalType = '#microsoft.graph.user'; PrincipalUserType = 'Guest'
                                        PrincipalUPN = 'vendor_partner.com#EXT#@contoso.onmicrosoft.com'
                                        PrincipalDisplayName = 'Vendor Guest' }
                 )
+                SectionStatus = @{ RoleAssignments = 'Collected'; RoleEligibilitySchedules = 'Collected'; PrivilegedRoleFlags = 'Collected' }
             })
             (GetVerdict 'Test-TPControlAADNoGuestInPrivRoles' 'AAD-11.2').State | Should -Be 'Satisfied' `
                 -Because 'flagging a guest in a harmless role would be a false positive that erodes trust in the report'
@@ -1290,10 +1296,11 @@ Describe 'Failed role collection is never reported as compliance (AAD roles)' {
     It 'a COLLECTED-but-genuinely-clean tenant still passes AAD-11.2' {
         Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (NewRoles @{
             RoleAssignments = @( [pscustomobject]@{ RoleDefinitionName = 'Global Administrator'
+                                                    PrincipalType = '#microsoft.graph.user'; PrincipalUserType = 'Member'
                                                     PrincipalUPN = 'admin@contoso.com'
                                                     PrincipalDisplayName = 'Alice' } )
             PrivRoles     = @()
-            SectionStatus = @{ RoleAssignments = 'Collected'; RoleEligibilitySchedules = 'Collected' }
+            SectionStatus = @{ RoleAssignments = 'Collected'; RoleEligibilitySchedules = 'Collected'; PrivilegedRoleFlags = 'Collected' }
         })
         (RoleVerdict 'Test-TPControlAADNoGuestInPrivRoles' 'AAD-11.2').State | Should -Be 'Satisfied' `
             -Because 'the guard must not suppress genuine compliance'

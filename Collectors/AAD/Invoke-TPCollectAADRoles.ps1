@@ -37,6 +37,10 @@ function Invoke-TPCollectAADRoles {
             SectionStatus = @{
                 RoleAssignments          = 'NotRun'
                 RoleEligibilitySchedules = 'NotRun'
+                # Microsoft's own isPrivileged flag per role definition (beta
+                # only; v1.0 unifiedRoleDefinition does not define it). Read on
+                # its own so a failure never costs the v1.0 role catalog.
+                PrivilegedRoleFlags      = 'NotRun'
             }
         }
     }
@@ -133,6 +137,32 @@ function Invoke-TPCollectAADRoles {
             }
         }
 
+        # Microsoft's isPrivileged flag (role definitions whose permissions can
+        # lead to elevation; Microsoft Entra built-in roles reference, the
+        # PRIVILEGED label). It exists on the beta unifiedRoleDefinition only,
+        # so it is read separately and attached as IsPrivileged ($null = not
+        # read). IsPriv, the tool's fixed 17-role list, is unchanged.
+        try {
+            $flagRows = @(Get-TPGraphAllPages -MaxPages 50 `
+                -Uri 'https://graph.microsoft.com/beta/roleManagement/directory/roleDefinitions?$select=id,isPrivileged')
+            $flags = @{}
+            foreach ($fr in $flagRows) {
+                $fid = [string](Get-TPObjectField -Item $fr -Key 'id' -Default '')
+                $fv  = Get-TPObjectField -Item $fr -Key 'isPrivileged' -Default $null
+                if ($fid -and $fv -is [bool]) { $flags[$fid] = $fv }
+            }
+            foreach ($rd in @($result.Data.RoleDefinitions)) {
+                $rd['IsPrivileged'] = $(if ($flags.ContainsKey([string]$rd.Id)) { $flags[[string]$rd.Id] } else { $null })
+            }
+            $result.Data.PrivilegedRoleIds = @($flags.Keys | Where-Object { $flags[$_] -eq $true } | Sort-Object)
+            $result.Data.SectionStatus.PrivilegedRoleFlags = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.PrivilegedRoleFlags = 'Failed'
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'AAD-PrivilegedRoleFlags' -Message $_.Exception.Message
+            }
+        }
+
         # Build role ID → name lookup
         $roleMap = @{}
         foreach ($rd in @($result.Data.RoleDefinitions)) {
@@ -176,6 +206,10 @@ function Invoke-TPCollectAADRoles {
                     PrincipalType        = [string](Get-TPObjectField -Item $pr -Key '@odata.type' -Default 'unknown')
                     PrincipalDisplayName = [string](Get-TPObjectField -Item $pr -Key 'displayName' -Default 'unknown')
                     PrincipalUPN         = [string](Get-TPObjectField -Item $pr -Key 'userPrincipalName' -Default '')
+                    # userType is returned on the expanded user principal
+                    # (Microsoft's list example); '' for groups and service
+                    # principals, and for a user whose row omitted it.
+                    PrincipalUserType    = [string](Get-TPObjectField -Item $pr -Key 'userType' -Default '')
                     DirectoryScopeId     = [string](Get-TPObjectField -Item $a -Key 'directoryScopeId' -Default '/')
                     IsPriv               = ($privRoleNames -contains $roleName)
                     OnPremisesSyncEnabled = (Get-TPObjectField -Item $pr -Key 'onPremisesSyncEnabled' -Default $null)
@@ -248,6 +282,7 @@ function Invoke-TPCollectAADRoles {
                     PrincipalType        = [string](Get-TPObjectField -Item $pr -Key '@odata.type' -Default 'unknown')
                     PrincipalDisplayName = [string](Get-TPObjectField -Item $pr -Key 'displayName' -Default 'unknown')
                     PrincipalUPN         = [string](Get-TPObjectField -Item $pr -Key 'userPrincipalName' -Default '')
+                    PrincipalUserType    = [string](Get-TPObjectField -Item $pr -Key 'userType' -Default '')
                     DirectoryScopeId     = [string](Get-TPObjectField -Item $e -Key 'directoryScopeId' -Default '/')
                     IsPriv               = ($privRoleNames -contains $roleName)
                     OnPremisesSyncEnabled= (Get-TPObjectField -Item $pr -Key 'onPremisesSyncEnabled' -Default $null)

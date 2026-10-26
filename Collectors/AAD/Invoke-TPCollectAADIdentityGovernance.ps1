@@ -385,6 +385,13 @@ function Invoke-TPCollectAADIdentityGovernance {
                     DisplayName           = [string]$policy.displayName
                     ScopeId               = [string]$policy.scopeId
                     RequiresMFA           = if ($enablementRule -or $authContextRule) { $mfaViaEnablement -or $mfaViaAuthCtx } else { $null }
+                    # The two routes kept apart (AAD-3.3): an authentication
+                    # context is MFA only when the Conditional Access policy that
+                    # targets its claim value requires MFA, which the evaluator
+                    # checks against AAD-CAPolicies. $null = rule absent.
+                    MfaViaEnablement      = if ($enablementRule) { $mfaViaEnablement } else { $null }
+                    AuthContextEnabled    = if ($authContextRule) { $mfaViaAuthCtx } else { $null }
+                    AuthContextClaimValue = [string](Get-TPObjectField -Item $authContextRule -Key 'claimValue' -Default '')
                     RequiresJustification = if ($enablementRule) { [bool]($enabledRuleNames -contains 'Justification') } else { $null }
                     RequiresApproval      = if ($approvalRule) { [bool](Get-TPNestedProperty -Object $approvalRule -Path 'setting.isApprovalRequired' -Default $false) } else { $null }
                     MaxDurationHours      = if ($expiryRule -and $expiryRule.maximumDuration) {

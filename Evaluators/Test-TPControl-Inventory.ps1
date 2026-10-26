@@ -135,24 +135,50 @@ function Test-TPControlInventoryStaleGuests {
             -Detail "Not scored: last sign-in (Graph signInActivity) requires Microsoft Entra ID P1 or P2, which this tenant does not hold, so whether any of the $n guest account(s) read is stale is not known — surfaced as a licensing upgrade opportunity, not counted against the score. Review guest accounts by last sign-in in Entra ID > Users, or license Entra ID P1."
         return
     }
-    $staleGuests = @($inv.Data['GuestUsers'] | Where-Object { $_.IsStale -eq $true })
-    $allGuests   = @($inv.Data['GuestUsers']).Count
+    # Judged as Microsoft's inactive-guest check judges it: ENABLED guests whose
+    # last successful sign-in (or, with none recorded, the account's creation)
+    # is more than 90 days ago. A disabled guest cannot sign in and is reported,
+    # not scored. Rows from before the collector recorded the last successful
+    # sign-in are not assessed: their staleness came from the last interactive
+    # attempt, which a failed sign-in refreshes.
+    $rows = @(Get-TPObjectField -Item $inv.Data -Key 'GuestUsers' -Default @() | Where-Object { $null -ne $_ })
+    $allGuests = $rows.Count
     if ($allGuests -eq 0 -and -not (Test-TPInventorySectionCollected -Inventory $inv -Section 'GuestUsers')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
             -Detail 'Guest account enumeration did not complete (see Exceptions) — stale guest access could not be assessed.'
         return
     }
-    if ($staleGuests.Count -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$allGuests guest account(s) found — all have signed in within the past 90 days. No stale guest access detected."
-    } else {
+    $hasField = { param($r) if ($r -is [System.Collections.IDictionary]) { $r.Contains('LastSuccessfulSignIn') } else { $null -ne $r.PSObject.Properties['LastSuccessfulSignIn'] } }
+    if (@($rows | Where-Object { -not (& $hasField $_) }).Count -gt 0) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "$allGuests guest account(s) were read, but this results file predates recording each guest's last successful sign-in, and the last interactive attempt it holds is refreshed by a failed sign-in. Not assessed."
+        return
+    }
+    $enabledOf = { param($r) Get-TPObjectField -Item $r -Key 'AccountEnabled' -Default $null }
+    $enabled  = @($rows | Where-Object { (& $enabledOf $_) -eq $true })
+    $disabled = @($rows | Where-Object { (& $enabledOf $_) -eq $false })
+    $enUnknown = @($rows | Where-Object { $null -eq (& $enabledOf $_) })
+    $staleGuests = @($enabled | Where-Object { (Get-TPObjectField -Item $_ -Key 'IsStale' -Default $null) -eq $true })
+    $staleUnknown = @(@($enabled + $enUnknown) | Where-Object { $null -eq (Get-TPObjectField -Item $_ -Key 'IsStale' -Default $null) })
+    $staleDisabled = @($disabled | Where-Object { (Get-TPObjectField -Item $_ -Key 'IsStale' -Default $null) -eq $true }).Count
+    $disabledNote = if ($staleDisabled) { " $staleDisabled disabled guest account(s) are also inactive for 90+ days; disabled accounts cannot sign in and are not scored, but consider removing them." } else { '' }
+    $unknownNote = ''
+    if ($enUnknown.Count) { $unknownNote += " Whether $($enUnknown.Count) guest account(s) are enabled was not recorded." }
+    if ($staleUnknown.Count) { $unknownNote += " Neither a successful sign-in nor a creation date could be read for $($staleUnknown.Count) guest account(s)." }
+    if ($staleGuests.Count -gt 0) {
         $objects = @($staleGuests | Sort-Object DaysSinceSignIn -Descending | Select-Object -First 50 | ForEach-Object {
-            $days = if ($_.DaysSinceSignIn -eq 9999) { "Never signed in" } else { "$($_.DaysSinceSignIn) days since $([string](Get-TPObjectField -Item $_ -Key 'LastSignInBasis' -Default 'last sign-in'))" }
-            "$($_.DisplayName) ($($_.UPN)) — Last sign-in: $days"
+            $basis = [string](Get-TPObjectField -Item $_ -Key 'LastSignInBasis' -Default 'last successful sign-in')
+            "$($_.DisplayName) ($($_.UPN)) — $($_.DaysSinceSignIn) days since $basis"
         })
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "$($staleGuests.Count) guest account(s) with no sign-in activity in 90+ days. These are likely ex-vendors, ex-contractors, or test accounts that retain access to SharePoint, Teams, and shared resources." `
-            -CurrentValue "$($staleGuests.Count) stale guests of $allGuests total" -RequiredValue 'All guests active within 90 days or removed' `
+            -Detail "$($staleGuests.Count) enabled guest account(s) with no successful sign-in in 90+ days (judged from account creation where none is recorded). These are likely ex-vendors, ex-contractors, or test accounts that retain access to SharePoint, Teams, and shared resources.$disabledNote$unknownNote" `
+            -CurrentValue "$($staleGuests.Count) stale enabled guests of $allGuests total" -RequiredValue 'Every enabled guest has signed in successfully within 90 days, or is disabled or removed' `
             -Remediation $ctrl.Remediation -AffectedObjects $objects
+    } elseif ($enUnknown.Count -or $staleUnknown.Count) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "No enabled guest account was found inactive for 90+ days, but$unknownNote Not assessed.$disabledNote"
+    } else {
+        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$allGuests guest account(s) found; all $($enabled.Count) enabled guest(s) have signed in successfully within the past 90 days (or were created within it). No stale guest access detected.$disabledNote"
     }
 }
 
