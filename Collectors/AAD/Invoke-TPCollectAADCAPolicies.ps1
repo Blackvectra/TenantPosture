@@ -67,6 +67,14 @@ function Invoke-TPCollectAADCAPolicies {
                 $g = { param($path, $def = @()) Get-TPNestedProperty -Object $p -Path $path -Default $def }
                 $sif = & $g 'sessionControls.signInFrequency' $null
                 $pb  = & $g 'sessionControls.persistentBrowser' $null
+                $projectGuests = { param($path)
+                    $o = & $g $path $null
+                    if ($null -eq $o) { return $null }
+                    @{
+                        GuestOrExternalUserTypes      = [string](Get-TPObjectField -Item $o -Key 'guestOrExternalUserTypes' -Default '')
+                        ExternalTenantsMembershipKind = [string](Get-TPNestedProperty -Object $o -Path 'externalTenants.membershipKind' -Default '')
+                    }
+                }
                 @{
                     Id               = [string](& $g 'id' '')
                     DisplayName      = [string](& $g 'displayName' '')
@@ -93,6 +101,12 @@ function Invoke-TPCollectAADCAPolicies {
                             ExcludeGroups = @(& $g 'conditions.users.excludeGroups')
                             IncludeRoles  = @(& $g 'conditions.users.includeRoles')
                             ExcludeRoles  = @(& $g 'conditions.users.excludeRoles')
+                            # The 'Guest or external users' selection (AAD-10.4's guest
+                            # half). $null when the policy does not select it; a results
+                            # file from before this read has no key and GuestConditionsRead
+                            # below is absent, so the guest half is not assessed.
+                            IncludeGuestsOrExternalUsers = & $projectGuests 'conditions.users.includeGuestsOrExternalUsers'
+                            ExcludeGuestsOrExternalUsers = & $projectGuests 'conditions.users.excludeGuestsOrExternalUsers'
                         }
                         Applications      = @{
                             Include = @(& $g 'conditions.applications.includeApplications')
@@ -153,6 +167,8 @@ function Invoke-TPCollectAADCAPolicies {
             }
             $result.Data.Policies = @($policyRows | ForEach-Object { & $projectPolicy $_ })
             $policiesCollected = $true
+            # Every policy above carries the guest selection read from Graph.
+            $result.Data.GuestConditionsRead = $true
 
             # Token protection (sessionControls.secureSignInSession) is not in
             # the v1.0 shape, so AAD-11.4 said "None" on every tenant. Read it

@@ -173,6 +173,7 @@ function Get-TPPIMScopedPolicies {
                 RequiresJustification = Get-TPObjectField -Item $p -Key 'RequiresJustification'
                 RequiresApproval      = Get-TPObjectField -Item $p -Key 'RequiresApproval'
                 MaxDurationHours      = Get-TPObjectField -Item $p -Key 'MaxDurationHours'
+                MaxDuration           = [string](Get-TPObjectField -Item $p -Key 'MaxDuration' -Default '')
             }
         }
     }
@@ -1088,26 +1089,64 @@ function Test-TPControlAADPIMApproval {
 
 # ── AAD-3.6 PIM Max Activation Duration ──────────────────────────────────────
 function Test-TPControlAADPIMDuration {
+    # Owner's decision (2026-10-26), after Microsoft's Zero Trust guide (Phase 1,
+    # Step 6, Configure activation settings: "Set maximum activation duration (for
+    # example: 1-4 hours for high-impact roles)"): the high-impact roles, which are
+    # Microsoft's stated minimum set of privileged roles (Global, Privileged Role,
+    # Security, Exchange and SharePoint Administrator), allow at most 4 hours; every
+    # other role in the tool's privileged list at most 8. The duration is read from
+    # the ISO 8601 value Graph returns (PT30M, PT1H30M, P1D); a results file from
+    # before that read kept only the hour part, so a stored value equal to a limit
+    # may have hidden minutes and is not assessed.
     [CmdletBinding()] param()
     $cid = 'AAD-3.6'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
     $gov = Get-TPRawData -Key 'AAD-IdentityGovernance'
     if (-not $gov -or -not $gov.Success -or @($gov.Data['PIMRolePolicies']).Count -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'PIM policy data not collected'; return
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'PIM policy data not collected'; return
     }
+    $highImpact = @('Global Administrator', 'Privileged Role Administrator', 'Security Administrator', 'Exchange Administrator', 'SharePoint Administrator')
+    $required = "Maximum activation duration 4 hours or less for $($highImpact -join ', '); 8 hours or less for the other privileged roles"
     $sc = Get-TPPIMScopedPolicies -Policies $gov.Data['PIMRolePolicies']
-    $scope = if ($sc.Scoped) { 'privileged-role' } else { 'PIM role' }
-    $note  = if ($sc.Scoped) { '' } else { ' (Policy-to-role mapping was unavailable, so every role was scored, not only privileged ones.)' }
-    $longDuration = @($sc.Policies | Where-Object { $null -ne $_.MaxDurationHours -and $_.MaxDurationHours -gt 8 })
-    $unknownDuration = @($sc.Policies | Where-Object { $null -eq $_.MaxDurationHours })
-    if ($longDuration.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail "$($longDuration.Count) $scope policy(ies) allow activation >8 hours. Shorter windows reduce blast radius.$note" -CurrentValue ">8h max duration" -RequiredValue '≤8 hours max duration'
-    } elseif (@($sc.Policies).Count -eq 0 -or $unknownDuration.Count -gt 0) {
-        # Previously scored Partial on an unreadable duration — a verdict the tool never computed.
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "Maximum activation duration could not be read for $($unknownDuration.Count) $scope policy(ies); not assessed."
-    } else {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "All $(@($sc.Policies).Count) $scope policies have max activation ≤8 hours.$note"
+    $fmt = { param($h) if ($h -lt 1) { "$([math]::Round($h * 60)) minutes" } else { "$([math]::Round($h, 2)) hours" } }
+    $over = @(); $okHigh = @(); $okOther = @(); $unread = @()
+    foreach ($p in @($sc.Policies)) {
+        $role = [string](Get-TPObjectField -Item $p -Key 'RoleName' -Default '')
+        $label = if ($role) { $role } else { [string](Get-TPObjectField -Item $p -Key 'PolicyId' -Default 'policy') }
+        $isHigh = $sc.Scoped -and ($role -in $highImpact)
+        $limit = if ($isHigh) { 4 } else { 8 }
+        $raw = [string](Get-TPObjectField -Item $p -Key 'MaxDuration' -Default '')
+        $legacy = $false
+        if ($raw) {
+            $h = ConvertTo-TPDurationHours -Duration $raw
+        } else {
+            # Older results: only the hour part of the duration was kept.
+            $legacy = $true
+            $h = $null
+            $stored = [string](Get-TPObjectField -Item $p -Key 'MaxDurationHours' -Default '')
+            $n = 0
+            if ($stored -match '^\d{1,5}$' -and [int]::TryParse($stored, [System.Globalization.NumberStyles]::None, [cultureinfo]::InvariantCulture, [ref]$n)) { $h = [double]$n }
+        }
+        if ($null -eq $h -or ($legacy -and $h -eq $limit)) { $unread += $label; continue }
+        if ($h -gt $limit) { $over += "$label ($(& $fmt $h); limit $limit hours)"; continue }
+        if ($isHigh) { $okHigh += $role } else { $okOther += $label }
     }
+    $v = @(); $s = @(); $u = @()
+    if ($sc.Scoped) {
+        $seen = @(@($sc.Policies) | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'RoleName' -Default '') })
+        $missingHigh = @($highImpact | Where-Object { $_ -notin $seen })
+        if ($okHigh.Count -gt 0) { $v += "High-impact roles allowing activation for 4 hours or less (the set judged at 4 hours is Microsoft's minimum privileged set: $($highImpact -join ', ')): $((@($highImpact | Where-Object { $_ -in $okHigh })) -join ', ')." }
+        if ($okOther.Count -gt 0) { $v += "$($okOther.Count) other privileged-role policy(ies) allow activation for 8 hours or less." }
+        if ($missingHigh.Count -gt 0) { $u += "the activation duration of $($missingHigh -join ', '), because no PIM policy was mapped to the role." }
+    } else {
+        if ($okOther.Count -gt 0) { $v += "$($okOther.Count) PIM role policy(ies) allow activation for 8 hours or less." }
+        $u += "whether the high-impact roles ($($highImpact -join ', ')) allow 4 hours or less, because the policy-to-role mapping was unavailable (every role policy was judged against 8 hours)."
+    }
+    if ($over.Count -gt 0) { $s += "$($over.Count) $(if ($sc.Scoped) { 'privileged-role' } else { 'PIM role' }) policy(ies) allow activation longer than their limit, so a compromised activation stays usable longer: $((@($over) | Select-Object -First 10) -join ', ')$(if ($over.Count -gt 10) { " and $($over.Count - 10) more" })." }
+    if ($unread.Count -gt 0) { $u += "the maximum activation duration of $($unread.Count) policy(ies), because the value was not returned, could not be read, or (in a results file from before the full duration was read) equals the limit and may have hidden minutes: $((@($unread) | Select-Object -First 10) -join ', ')." }
+    if (@($sc.Policies).Count -eq 0) { $u += 'any privileged-role PIM policy, because none was mapped to a privileged role.' }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $v -Shortfalls $s -NotEstablished $u `
+        -CurrentValue "$(@($sc.Policies).Count) policy(ies): $($over.Count) over the limit, $($unread.Count) not read" -RequiredValue $required
 }
 
 # ── AAD-4.1 Guest Invite Permissions Restricted ───────────────────────────────
@@ -1901,34 +1940,218 @@ function Test-TPControlAADBreakGlassMonitoring {
 }
 
 # ── AAD-10.4 User Sign-in Frequency Session Control ─────────────────────────
+# Judged per population, as Microsoft's Zero Trust Assessment does (owner's
+# decision, 2026-10-26):
+#   Privileged roles (test 21825, "Privileged users have short-lived sign-in
+#   sessions"): every privileged role in this tenant's role catalog (the tool's
+#   list, IsPriv, and Microsoft's isPrivileged flag, IsPrivileged) is named in
+#   IncludeRoles of an enabled policy whose sign-in frequency is on, of type
+#   hours, at 4 or less. The test counts only policies that name the role, so an
+#   all-users policy is not credited here either.
+#   Guests (test 21824, "Guests don't have long lived sign-in sessions"): an
+#   enabled policy selecting 'Guest or external users'
+#   (includeGuestsOrExternalUsers) whose frequency is 24 hours or less, 1 day, or
+#   every time.
+# Beyond the tests, a counted policy must reach every application and the
+# interactive client app types with no platform, location, device-filter or risk
+# narrowing, and user or group exclusions are judged across the counted policies
+# (Get-TPExclusionCoverage). One half met is Partial; neither is a Gap. A results
+# file from before the guest selection was read leaves the guest half not
+# assessed, and an unread role catalog the privileged half.
+function Get-TPSignInFrequencyHours {
+    # Hours a sign-in frequency session control allows: [double], 0 for every
+    # time, or $null when it is off or its value is not a positive number.
+    [CmdletBinding()]
+    param([AllowNull()] $Policy)
+    $sif = Get-TPNestedProperty -Object $Policy -Path 'SessionControls.SignInFrequency' -Default $null
+    if ($null -eq $sif -or (Get-TPObjectField -Item $sif -Key 'IsEnabled' -Default $false) -ne $true) { return $null }
+    $type = [string](Get-TPObjectField -Item $sif -Key 'Type' -Default '')
+    if (-not $type -and [string](Get-TPObjectField -Item $sif -Key 'FrequencyInterval' -Default '') -eq 'everyTime') { return [double]0 }
+    $raw = [string](Get-TPObjectField -Item $sif -Key 'Value' -Default '')
+    $n = 0
+    if ($raw -notmatch '^\d{1,6}$' -or -not [int]::TryParse($raw, [System.Globalization.NumberStyles]::None, [cultureinfo]::InvariantCulture, [ref]$n) -or $n -le 0) { return $null }
+    switch ($type) { 'hours' { return [double]$n } 'days' { return [double]($n * 24) } }
+    return $null
+}
+
 function Test-TPControlAADSignInFrequency {
     [CmdletBinding()] param()
     $cid = 'AAD-10.4'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
+    $required = 'Enabled CA policies with a sign-in frequency session control: every privileged role at 4 hours or less (named in the policy''s roles), and guest or external users at 24 hours or less (or every time)'
     if ((Get-TPSecurityDefaultsState) -eq $true) {
         Add-TPSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
             -Detail 'No sign-in frequency session control is in force: session controls are a Conditional Access feature Security Defaults does not provide, so sign-in sessions follow the default rolling window of up to 90 days and a stolen token stays usable within it.' `
-            -CurrentValue 'Security Defaults enabled; no Conditional Access policy in force' -RequiredValue 'Enabled CA policy with a sign-in frequency session control' `
+            -CurrentValue 'Security Defaults enabled; no Conditional Access policy in force' -RequiredValue $required `
             -Remediation $ctrl.Remediation -NeedsConditionalAccess
         return
     }
     $ca = Get-TPRawData -Key 'AAD-CAPolicies'
     if (-not $ca -or -not $ca.Success) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
-            -Title $ctrl.Title -Detail 'CA data not collected'; return
+            -Title $ctrl.Title -FrameworkIds $cit -Detail 'CA data not collected'; return
     }
-    Add-TPCAPolicyTierFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $ca.Data['Policies'] `
-        -Match { (Get-TPNestedProperty -Object $_ -Path 'SessionControls.SignInFrequency.IsEnabled') -eq $true -and
-                 # "Every time" on a risk-conditioned policy (Microsoft's
-                 # risky-sign-in template) re-prompts only risky sign-ins; it
-                 # is not a periodic re-authentication limit.
-                 [string](Get-TPNestedProperty -Object $_ -Path 'SessionControls.SignInFrequency.FrequencyInterval' -Default '') -ne 'everyTime' -and
-                 @(Get-TPNestedProperty -Object $_ -Path 'Conditions.SignInRiskLevels' -Default @()).Count -eq 0 -and
-                 @(Get-TPNestedProperty -Object $_ -Path 'Conditions.UserRiskLevels' -Default @()).Count -eq 0 } `
-        -What 'A sign-in frequency session control' `
-        -EnabledDetail 'a sign-in frequency session control forces periodic re-authentication, limiting stolen token lifetime.' `
-        -MissingDetail 'no Conditional Access policy sets a sign-in frequency. Stolen tokens remain valid for the default session lifetime (up to 90 days).' `
-        -RequiredValue 'Enabled CA policy with a sign-in frequency session control'
+    $policies = @(@(Get-TPNestedProperty -Object $ca -Path 'Data.Policies' -Default @()) | Where-Object { $null -ne $_ })
+    $listIncomplete = Get-TPPolicyListIncomplete -CA $ca
+    $nameOf = { param($p) [string](Get-TPObjectField -Item $p -Key 'DisplayName' -Default '') }
+    $stateOf = { param($p) [string](Get-TPObjectField -Item $p -Key 'State' -Default '') }
+    $userGroupExclusions = { param($p) @(Get-TPCAPrincipalExclusions -Policy $p | Where-Object { $_ -notlike 'role:*' }) }
+    $narrowingOf = { param($p) @(Get-TPCANarrowing -Policy $p -RequiredClientAppTypes (Get-TPCAInteractiveClientAppTypes) -Ignore @('applies to only some users, groups or roles')) }
+    $fmt = { param($p)
+        if ((Get-TPSignInFrequencyHours -Policy $p) -eq 0) { return 'every time' }
+        $t = [string](Get-TPNestedProperty -Object $p -Path 'SessionControls.SignInFrequency.Type' -Default '')
+        "$([string](Get-TPNestedProperty -Object $p -Path 'SessionControls.SignInFrequency.Value' -Default '')) $(if ($t -eq 'days') { 'day(s)' } else { 'hour(s)' })" }
+
+    $v = @(); $s = @(); $u = @(); $ao = @(); $cur = @()
+    $sharedExclusions = [System.Collections.Generic.List[string]]::new()
+    $byExclusionNote = ''
+
+    # ── Privileged roles: 4 hours or less, type hours (ZTA 21825) ──
+    $privMet = { param($p)
+        $h = Get-TPSignInFrequencyHours -Policy $p
+        $type = [string](Get-TPNestedProperty -Object $p -Path 'SessionControls.SignInFrequency.Type' -Default '')
+        $null -ne $h -and $type -eq 'hours' -and $h -le 4
+    }
+    $roleRaw = Get-TPRawData -Key 'AAD-DirectoryRoles'
+    $privRoles = [ordered]@{}; $flagsRead = $false
+    if ($roleRaw -and (Get-TPObjectField -Item $roleRaw -Key 'Success' -Default $null) -eq $true) {
+        foreach ($d in @(Get-TPNestedProperty -Object $roleRaw -Path 'Data.RoleDefinitions' -Default @())) {
+            $rid = [string](Get-TPObjectField -Item $d -Key 'Id' -Default '')
+            $flag = Get-TPObjectField -Item $d -Key 'IsPrivileged' -Default $null
+            if ($null -ne $flag) { $flagsRead = $true }
+            if ($rid -and ((Get-TPObjectField -Item $d -Key 'IsPriv' -Default $false) -eq $true -or $flag -eq $true)) {
+                $privRoles[$rid] = [string](Get-TPObjectField -Item $d -Key 'DisplayName' -Default $rid)
+            }
+        }
+    }
+    $privEnabled = @($policies | Where-Object { (& $stateOf $_) -eq 'enabled' -and (& $privMet $_) -and @(Get-TPNestedProperty -Object $_ -Path 'Conditions.Users.IncludeRoles' -Default @() | Where-Object { $_ }).Count -gt 0 })
+    $privStaged = @($policies | Where-Object { (& $stateOf $_) -eq 'enabledForReportingButNotEnforced' -and (& $privMet $_) -and @(Get-TPNestedProperty -Object $_ -Path 'Conditions.Users.IncludeRoles' -Default @() | Where-Object { $_ }).Count -gt 0 } | ForEach-Object { & $nameOf $_ })
+    $privNarrowed = [ordered]@{}
+    if ($privRoles.Count -eq 0 -and $privEnabled.Count -eq 0 -and -not $listIncomplete) {
+        # Every tenant has a Global Administrator role; with no enabled role-scoped
+        # policy at 4 hours or less, no privileged role can be covered, whatever the
+        # catalog holds.
+        $s += 'No enabled policy that names privileged directory roles sets a sign-in frequency of 4 hours or less (type hours), so no privileged role has a short-lived session (the role catalog was not read, so the roles are not listed).'
+        $cur += 'Privileged roles: no policy at 4 hours or less'
+    } elseif ($privRoles.Count -eq 0) {
+        $u += 'whether every privileged role has a sign-in frequency of 4 hours or less, because this tenant''s role catalog was not read.'
+        $cur += 'Privileged roles: not assessed (role catalog not read)'
+    } else {
+        $setNote = if ($flagsRead) { 'the tool''s privileged-role list and every role Microsoft marks isPrivileged' } else { 'the tool''s privileged-role list (Microsoft''s isPrivileged flags were not read)' }
+        $uncovered = @(); $unproven = @(); $byExclusion = @()
+        foreach ($rid in @($privRoles.Keys)) {
+            $cands = @()
+            foreach ($p in $privEnabled) {
+                $inc = @(Get-TPNestedProperty -Object $p -Path 'Conditions.Users.IncludeRoles' -Default @() | ForEach-Object { [string]$_ })
+                $exc = @(Get-TPNestedProperty -Object $p -Path 'Conditions.Users.ExcludeRoles' -Default @() | ForEach-Object { [string]$_ })
+                if ($inc -notcontains $rid -or $exc -contains $rid) { continue }
+                $nar = @(& $narrowingOf $p)
+                if ($nar.Count -gt 0) { $privNarrowed[(& $nameOf $p)] = ($nar -join '; '); continue }
+                $cands += [pscustomobject]@{ Name = (& $nameOf $p); Exclusions = @(& $userGroupExclusions $p) }
+            }
+            $cov = Get-TPExclusionCoverage -Candidates $cands
+            switch ($cov.Kind) {
+                'Full'       { }
+                'Exceptions' { $byExclusion += $privRoles[$rid]; foreach ($x in @($cov.Exceptions)) { if (-not $sharedExclusions.Contains([string]$x)) { $sharedExclusions.Add([string]$x) } } }
+                'Unproven'   { $unproven += $privRoles[$rid] }
+                default      { $uncovered += $privRoles[$rid] }
+            }
+        }
+        $total = $privRoles.Count
+        $list = { param($names) $a = @($names); "$(($a | Select-Object -First 10) -join ', ')$(if ($a.Count -gt 10) { " and $($a.Count - 10) more" })" }
+        if ($uncovered.Count -eq 0 -and $privEnabled.Count -gt 0) {
+            $v += "Every one of the $total privileged roles ($setNote) is named in an enabled policy whose sign-in frequency is 4 hours or less: $((@($privEnabled | ForEach-Object { "$(& $nameOf $_) [$(& $fmt $_)]" })) -join ', ')."
+        } elseif ($uncovered.Count -eq 0) {
+            $v += "Every one of the $total privileged roles is named in an enabled policy whose sign-in frequency is 4 hours or less."
+        } elseif ($uncovered.Count -lt $total) {
+            $v += "$($total - $uncovered.Count) of $total privileged roles ($setNote) are named in an enabled policy whose sign-in frequency is 4 hours or less."
+        }
+        if ($uncovered.Count -gt 0) {
+            if ($listIncomplete) {
+                $u += "whether $($uncovered.Count) of $total privileged roles have a sign-in frequency of 4 hours or less, because the Conditional Access policy list could not be read in full: $(& $list $uncovered)."
+            } else {
+                $s += "$($uncovered.Count) of $total privileged roles ($setNote) are not named in any enabled policy with a sign-in frequency of 4 hours or less (type hours), so a stolen session for them stays usable for longer: $(& $list $uncovered)."
+            }
+        }
+        if ($unproven.Count -gt 0) {
+            $u += "whether any holder of $(& $list $unproven) is excluded from every counted policy; the policies exclude different users or groups and group membership was not resolved."
+        }
+        # A policy that is not counted is named only beside a shortfall; it never
+        # enters -Verified (that would turn a Gap into Partial).
+        if ($uncovered.Count -gt 0 -and -not $listIncomplete) {
+            foreach ($n in @($privNarrowed.Keys)) { $s += "'$n' sets a short sign-in frequency for privileged roles but $($privNarrowed[$n]), so it is not counted." }
+            if ($privStaged.Count -gt 0) { $s += "Report-only for privileged roles (enforces nothing, not counted): $($privStaged -join ', ')." }
+        }
+        $cur += "Privileged roles: $($total - $uncovered.Count - $unproven.Count) of $total covered at 4 hours or less"
+        if ($byExclusion.Count -gt 0) { $byExclusionNote = "privileged roles $(& $list $byExclusion)" } else { $byExclusionNote = '' }
+    }
+
+    # ── Guests and external users: 24 hours or less, 1 day, or every time (ZTA 21824) ──
+    $guestMet = { param($p) $h = Get-TPSignInFrequencyHours -Policy $p; $null -ne $h -and $h -le 24 }
+    $targetsGuests = { param($p) $null -ne (Get-TPNestedProperty -Object $p -Path 'Conditions.Users.IncludeGuestsOrExternalUsers' -Default $null) }
+    $guestNote = ''
+    $anyShortEnabled = @($policies | Where-Object { (& $stateOf $_) -eq 'enabled' -and (& $guestMet $_) -and @(& $narrowingOf $_).Count -eq 0 }).Count -gt 0
+    if ((Get-TPNestedProperty -Object $ca -Path 'Data.GuestConditionsRead' -Default $false) -ne $true -and -not $anyShortEnabled -and -not $listIncomplete) {
+        # No enabled policy at 24 hours or less exists at all, so none can cover guests,
+        # whichever users the policies select.
+        $s += 'No enabled policy sets a sign-in frequency of 24 hours or less (or every time) for anyone, so guest or external users have no short-lived session either.'
+        $cur += 'Guests: no policy at 24 hours or less'
+    } elseif ((Get-TPNestedProperty -Object $ca -Path 'Data.GuestConditionsRead' -Default $false) -ne $true) {
+        $u += 'whether guest or external users have a sign-in frequency of 24 hours or less, because this results file predates the read of each policy''s ''Guest or external users'' selection.'
+        $cur += 'Guests: not assessed (guest selection not read)'
+    } else {
+        $gEnabled = @($policies | Where-Object { (& $stateOf $_) -eq 'enabled' -and (& $targetsGuests $_) -and (& $guestMet $_) })
+        $gStaged = @($policies | Where-Object { (& $stateOf $_) -eq 'enabledForReportingButNotEnforced' -and (& $targetsGuests $_) -and (& $guestMet $_) } | ForEach-Object { & $nameOf $_ })
+        $cands = @(); $gNarrowed = [ordered]@{}
+        foreach ($p in $gEnabled) {
+            $nar = @(& $narrowingOf $p)
+            if ($nar.Count -gt 0) { $gNarrowed[(& $nameOf $p)] = ($nar -join '; '); continue }
+            $cands += [pscustomobject]@{ Name = (& $nameOf $p); Exclusions = @(& $userGroupExclusions $p) }
+        }
+        $gcov = Get-TPExclusionCoverage -Candidates $cands
+        $typesOf = { param($p) $t = [string](Get-TPNestedProperty -Object $p -Path 'Conditions.Users.IncludeGuestsOrExternalUsers.GuestOrExternalUserTypes' -Default ''); if ($t) { $t } else { 'types not returned' } }
+        $describe = { param($names) (@($gEnabled | Where-Object { (& $nameOf $_) -in @($names) } | ForEach-Object { "$(& $nameOf $_) [$(& $fmt $_); guest types: $(& $typesOf $_)]" })) -join ', ' }
+        switch ($gcov.Kind) {
+            'Full' {
+                $v += "Guest or external users have a sign-in frequency of 24 hours or less (or every time) from an enabled policy selecting them: $(& $describe $gcov.FullNames)."
+                $cur += 'Guests: covered at 24 hours or less'
+            }
+            'Exceptions' {
+                $v += "Guest or external users have a sign-in frequency of 24 hours or less from: $(& $describe $gcov.Names)."
+                $guestNote = 'guest or external users'
+                foreach ($x in @($gcov.Exceptions)) { if (-not $sharedExclusions.Contains([string]$x)) { $sharedExclusions.Add([string]$x) } }
+                $cur += 'Guests: covered at 24 hours or less, with shared exclusions'
+            }
+            'Unproven' {
+                $v += "Guest or external users have a sign-in frequency of 24 hours or less from: $(& $describe $gcov.Names)."
+                $u += 'whether any guest is excluded from every counted guest policy; the policies exclude different users or groups and group membership was not resolved.'
+                $cur += 'Guests: covered at 24 hours or less, exclusions unproven'
+            }
+            default {
+                if ($listIncomplete) {
+                    $u += 'whether guest or external users have a sign-in frequency of 24 hours or less, because the Conditional Access policy list could not be read in full.'
+                    $cur += 'Guests: not assessed (policy list incomplete)'
+                } else {
+                    $s += 'No enabled policy that selects guest or external users sets a sign-in frequency of 24 hours or less (or every time), so a guest''s session follows the default rolling window of up to 90 days.'
+                    $cur += 'Guests: no policy at 24 hours or less'
+                }
+            }
+        }
+        if ($gcov.Kind -eq 'None' -and -not $listIncomplete) {
+            foreach ($n in @($gNarrowed.Keys)) { $s += "'$n' sets a short sign-in frequency for guests but $($gNarrowed[$n]), so it is not counted." }
+            if ($gStaged.Count -gt 0) { $s += "Report-only for guests (enforces nothing, not counted): $($gStaged -join ', ')." }
+        }
+    }
+
+    if ($sharedExclusions.Count -gt 0) {
+        $who = @(@($byExclusionNote, $guestNote) | Where-Object { $_ }) -join ' and '
+        $sentence = "every counted policy for $who excludes the same principal(s), so their sessions are not limited: $((@($sharedExclusions) | ForEach-Object { Get-TPCAPrincipalLabel -Principal $_ }) -join ', '). If these are emergency-access accounts, record them as an approved exception (the tenant's EmergencyAccess record in Config/baseline-exceptions), which reports the exclusion as approved and keeps it named."
+        $s += $sentence
+        $ao = @(@($sharedExclusions) | ForEach-Object { [ordered]@{ Principal = [string]$_; Exclusion = 'SharedByEveryQualifyingPolicy'; Sentence = $sentence } })
+    }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
+        -Verified $v -Shortfalls $s -NotEstablished $u -AffectedObjects $ao `
+        -CurrentValue ($cur -join '; ') -RequiredValue $required
 }
 
 # ── AAD-11.1 Device Code Authentication Flow Blocked ─────────────────────────

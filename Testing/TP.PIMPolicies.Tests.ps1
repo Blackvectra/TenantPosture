@@ -198,6 +198,93 @@ return @{ value = @() }
         Test-TPControlAADPIMJustification
         (Verdict 'AAD-3.4').State | Should -Be 'NotApplicable'
     }
+
+    # AAD-3.6 (owner's decision 2026-10-26, Microsoft Zero Trust Phase 1 Step 6: "Set maximum
+    # activation duration (for example: 1-4 hours for high-impact roles)"): Global, Privileged
+    # Role, Security, Exchange and SharePoint Administrator at 4 hours or less; the other
+    # privileged roles at 8 hours or less. Durations are read in full (PT30M, PT1H30M, P1D).
+    Context 'AAD-3.6 maximum activation duration' {
+        BeforeAll {
+            $script:HighIds = [ordered]@{
+                'Global Administrator' = $script:GA; 'Privileged Role Administrator' = 'e8611ab8-c189-46e8-94e1-60213ab1f814'
+                'Security Administrator' = '194ae4cb-b126-40b2-bd5b-6091b380977d'; 'Exchange Administrator' = '29232cdf-9323-42fd-ade2-1d097af3e4de'
+                'SharePoint Administrator' = 'f28a1f50-f6e7-4571-818b-6a12f2af6b6c' }
+            function script:Run36([hashtable] $Durations, [string] $Helpdesk = 'PT8H', [string[]] $Skip = @()) {
+                $pols = @(); $asg = @()
+                foreach ($n in @($script:HighIds.Keys)) {
+                    if ($n -in $Skip) { continue }
+                    $d = if ($Durations.ContainsKey($n)) { $Durations[$n] } else { 'PT4H' }
+                    $pid_ = "p-$($script:HighIds[$n])"; $pols += New-Policy $pid_ -MaxDuration $d; $asg += Asg $pid_ $script:HighIds[$n]
+                }
+                $pols += New-Policy 'p-hd' -MaxDuration $Helpdesk; $asg += Asg 'p-hd' $script:HD
+                Set-Scenario -Policies $pols -Assignments $asg
+                $defs = @(foreach ($n in @($script:HighIds.Keys)) { @{ Id = $script:HighIds[$n]; DisplayName = $n; IsPriv = $true; IsBuiltIn = $true; IsEnabled = $true } })
+                $defs += @{ Id = $script:HD; DisplayName = 'Helpdesk Administrator'; IsPriv = $true; IsBuiltIn = $true; IsEnabled = $true }
+                Set-TPRawData -Key 'AAD-DirectoryRoles' -Data @{ Success = $true; Data = @{ RoleDefinitions = $defs } }
+                Clear-TPFindings
+                Test-TPControlAADPIMDuration
+                Verdict 'AAD-3.6'
+            }
+        }
+
+        It 'the collector reads every part of the ISO 8601 duration' {
+            $null = Run36 @{ 'Global Administrator' = 'PT1H30M'; 'Security Administrator' = 'PT30M' } -Helpdesk 'P1D'
+            $pp = @((Get-TPRawData -Key 'AAD-IdentityGovernance').Data.PIMRolePolicies)
+            ($pp | Where-Object { $_.PolicyId -eq "p-$($script:GA)" }).MaxDurationHours | Should -Be 1.5
+            ($pp | Where-Object { $_.PolicyId -eq "p-$($script:GA)" }).MaxDuration | Should -Be 'PT1H30M'
+            ($pp | Where-Object { $_.PolicyId -eq 'p-194ae4cb-b126-40b2-bd5b-6091b380977d' }).MaxDurationHours | Should -Be 0.5
+            ($pp | Where-Object { $_.PolicyId -eq 'p-hd' }).MaxDurationHours | Should -Be 24
+            $conv = { param($d) & $script:Mod { param($x) ConvertTo-TPDurationHours -Duration $x } $d }
+            & $conv 'PT4H30M' | Should -Be 4.5
+            & $conv 'PT8H'    | Should -Be 8
+            $null -eq (& $conv 'P1Y')   | Should -BeTrue -Because 'a year has no fixed length in hours'
+            $null -eq (& $conv 'PT')    | Should -BeTrue
+            $null -eq (& $conv '8h')    | Should -BeTrue
+        }
+
+        It 'high-impact roles at 4 hours (or minutes) and the others at 8 is Satisfied, naming the set' {
+            $f = Run36 @{ 'Security Administrator' = 'PT30M'; 'Exchange Administrator' = 'PT1H30M' }
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'Global Administrator, Privileged Role Administrator, Security Administrator, Exchange Administrator, SharePoint Administrator'
+        }
+
+        It 'a high-impact role over 4 hours, even by minutes, is a shortfall; 8 hours is still fine for the others' {
+            $f = Run36 @{ 'Global Administrator' = 'PT4H30M' }
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Global Administrator \(4.5 hours; limit 4 hours\)'
+            (Run36 @{ 'Global Administrator' = 'PT5H' }).State | Should -Be 'Partial'
+            (Run36 @{} -Helpdesk 'PT9H').State | Should -Be 'Partial'
+            (Run36 @{} -Helpdesk 'PT8H').State | Should -Be 'Satisfied'
+        }
+
+        It 'a high-impact role with no mapped policy, or an unreadable duration, is not assessed' {
+            $f = Run36 @{} -Skip @('SharePoint Administrator')
+            $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'SharePoint Administrator, because no PIM policy was mapped'
+            (Run36 @{ 'Exchange Administrator' = 'forever' }).State | Should -Be 'NotApplicable'
+        }
+
+        It 'an older results file (hour part only): a value equal to the limit is not assessed, over it is a shortfall, under it passes' {
+            $mk = { param([object[]] $Pols)
+                Clear-TPState
+                Set-TPRawData -Key 'AAD-IdentityGovernance' -Data @{ Success = $true; Data = @{ PIMRolePolicies = @($Pols) } }
+                Set-TPRawData -Key 'AAD-DirectoryRoles' -Data @{ Success = $true; Data = @{ RoleDefinitions = @(
+                    foreach ($n in @($script:HighIds.Keys)) { @{ Id = $script:HighIds[$n]; DisplayName = $n; IsPriv = $true } }) } }
+                Test-TPControlAADPIMDuration; Verdict 'AAD-3.6' }
+            $pols = { param([int] $ga) @(foreach ($n in @($script:HighIds.Keys)) { @{ PolicyId = "p-$n"; RoleDefinitionId = $script:HighIds[$n]; MaxDurationHours = $(if ($n -eq 'Global Administrator') { $ga } else { 2 }) } }) }
+            (& $mk (& $pols 4)).State | Should -Be 'NotApplicable' -Because 'PT4H30M was stored as 4'
+            (& $mk (& $pols 5)).State | Should -Be 'Partial'
+            (& $mk (& $pols 3)).State | Should -Be 'Satisfied'
+        }
+
+        It 'without the policy-to-role map the high-impact half is not assessed, and 9 hours is still a shortfall' {
+            Set-Scenario -Policies @((New-Policy 'p-x' -MaxDuration 'PT2H')) -AssignmentsFail $true
+            Test-TPControlAADPIMDuration
+            $f = Verdict 'AAD-3.6'; $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'mapping was unavailable'
+            Set-Scenario -Policies @((New-Policy 'p-x' -MaxDuration 'PT9H')) -AssignmentsFail $true
+            Test-TPControlAADPIMDuration
+            (Verdict 'AAD-3.6').State | Should -Be 'Gap'
+        }
+    }
 }
 
 Describe 'Role-name resolution guard (AAD-10.2 / AAD-11.2)' {

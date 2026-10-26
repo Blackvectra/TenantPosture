@@ -167,40 +167,51 @@ function Invoke-TPCollectAADInventory {
         # Stale member accounts (signInActivity requires AuditLog.Read.All)
         try {
             $staleRows = @(& $readUsersWithSignIn 'id,displayName,userPrincipalName,accountEnabled,createdDateTime,signInActivity,assignedLicenses' "userType eq 'Member' and accountEnabled eq true" 'AAD-StaleAccounts')
-            # Last ACTIVITY, not last attempt: lastSignInDateTime records the
-            # last interactive attempt, successful or not, so a departed user
-            # being password-sprayed looked active, while a user who only
-            # refreshes tokens (Outlook, Teams) looked stale. Graph's
-            # lastSuccessfulSignInDateTime covers both kinds of successful
-            # sign-in; records that predate it fall back to the later of the
-            # interactive and non-interactive timestamps. Accounts created in
-            # the last 90 days are not stale for never having signed in.
+            # DISA Microsoft Entra ID STIG V-270204 (ENTR-ID-000090), adopted by the
+            # owner on 2026-10-26: an enabled account is inactive when its last
+            # sign-in (signInActivity.lastSignInDateTime, the interactive sign-in
+            # the STIG check reads) is more than 35 days old, or when it never
+            # signed in and was created more than 35 days ago. The tool also
+            # counts an account whose last SUCCESSFUL sign-in (Graph's
+            # lastSuccessfulSignInDateTime, interactive or not) is more than 35
+            # days old, because lastSignInDateTime records attempts too and a
+            # departed user being password-sprayed would otherwise look active.
+            # Either one makes the account inactive; every account the STIG
+            # check lists is listed here. Unlicensed members count as well.
             $parseUtc = { param($v)
                 $p = [datetime]::MinValue
                 if ($v -and [datetime]::TryParse([string]$v, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$p)) { $p.ToUniversalTime() } else { $null } }
             $now = [datetime]::UtcNow
+            $limitDays = 35
+            $undetermined = 0
             # Without the license no account can be called stale; the evaluator reads SignInActivityLicensed.
             $stale = @(foreach ($u in $(if ($result.Data.SignInActivityLicensed -eq $false) { @() } else { $staleRows })) {
-                $success = & $parseUtc (Get-TPNestedProperty -Object $u -Path 'signInActivity.lastSuccessfulSignInDateTime' -Default '')
-                $basis = 'last successful sign-in'
-                $last = $success
-                if (-not $last) {
-                    $cands = @((& $parseUtc (Get-TPNestedProperty -Object $u -Path 'signInActivity.lastSignInDateTime' -Default '')),
-                               (& $parseUtc (Get-TPNestedProperty -Object $u -Path 'signInActivity.lastNonInteractiveSignInDateTime' -Default '')) | Where-Object { $_ })
-                    if ($cands.Count) { $last = ($cands | Measure-Object -Maximum).Maximum; $basis = 'last sign-in attempt' }
+                $interactive = & $parseUtc (Get-TPNestedProperty -Object $u -Path 'signInActivity.lastSignInDateTime' -Default '')
+                $success     = & $parseUtc (Get-TPNestedProperty -Object $u -Path 'signInActivity.lastSuccessfulSignInDateTime' -Default '')
+                $created     = & $parseUtc (Get-TPObjectField -Item $u -Key 'createdDateTime' -Default '')
+                $reasons = [System.Collections.Generic.List[string]]::new()
+                if ($interactive) {
+                    if (($now - $interactive).TotalDays -gt $limitDays) { $reasons.Add("last sign-in $([int]($now - $interactive).TotalDays) days ago") }
+                } elseif ($created -and ($now - $created).TotalDays -gt $limitDays) {
+                    $reasons.Add("no sign-in recorded; created $([int]($now - $created).TotalDays) days ago")
                 }
-                $created = & $parseUtc (Get-TPObjectField -Item $u -Key 'createdDateTime' -Default '')
-                if ($created -and ($now - $created).TotalDays -le 90) { continue }
-                if ($last -and ($now - $last).TotalDays -le 90) { continue }
+                if ($success -and ($now - $success).TotalDays -gt $limitDays) { $reasons.Add("last successful sign-in $([int]($now - $success).TotalDays) days ago") }
+                # No sign-in recorded and no readable creation date: not known.
+                if ($reasons.Count -eq 0 -and -not $interactive -and -not $created) { $undetermined++ }
+                if ($reasons.Count -eq 0) { continue }
+                $last = if ($interactive -and $success) { if ($interactive -gt $success) { $interactive } else { $success } } elseif ($interactive) { $interactive } else { $success }
                 @{
                     DisplayName     = [string](Get-TPObjectField -Item $u -Key 'displayName' -Default '')
                     UPN             = [string](Get-TPObjectField -Item $u -Key 'userPrincipalName' -Default '')
+                    Id              = [string](Get-TPObjectField -Item $u -Key 'id' -Default '')
                     LastSignIn      = $(if ($last) { $last.ToString('o') } else { 'Never' })
-                    LastSignInBasis = $basis
+                    LastSignInBasis = ($reasons -join '; ')
                     DaysSinceSignIn = $(if ($last) { [int]($now - $last).TotalDays } else { 9999 })
                     HasLicense      = (@(Get-TPObjectField -Item $u -Key 'assignedLicenses' -Default @()).Count -gt 0)
                 }
             })
+            $result.Data.StaleMembersThresholdDays = $limitDays
+            $result.Data.StaleMembersUndetermined = $undetermined
             $result.Data.StaleMembers = $stale
             $result.Data.SectionStatus.StaleMembers = 'Collected'
         } catch {

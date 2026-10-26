@@ -410,17 +410,31 @@ Describe 'Exchange controls read the setting they name' {
                 OAuthGrantedApps = @(@{ AppName = 'Mail app'; ClientId = '2222'; Scope = 'openid Mail.Read' }) })
             (Verdict 'Test-TPControlInventoryOAuthApps' 'AAD-12.4').State | Should -Be 'Gap'
         }
-        It 'AAD-12.3 judges last SUCCESSFUL activity and ignores new hires' {
+        # DISA Entra ID STIG V-270204 (owner's decision 2026-10-26): an enabled member is
+        # inactive when its last sign-in (lastSignInDateTime) is more than 35 days old, or it
+        # never signed in and was created more than 35 days ago; the tool also counts a last
+        # SUCCESSFUL sign-in more than 35 days old, so a sprayed departed account is not active.
+        It 'AAD-12.3 applies STIG V-270204 at 35 days, counts a stale last success, and ignores new hires' {
             $now = [datetime]::UtcNow
             & $script:Mod { param($n) $script:Users = @(
                 # departed: last success 400 days ago, sprayed 3 days ago
-                @{ displayName = 'Departed'; userPrincipalName = 'gone@contoso.com'; createdDateTime = $n.AddDays(-900).ToString('o'); assignedLicenses = @(@{ skuId = 'x' })
+                @{ id = 'u1'; displayName = 'Departed'; userPrincipalName = 'gone@contoso.com'; createdDateTime = $n.AddDays(-900).ToString('o'); assignedLicenses = @(@{ skuId = 'x' })
                    signInActivity = @{ lastSignInDateTime = $n.AddDays(-3).ToString('o'); lastSuccessfulSignInDateTime = $n.AddDays(-400).ToString('o') } },
-                # active: interactive 120 days ago, token refresh yesterday (no lastSuccessful on old records)
-                @{ displayName = 'Busy'; userPrincipalName = 'sales@contoso.com'; createdDateTime = $n.AddDays(-900).ToString('o'); assignedLicenses = @(@{ skuId = 'x' })
+                # interactive 120 days ago, token refresh yesterday: the STIG reads lastSignInDateTime
+                @{ id = 'u2'; displayName = 'Busy'; userPrincipalName = 'sales@contoso.com'; createdDateTime = $n.AddDays(-900).ToString('o'); assignedLicenses = @(@{ skuId = 'x' })
                    signInActivity = @{ lastSignInDateTime = $n.AddDays(-120).ToString('o'); lastNonInteractiveSignInDateTime = $n.AddDays(-1).ToString('o') } },
+                # 36 days idle, unlicensed: inactive under the STIG, licensed or not
+                @{ id = 'u3'; displayName = 'Idle'; userPrincipalName = 'idle@contoso.com'; createdDateTime = $n.AddDays(-900).ToString('o'); assignedLicenses = @()
+                   signInActivity = @{ lastSignInDateTime = $n.AddDays(-36).ToString('o'); lastSuccessfulSignInDateTime = $n.AddDays(-36).ToString('o') } },
+                # 34 days idle: active
+                @{ id = 'u4'; displayName = 'Recent'; userPrincipalName = 'recent@contoso.com'; createdDateTime = $n.AddDays(-900).ToString('o'); assignedLicenses = @(@{ skuId = 'x' })
+                   signInActivity = @{ lastSignInDateTime = $n.AddDays(-34).ToString('o'); lastSuccessfulSignInDateTime = $n.AddDays(-34).ToString('o') } },
+                # never signed in, created 36 days ago (signInActivity absent)
+                @{ id = 'u5'; displayName = 'Never'; userPrincipalName = 'never@contoso.com'; createdDateTime = $n.AddDays(-36).ToString('o'); assignedLicenses = @(@{ skuId = 'x' }) },
                 # new hire, created last week, never signed in (signInActivity absent)
-                @{ displayName = 'New Hire'; userPrincipalName = 'newhire@contoso.com'; createdDateTime = $n.AddDays(-7).ToString('o'); assignedLicenses = @(@{ skuId = 'x' }) }) } $now
+                @{ id = 'u6'; displayName = 'New Hire'; userPrincipalName = 'newhire@contoso.com'; createdDateTime = $n.AddDays(-7).ToString('o'); assignedLicenses = @(@{ skuId = 'x' }) },
+                # never signed in, no creation date: not known, counted as undetermined
+                @{ id = 'u7'; displayName = 'Unknown'; userPrincipalName = 'unknown@contoso.com'; assignedLicenses = @() }) } $now
             Inject 'Invoke-TPGraphRequest' @'
 param([string] $Uri, [string] $Method = 'GET', $Body, $Headers, [string] $OutputType = 'HashTable')
 if ($Uri -like '*/users?*userType eq ''Member''*') { return @{ value = @($script:Users) } }
@@ -429,7 +443,19 @@ return @{ value = @() }
             try {
                 $r = Invoke-TPCollectAADInventory
                 $r.Data.SectionStatus.StaleMembers | Should -Be 'Collected'
-                @($r.Data.StaleMembers | ForEach-Object { $_.UPN }) | Should -Be @('gone@contoso.com')
+                $r.Data.StaleMembersThresholdDays | Should -Be 35
+                $r.Data.StaleMembersUndetermined | Should -Be 1
+                @($r.Data.StaleMembers | ForEach-Object { $_.UPN } | Sort-Object) | Should -Be @('gone@contoso.com', 'idle@contoso.com', 'never@contoso.com', 'sales@contoso.com')
+                (@($r.Data.StaleMembers) | Where-Object { $_.UPN -eq 'gone@contoso.com' }).LastSignInBasis | Should -Match 'last successful sign-in 400 days ago'
+                (@($r.Data.StaleMembers) | Where-Object { $_.UPN -eq 'never@contoso.com' }).LastSignInBasis | Should -Match 'no sign-in recorded; created 36 days ago'
+                Set-TPRawData -Key 'AAD-Inventory' -Data $r
+                $f = Verdict 'Test-TPControlInventoryStaleMembers' 'AAD-12.3'
+                $f.State | Should -Be 'Gap'
+                $f.Detail | Should -Match '4 enabled member account\(s\) are inactive \(3 licensed\)'
+                $f.Detail | Should -Match 'V-270204'
+                $f.Detail | Should -Match 'Emergency-access .* counted'
+                $f.Detail | Should -Match '1 account\(s\) have no sign-in and no readable creation date'
+                @($f.AffectedObjects) -join ' ' | Should -Match 'Idle \(idle@contoso.com\) \[unlicensed\]'
             } finally { Remove 'Invoke-TPGraphRequest' }
         }
     }

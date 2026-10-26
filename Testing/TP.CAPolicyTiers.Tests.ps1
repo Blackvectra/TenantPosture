@@ -5,7 +5,7 @@
 # Author: Matthew Levorson
 #
 # Pins the three-tier verdict for the "is there a Conditional Access policy
-# doing X" controls AAD-10.4, AAD-11.4, AAD-11.7, AAD-11.8 and AAD-11.9:
+# doing X" controls AAD-11.4, AAD-11.7, AAD-11.8 and AAD-11.9:
 #   None (no policy, or only disabled ones) -> Gap
 #   Audit mode (report-only only)           -> Partial
 #   Enabled                                 -> Satisfied
@@ -62,13 +62,15 @@ Describe 'CA policy tiers — None / Audit mode / Enabled' {
     # AAD-11.7 needs two policies (compliant device AND a device-filter block),
     # so it is judged component by component (the "Benchmark gap fixes (AAD)" block of TP.IdentityTruth.Tests.ps1)
     # and appears here only in the Security Defaults case.
+    # AAD-10.4 is judged per population (privileged roles at 4 hours or less, guests
+    # at 24 hours or less; the "AAD-10.4 sign-in frequency per population" context of
+    # TP.IdentityTruth.Tests.ps1) and appears here only in the shared cases below.
     $cases = @(
-        @{ Cid = 'AAD-10.4'; Fn = 'Test-TPControlAADSignInFrequency' }
         @{ Cid = 'AAD-11.4'; Fn = 'Test-TPControlAADTokenProtection' }
         @{ Cid = 'AAD-11.8'; Fn = 'Test-TPControlAADTermsOfUse' }
         @{ Cid = 'AAD-11.9'; Fn = 'Test-TPControlAADWorkloadIdentityCA' }
     )
-    $sdCases = @($cases) + @(@{ Cid = 'AAD-11.7'; Fn = 'Test-TPControlAADPrivilegedWorkstation' })
+    $sdCases = @($cases) + @(@{ Cid = 'AAD-11.7'; Fn = 'Test-TPControlAADPrivilegedWorkstation' }, @{ Cid = 'AAD-10.4'; Fn = 'Test-TPControlAADSignInFrequency' })
 
     It '<Cid>: no policy is a Gap reading "None" — never half credit' -TestCases $cases {
         $f = Invoke-Case $Fn $Cid @()

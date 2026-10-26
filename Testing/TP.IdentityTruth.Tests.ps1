@@ -1847,4 +1847,159 @@ Describe 'Benchmark gap fixes (AAD)' {
             (V 'Test-TPControlAADAppCredentialExpiry' 'AAD-14.1').State | Should -Be 'Gap'
         }
     }
+
+    # AAD-10.4 (owner's decision 2026-10-26): Zero Trust Assessment tests 21825 (every
+    # privileged role named in an enabled policy whose sign-in frequency is type hours,
+    # 4 or less) and 21824 (an enabled policy selecting guest or external users at 24
+    # hours or less, 1 day, or every time). One half is Partial; neither is a Gap.
+    Context 'AAD-10.4 sign-in frequency per population' {
+        BeforeAll {
+            $script:SifH = { param([int] $v, [string] $t = 'hours') @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'timeBased'; Value = $v; Type = $t } } }
+            function script:GuestPol([string] $Name = 'Guests SIF', [hashtable] $Session, [string] $State = 'enabled') {
+                $p = Pol -Name $Name -State $State -Users @() -Session $Session
+                $p.Conditions.Users.IncludeGuestsOrExternalUsers = @{ GuestOrExternalUserTypes = 'internalGuest,b2bCollaborationGuest,b2bCollaborationMember,b2bDirectConnectUser,otherExternalUser,serviceProvider'; ExternalTenantsMembershipKind = 'all' }
+                $p
+            }
+            function script:Ca104([object[]] $Policies, [bool] $GuestRead = $true) {
+                $d = @{ Policies = @($Policies); SectionStatus = @{ TokenProtection = 'Collected'; PolicyCompleteness = 'Collected' } }
+                if ($GuestRead) { $d.GuestConditionsRead = $true }
+                Set-TPRawData -Key 'AAD-CAPolicies' -Data (Bag $d)
+            }
+            function script:Catalog104 {
+                Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{ RoleDefinitions = @(
+                    @{ Id = $script:GA;  DisplayName = 'Global Administrator';           IsPriv = $true;  IsPrivileged = $true },
+                    @{ Id = $script:HIA; DisplayName = 'Hybrid Identity Administrator'; IsPriv = $false; IsPrivileged = $true },
+                    @{ Id = 'reader';    DisplayName = 'Reports Reader';                IsPriv = $false; IsPrivileged = $false }) })
+            }
+            function script:V104 { V 'Test-TPControlAADSignInFrequency' 'AAD-10.4' }
+        }
+
+        It 'every privileged role (tool list and Microsoft isPrivileged) at 4 hours and guests at 24 hours is Satisfied' {
+            Catalog104
+            Ca104 @((Pol -Name 'Admins 4h' -Users @() -Roles @($script:GA, $script:HIA) -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 24)))
+            $f = V104
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'Every one of the 2 privileged roles'
+            $f.Detail | Should -Match "Microsoft marks isPrivileged"
+            $f.Detail | Should -Match 'Guests SIF \[24 hour\(s\); guest types: internalGuest'
+        }
+
+        It 'boundaries: 5 hours, or 1 day, for privileged roles fails the half; 1 day and every time pass for guests, 25 hours and 2 days do not' {
+            foreach ($c in @(@{ S = (& $script:SifH 5); Ok = $false }, @{ S = (& $script:SifH 1 'days'); Ok = $false }, @{ S = (& $script:SifH 1); Ok = $true })) {
+                Clear-TPState; Catalog104
+                Ca104 @((Pol -Name 'Admins' -Users @() -Roles @($script:GA, $script:HIA) -Session $c.S), (GuestPol -Session (& $script:SifH 24)))
+                (V104).State | Should -Be $(if ($c.Ok) { 'Satisfied' } else { 'Partial' }) -Because "privileged $($c.S.SignInFrequency.Value) $($c.S.SignInFrequency.Type)"
+            }
+            foreach ($c in @(@{ S = (& $script:SifH 1 'days'); Ok = $true }, @{ S = @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'everyTime'; Value = $null; Type = '' } }; Ok = $true },
+                             @{ S = (& $script:SifH 25); Ok = $false }, @{ S = (& $script:SifH 2 'days'); Ok = $false })) {
+                Clear-TPState; Catalog104
+                Ca104 @((Pol -Name 'Admins' -Users @() -Roles @($script:GA, $script:HIA) -Session (& $script:SifH 4)), (GuestPol -Session $c.S))
+                (V104).State | Should -Be $(if ($c.Ok) { 'Satisfied' } else { 'Partial' }) -Because "guest $($c.S.SignInFrequency.Value) $($c.S.SignInFrequency.Type) $($c.S.SignInFrequency.FrequencyInterval)"
+            }
+        }
+
+        It 'a role left out of every policy is a shortfall naming it; an all-users policy is not credited (the test counts policies that name the role)' {
+            Catalog104
+            Ca104 @((Pol -Name 'GA 4h' -Users @() -Roles @($script:GA) -Session (& $script:SifH 4)), (Pol -Name 'Everyone 4h' -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8)))
+            $f = V104
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match '1 of 2 privileged roles .* Hybrid Identity Administrator'
+        }
+
+        It 'a privileged-role policy excluding the role, scoped to one application, or report-only is not counted' {
+            Catalog104
+            $excl = Pol -Name 'Excludes HIA' -Users @() -Roles @($script:GA, $script:HIA) -Session (& $script:SifH 4); $excl.Conditions.Users.ExcludeRoles = @($script:HIA)
+            Ca104 @($excl, (GuestPol -Session (& $script:SifH 8))); (V104).State | Should -Be 'Partial'
+            Clear-TPState; Catalog104
+            Ca104 @((Pol -Name 'Portal only' -Users @() -Roles @($script:GA, $script:HIA) -Apps @('797f4846-ba00-4fd7-ba43-dac1f8f63013') -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8)))
+            $f = V104; $f.State | Should -Be 'Partial'; $f.Detail | Should -Match "'Portal only' .* applies to only some applications"
+            Clear-TPState; Catalog104
+            Ca104 @((Pol -Name 'Staged' -State 'enabledForReportingButNotEnforced' -Users @() -Roles @($script:GA, $script:HIA) -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8)))
+            $f = V104; $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'Report-only for privileged roles .* Staged'
+        }
+
+        It 'neither half met is a Gap; a policy for all users with a long frequency earns nothing' {
+            Catalog104
+            Ca104 @((Pol -Name 'Everyone 30 days' -Session (& $script:SifH 30 'days')))
+            $f = V104
+            $f.State | Should -Be 'Gap'
+            $f.Detail | Should -Match 'guest or external users'
+        }
+
+        It 'a user excluded from every counted policy is a shortfall carrying structured exclusions for the emergency-access approval' {
+            Catalog104
+            $p = Pol -Name 'Admins 4h' -Users @() -Roles @($script:GA, $script:HIA) -Session (& $script:SifH 4); $p.Conditions.Users.ExcludeUsers = @('bg-1')
+            Ca104 @($p, (GuestPol -Session (& $script:SifH 8)))
+            $f = V104
+            $f.State | Should -Be 'Partial'
+            $f.Detail | Should -Match 'excludes the same principal\(s\).*user:bg-1'
+            @($f.AffectedObjects | Where-Object { (Get-TPObjectField -Item $_ -Key 'Exclusion' -Default '') -eq 'SharedByEveryQualifyingPolicy' }).Count | Should -Be 1
+        }
+
+        It 'not read is not assessed: no role catalog, a results file without the guest selection, or an incomplete policy list' {
+            Ca104 @((Pol -Name 'Admins 4h' -Users @() -Roles @($script:GA) -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8)))
+            $f = V104; $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'role catalog was not read'
+            Clear-TPState; Catalog104
+            Ca104 @((Pol -Name 'Admins 4h' -Users @() -Roles @($script:GA, $script:HIA) -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8))) -GuestRead $false
+            $f = V104; $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'predates the read'
+            Clear-TPState; Catalog104
+            Set-TPRawData -Key 'AAD-CAPolicies' -Data (Bag @{ Policies = @(); GuestConditionsRead = $true; SectionStatus = @{ PolicyCompleteness = 'Failed' } })
+            (V104).State | Should -Be 'NotApplicable'
+        }
+
+        It 'the CA collector projects the guest or external users selection and records that it read it' {
+            Set-Graph {
+                param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                if ($Uri -match 'conditionalAccess/policies') { return @{ value = @(
+                    @{ id = 'g1'; displayName = 'Guests'; state = 'enabled'
+                       conditions = @{ users = @{ includeUsers = @(); includeGuestsOrExternalUsers = @{ guestOrExternalUserTypes = 'b2bCollaborationGuest,serviceProvider'; externalTenants = @{ '@odata.type' = '#microsoft.graph.conditionalAccessAllExternalTenants'; membershipKind = 'all' } } }; applications = @{ includeApplications = @('All') } }
+                       sessionControls = @{ signInFrequency = @{ isEnabled = $true; type = 'hours'; value = 12; frequencyInterval = 'timeBased'; authenticationType = 'primaryAndSecondaryAuthentication' } } },
+                    @{ id = 'a1'; displayName = 'All'; state = 'enabled'; conditions = @{ users = @{ includeUsers = @('All') }; applications = @{ includeApplications = @('All') } } }) } }
+                return @{ value = @() }
+            }
+            Invoke-TPCollectAADCAPolicies 3>$null | Out-Null
+            $raw = Get-TPRawData -Key 'AAD-CAPolicies'
+            $raw.Data.GuestConditionsRead | Should -BeTrue
+            $g = @($raw.Data.Policies) | Where-Object { $_.Id -eq 'g1' }
+            $g.Conditions.Users.IncludeGuestsOrExternalUsers.GuestOrExternalUserTypes | Should -Be 'b2bCollaborationGuest,serviceProvider'
+            $g.Conditions.Users.IncludeGuestsOrExternalUsers.ExternalTenantsMembershipKind | Should -Be 'all'
+            $g.SessionControls.SignInFrequency.Value | Should -Be 12
+            $null -eq (@($raw.Data.Policies) | Where-Object { $_.Id -eq 'a1' }).Conditions.Users.IncludeGuestsOrExternalUsers | Should -BeTrue
+        }
+    }
+
+    # AAD-12.3 (owner's decision 2026-10-26): DISA Entra ID STIG V-270204 at 35 days over
+    # every enabled member account; the real collector is driven in TP.ExchangeTruth.Tests.ps1.
+    Context 'AAD-12.3 inactive member accounts (STIG V-270204)' {
+        BeforeAll {
+            function script:Inv123([hashtable] $Extra, [object[]] $Rows = @()) {
+                $d = @{ StaleMembers = @($Rows); SectionStatus = @{ StaleMembers = 'Collected' } }
+                foreach ($k in $Extra.Keys) { $d[$k] = $Extra[$k] }
+                Set-TPRawData -Key 'AAD-Inventory' -Data (Bag $d)
+                V 'Test-TPControlInventoryStaleMembers' 'AAD-12.3'
+            }
+        }
+        It 'none inactive under the 35-day read is Satisfied, saying emergency-access accounts are counted' {
+            $f = Inv123 @{ StaleMembersThresholdDays = 35; StaleMembersUndetermined = 0 }
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match '35 days'
+            $f.Detail | Should -Match 'V-270204'
+            $f.Detail | Should -Match 'Emergency-access .* counted'
+        }
+        It 'an account whose activity could not be dated leaves a clean list not assessed' {
+            (Inv123 @{ StaleMembersThresholdDays = 35; StaleMembersUndetermined = 2 }).State | Should -Be 'NotApplicable'
+        }
+        It 'an unlicensed inactive member is a Gap (the licensed-only filter is gone)' {
+            $f = Inv123 @{ StaleMembersThresholdDays = 35 } @(@{ DisplayName = 'Idle'; UPN = 'idle@contoso.com'; LastSignIn = 'x'; LastSignInBasis = 'last sign-in 40 days ago'; DaysSinceSignIn = 40; HasLicense = $false })
+            $f.State | Should -Be 'Gap'
+            @($f.AffectedObjects) -join ' ' | Should -Match 'unlicensed\] .* last sign-in 40 days ago'
+        }
+        It 'a results file from before the 35-day read: a clean 90-day list is not assessed, a 90-day row is still a Gap and says the list may be incomplete' {
+            $f = Inv123 @{}
+            $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'predates the 35-day'
+            Clear-TPState
+            $g = Inv123 @{} @(@{ DisplayName = 'Old'; UPN = 'old@contoso.com'; LastSignIn = 'x'; LastSignInBasis = 'last successful sign-in'; DaysSinceSignIn = 120; HasLicense = $true })
+            $g.State | Should -Be 'Gap'; $g.Detail | Should -Match '36 to 90 days may exist'
+        }
+    }
 }

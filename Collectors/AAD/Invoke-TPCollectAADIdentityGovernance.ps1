@@ -394,11 +394,12 @@ function Invoke-TPCollectAADIdentityGovernance {
                     AuthContextClaimValue = [string](Get-TPObjectField -Item $authContextRule -Key 'claimValue' -Default '')
                     RequiresJustification = if ($enablementRule) { [bool]($enabledRuleNames -contains 'Justification') } else { $null }
                     RequiresApproval      = if ($approvalRule) { [bool](Get-TPNestedProperty -Object $approvalRule -Path 'setting.isApprovalRequired' -Default $false) } else { $null }
-                    MaxDurationHours      = if ($expiryRule -and $expiryRule.maximumDuration) {
-                        # Parse ISO 8601 duration e.g. PT8H
-                        $dur = [string]$expiryRule.maximumDuration
-                        if ($dur -match 'PT(\d+)H') { [int]$matches[1] } else { $null }
-                    } else { $null }
+                    # The ISO 8601 duration as Graph returned it (PT8H, PT30M, PT1H30M,
+                    # P1D) and the hours it allows. 'PT(\d+)H' read PT30M as nothing
+                    # and PT4H30M as 4; ConvertTo-TPDurationHours reads every part
+                    # and returns $null for anything it cannot read.
+                    MaxDuration           = [string](Get-TPObjectField -Item $expiryRule -Key 'maximumDuration' -Default '')
+                    MaxDurationHours      = ConvertTo-TPDurationHours -Duration ([string](Get-TPObjectField -Item $expiryRule -Key 'maximumDuration' -Default ''))
                 }
             }
             $result.Data.PIMRolePolicies = @($pimRaw | ForEach-Object { & $projectPolicy $_ })
