@@ -7,11 +7,11 @@
 
 ## Introduction
 
-This baseline lists the 17 Microsoft Intune controls evaluated by TenantPosture. Each control produces a finding of **Satisfied**, **Partial**, **Gap**, **Not Applicable** or **Error**.
+This baseline lists the 18 Microsoft Intune controls evaluated by TenantPosture. Each control produces a finding of **Satisfied**, **Partial**, **Gap**, **Not Applicable** or **Error**.
 
 This file is generated from `Config/controls.json`, which is the single source of truth for control IDs, titles, severities, remediation and framework citations. Do not edit it by hand — change the control definition and regenerate, or the two will disagree. `Testing/*.BaselineDocs.Tests.ps1` fails the build if they do.
 
-**Severity breakdown:** 1 Critical · 12 High · 3 Medium · 1 Low
+**Severity breakdown:** 1 Critical · 13 High · 3 Medium · 1 Low
 
 ---
 
@@ -314,6 +314,36 @@ In the Intune admin center, Devices > By platform > Windows > Manage updates > W
 | HIPAA | §164.308(a)(1)(ii)(B), §164.308(a)(8) |
 | PCI DSS | Req 6.3.3 |
 | MITRE ATT&CK | T1190, T1068 |
+
+---
+
+### INT-2.6 — Office Macro and Active-Content Hardening Deployed
+
+**Severity:** High  |  **Category:** Endpoint  |  **Automated:** Yes
+
+**License required:** M365 Business Premium or Intune Plan 1
+
+**Description:**
+The assigned Intune policies that configure Microsoft 365 Apps (Settings Catalog policies, including the Microsoft 365 Apps security baseline) set the approved standard: the macro and active-content core of the CIS Microsoft Intune for Office Benchmark v1.1.0, Level 1 (Config/cis-intune-office-macro.json) for Word, Excel, PowerPoint and Access. Macros in files from the internet are blocked, VBA macro notification allows digitally signed macros only, Excel XLM macros and DDE server launch and lookup are off, Protected View is kept on for internet files, unsafe locations and Outlook attachments, trusted locations on the network are not allowed, and application add-ins must be signed by a trusted publisher.
+
+**Business risk:**
+A macro-enabled attachment or download is still one of the most common ways ransomware and remote-access malware reach a workstation. Where a user can enable macros, turn off Protected View, trust a network share or load an unsigned add-in, one convincing phishing email runs attacker code with the user's access.
+
+**Remediation:**
+In Intune, create a Settings Catalog configuration profile for Windows 10 and later (or deploy the Microsoft 365 Apps for Enterprise security baseline) assigned to the users of Microsoft 365 Apps for enterprise, and set for Word, Excel, PowerPoint and Access: Block macros from running in Office files from the Internet = Enabled; VBA Macro Notification Settings = Enabled: Disable all except digitally signed macros (Word, Excel, PowerPoint); Allow Trusted Locations on the network = Disabled; Require that application add-ins are signed by Trusted Publisher = Enabled. For Word, Excel and PowerPoint set Do not open files from the Internet zone in Protected View, Do not open files in unsafe locations in Protected View and Turn off Protected View for attachments opened from Outlook to Disabled. For Excel also set Prevent Excel from running XLM macros, Don't allow Dynamic Data Exchange (DDE) server launch in Excel and Don't allow Dynamic Data Exchange (DDE) server lookup in Excel to Enabled. Pilot with the teams that rely on macros first and sign the macros they need. The finding names each setting that is not set or set to another state. Microsoft documents these policies as applying to Microsoft 365 Apps for enterprise, not Microsoft 365 Apps for business.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | CM-6, CM-7, SI-3 |
+| CIS Controls v8.1 | 2.7, 4.1 |
+| CMMC 2.0 | CM.L2-3.4.2 |
+| ISO/IEC 27001:2022 | A.8.7, A.8.9 |
+| SOC 2 | CC6.8 |
+| HIPAA | §164.308(a)(5)(ii)(B) |
+| PCI DSS | Req 2.2 |
+| MITRE ATT&CK | T1566.001, T1204.002, T1559.002 |
 
 ---
 

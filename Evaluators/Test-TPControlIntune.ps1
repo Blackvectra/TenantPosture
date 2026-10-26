@@ -604,6 +604,101 @@ function Test-TPControlIntuneFirewall {
         -AffectedObjects @($rows | Where-Object { $_.State -ne 'On' } | ForEach-Object { [ordered]@{ Profile = $_.Profile; State = $_.State; TurnedOffBy = ($_.Off -join ', ') } })
 }
 
+# ── INT-2.6 Office Macro and Active-Content Hardening Deployed ────────────────
+# The expected state is the approved core of the CIS Microsoft Intune for Office
+# Benchmark v1.1.0, Level 1 (Config/cis-intune-office-macro.json; approval in
+# tp-standards.json IntuneOfficeMacroBaseline): every encoded setting set, by the
+# assigned Settings Catalog policies that configure Office, to the state the
+# benchmark requires. Not set is a shortfall (the not-configured rule; Office's
+# default is named, never credited). Administrative Templates policies are listed,
+# not read: a tenant whose Office settings live only there is not assessed, never a
+# Gap, and one that holds Office settings beside a Settings Catalog policy leaves
+# every setting the catalog does not meet unestablished (a value there can stand in
+# for or conflict with it). Office cloud policy service and on-premises Group Policy
+# are not visible to Graph at all; the Gap and the pass both say so.
+function Test-TPControlIntuneOfficeMacro {
+    [CmdletBinding()] param()
+    $cid = 'INT-2.6'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-TPFrameworkCitations -ControlId $cid
+    $int = Get-TPRawData -Key 'Intune-EndpointSecurity'
+    if (-not $int -or -not $int.Success) { Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Intune endpoint security data not collected'; return }
+    $data = Get-TPObjectField -Item $int -Key 'Data' -Default $null
+    # A results file from before the Office read carries no OfficePolicies section.
+    if (-not (Test-TPFieldPresent -Item $data -Key 'OfficePolicies') -or -not (Test-TPSectionCollected $int 'OfficePolicies')) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'OfficePolicies was not collected; not assessed. The Office settings of the assigned Settings Catalog policies were not read (the read failed, or a results file from before this read).'
+        return
+    }
+    $baseline = Get-TPIntuneOfficeMacroBaseline
+    if ($null -eq $baseline) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Not assessed: the Office macro and active-content settings are not judged because no Office macro configuration standard is approved (Config/tp-standards.json IntuneOfficeMacroBaseline is empty or names another benchmark version than Config/cis-intune-office-macro.json).'
+        return
+    }
+    $pname = { param($p) $n = [string](Get-TPObjectField -Item $p -Key 'DisplayName' -Default ''); if ($n) { $n } else { [string](Get-TPObjectField -Item $p -Key 'Id' -Default 'unnamed policy') } }
+    $office = @(Select-TPAssignedPolicies @(Get-TPObjectField -Item $data -Key 'OfficePolicies' -Default @()))
+    $read   = @($office | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'OfficeSettingsStatus' -Default '') -eq 'Read' })
+    $unread = @($office | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'OfficeSettingsStatus' -Default '') -ne 'Read' })
+    $gpRead = Test-TPSectionCollected $int 'AdminTemplatePolicies'
+    $gp = @(Select-TPAssignedPolicies @(Get-TPObjectField -Item $data -Key 'AdminTemplatePolicies' -Default @()))
+    $gpOffice = @($gp | Where-Object { [int](Get-TPObjectField -Item $_ -Key 'OfficeDefinitionCount' -Default 0) -gt 0 })
+    $gpUnread = @($gp | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'DefinitionsStatus' -Default '') -ne 'Read' })
+    $scope = "$($baseline.Name), $($baseline.Profile) ($($baseline.Subset))"
+    $edition = 'Microsoft documents these Office policies as applying to Microsoft 365 Apps for enterprise, not Microsoft 365 Apps for business; which edition the devices run is not read.'
+    $outside = 'Settings deployed through the Office cloud policy service or on-premises Group Policy are not visible to this read.'
+    $required = "$scope`: all $(@($baseline.Settings).Count) settings set by an assigned Intune policy to the state the benchmark requires"
+    $gpNames = (@($gpOffice | ForEach-Object { & $pname $_ }) -join ', ')
+    $gpUnreadNames = (@($gpUnread | ForEach-Object { & $pname $_ }) -join ', ')
+
+    if ($read.Count -eq 0) {
+        $why = @()
+        if ($unread.Count) { $why += "the settings of $($unread.Count) assigned Settings Catalog policy(ies) could not be read in full ($((@($unread | ForEach-Object { & $pname $_ })) -join ', ')), and they may configure Office" }
+        if (-not $gpRead) { $why += 'the Administrative Templates policies were not read' }
+        if ($gpOffice.Count) { $why += "Office settings are configured only in Administrative Templates policy(ies) ($gpNames), whose values this assessment does not read" }
+        if ($gpUnread.Count) { $why += "the settings of Administrative Templates policy(ies) $gpUnreadNames could not be read, and they may configure Office" }
+        if ($why.Count) {
+            Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+                -Detail "Not assessed: no assigned Settings Catalog policy was read that configures Office, and whether Office macros are hardened is not established, because $($why -join '; ')." `
+                -CurrentValue 'No Settings Catalog Office policy read' -RequiredValue $required
+        } else {
+            Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+                -Detail "No assigned Intune policy configures Office macro or active-content settings: no Settings Catalog policy (or Microsoft 365 Apps security baseline) sets an Office setting, and no Administrative Templates policy holds one. Macros in Office files, Excel XLM and DDE, Protected View and trusted locations are left to Office's defaults, which users can change. $outside $edition" `
+                -CurrentValue 'No assigned Intune Office policy' -RequiredValue $required -Remediation $ctrl.Remediation
+        }
+        return
+    }
+
+    $maps = @($read | ForEach-Object { [pscustomobject]@{
+        DisplayName = (& $pname $_)
+        Values = (Get-TPObjectField -Item $_ -Key 'OfficeSettingValues' -Default $null)
+        Labels = (Get-TPObjectField -Item $_ -Key 'OfficeSettingLabels' -Default $null) } })
+    $rows = @(Get-TPOfficeMacroBaselineRows -Policies $maps -Catalog $baseline)
+    $met = @($rows | Where-Object Status -eq 'Met'); $below = @($rows | Where-Object Status -eq 'Below')
+    $unset = @($rows | Where-Object Status -eq 'NotSet'); $odd = @($rows | Where-Object Status -eq 'Unrecognized')
+    # Settings left unset by the Settings Catalog policies may be set where this read cannot see.
+    $blind = ($gpOffice.Count -gt 0 -or $gpUnread.Count -gt 0 -or -not $gpRead -or $unread.Count -gt 0)
+    $verified = @(); $short = @(); $unknown = @()
+    if ($met.Count) { $verified += "$($met.Count) of $($rows.Count) settings of the $scope are set as required across $($read.Count) assigned Office policy(ies) ($((@($maps.DisplayName)) -join ', ')): $(($met.Cis) -join ', ')." }
+    if ($below.Count) {
+        $short += 'Set to a state the benchmark does not accept: ' + (($below | ForEach-Object { "$($_.Cis) $($_.App) $($_.Title) ($(@($_.Observed) -join ' / '); requires $($_.Required))" }) -join '; ') + '.'
+    }
+    $unsetText = ($unset | ForEach-Object { "$($_.Cis) $($_.App) $($_.Title)$(if ($_.NotConfigured) { " (not configured: $($_.NotConfigured))" })" }) -join '; '
+    if ($unset.Count -and -not $blind) { $short += "Not set by any assigned Office policy, which the benchmark requires: $unsetText." }
+    if ($unset.Count -and $blind) { $unknown += "whether $($unset.Count) setting(s) are set elsewhere: $unsetText." }
+    if ($odd.Count) { $unknown += 'a value this assessment does not recognize for ' + (($odd | ForEach-Object { "$($_.Cis) $($_.App) $($_.Title) ($(@($_.Observed) -join ' / '))" }) -join '; ') + '.' }
+    if ($unread.Count) { $unknown += "the Office settings of $($unread.Count) assigned Settings Catalog policy(ies) that could not be read in full ($((@($unread | ForEach-Object { & $pname $_ })) -join ', '))." }
+    if (-not $gpRead) { $unknown += 'the Administrative Templates policies, which were not read, so an Office setting there that conflicts with the Settings Catalog value is not ruled out.' }
+    if ($gpOffice.Count) { $unknown += "the values of $($gpOffice.Count) Administrative Templates policy(ies) that hold Office settings ($gpNames), which this assessment does not read; a value there can conflict with the Settings Catalog value." }
+    if ($gpUnread.Count) { $unknown += "the settings of Administrative Templates policy(ies) $gpUnreadNames, which could not be read." }
+    if ($verified.Count) { $verified[-1] = "$($verified[-1]) $edition" }
+    $affected = @($rows | Where-Object Status -ne 'Met' | ForEach-Object {
+        [ordered]@{ Cis = $_.Cis; App = $_.App; Setting = $_.Title; Status = $_.Status; Observed = (@($_.Observed) -join ' / '); Required = $_.Required } })
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -AffectedObjects $affected `
+        -CurrentValue "$($met.Count) of $($rows.Count) benchmark settings set as required across $($read.Count) assigned Office policy(ies)" `
+        -RequiredValue $required
+}
+
 # ── INT-2.4 Disk Encryption Compliance for macOS ─────────────────────────────
 function Test-TPControlIntuneMacEncryption {
     [CmdletBinding()] param()

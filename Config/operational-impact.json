@@ -399,6 +399,7 @@
     "INT-2.3": "device-config-change",
     "INT-2.4": "device-encryption",
     "INT-2.5": "device-config-change",
+    "INT-2.6": "device-config-change",
     "INT-3.1": "device-gate",
     "INT-3.2": "device-config-change",
     "INT-3.3": "device-gate",
@@ -545,6 +546,10 @@
       "Users": "No more expiry prompts. Nothing else changes.",
       "Watchouts": "Do it together with MFA for every user: never-expire is safe only when a stolen password alone cannot sign in.",
       "Reversible": "Yes."
+    },
+    "INT-2.6": {
+      "Users": "Unsigned macros stop running, macros in files downloaded or received by email are blocked, Excel stops launching DDE servers, and workbooks or templates on a network share are no longer trusted. Teams that run macro-based reports or line-of-business add-ins notice first.",
+      "Watchouts": "Find the macros the business depends on before rollout and sign them with a code-signing certificate deployed as a Trusted Publisher; moving them to a network trusted location is the opening this setting closes."
     }
   }
 }

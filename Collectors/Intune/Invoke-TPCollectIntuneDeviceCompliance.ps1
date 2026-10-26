@@ -50,10 +50,11 @@ function Get-TPComplianceActionList {
 # Whether a policy read with $expand=assignments is assigned: $true / $false from the
 # expanded list, $null when the list was not returned. The list is read off the object
 # directly, because Get-TPObjectField hands an empty array back as $null, which made a
-# policy with no assignment "not read" and so counted as assigned.
+# policy with no assignment "not read" and so counted as assigned. Shared by the
+# Intune collectors (the endpoint-security collector calls it as -Item).
 function Get-TPExpandedAssignmentState {
     [CmdletBinding()]
-    param([Parameter(Mandatory)] [AllowNull()] $Policy)
+    param([Parameter(Mandatory, Position = 0)] [Alias('Item')] [AllowNull()] $Policy)
     if ($null -eq $Policy) { return $null }
     if ($Policy -is [System.Collections.IDictionary]) {
         if (-not $Policy.Contains('assignments')) { return $null }

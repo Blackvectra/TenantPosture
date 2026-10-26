@@ -6,7 +6,7 @@
 
 ## What the baseline is, and is not
 
-The assessment answers "what is this tenant's posture against 207 controls and ten frameworks". The baseline answers a narrower question: **is this client configured the way the CIS Microsoft 365 Foundations Benchmark says, at the profile NRG assigns it?** It is a desired-state view over the assessment: it reads findings and never changes them, creates none, and moves no framework score. Every control the tool assesses is still assessed and reported; a control with no CIS recommendation is simply not a baseline requirement.
+The assessment answers "what is this tenant's posture against 208 controls and ten frameworks". The baseline answers a narrower question: **is this client configured the way the CIS Microsoft 365 Foundations Benchmark says, at the profile NRG assigns it?** It is a desired-state view over the assessment: it reads findings and never changes them, creates none, and moves no framework score. Every control the tool assesses is still assessed and reported; a control with no CIS recommendation is simply not a baseline requirement.
 
 ## Tiers are CIS profiles
 
@@ -76,7 +76,7 @@ plus a `BaselineCompliance` summary (counts by observed state, constraint and di
 | Minimum | 115 | 51 | 64 |
 | Standard | 16 | 3 | 13 |
 | Hardened | 59 | 21 | 38 |
-| Assessment-only controls | 132 | | |
+| Assessment-only controls | 133 | | |
 
 All 160 v7.0.0 recommendations are represented; 75 rows are tool-checked controls and 115 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
 
@@ -201,6 +201,7 @@ One row per control in `controls.json`; the tier column is what the test compare
 | INT-2.3 | Windows Firewall Policy Deployed via Intune | High | M365 Business Premium or Intune Plan 1 | — | **Assessment-only** |
 | INT-2.4 | macOS FileVault Encryption Required | High | M365 Business Premium or Intune Plan 1 | — | **Assessment-only** |
 | INT-2.5 | Windows Update Compliance Policy Deployed | High | M365 Business Premium or Intune Plan 1 | — | **Assessment-only** |
+| INT-2.6 | Office Macro and Active-Content Hardening Deployed | High | M365 Business Premium or Intune Plan 1 | — | **Assessment-only** |
 | AAD-8.1 | PIM Alerts Configured | Medium | Entra ID P2 | — | **Assessment-only** |
 | AAD-8.2 | Access Reviews for Privileged Roles | High | Entra ID P2 | — | **Assessment-only** |
 | AAD-9.1 | Authenticator Number Matching Enabled | High | Included (all plans) | 5.2.3.1 | **Minimum** |

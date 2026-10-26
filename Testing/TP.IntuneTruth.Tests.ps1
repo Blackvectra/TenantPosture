@@ -353,6 +353,156 @@ Describe 'Intune controls count what enforces something' {
             Set-TPRawData -Key 'Intune-DeviceCompliance' -Data $dc
             Set-TPRawData -Key 'Intune-EndpointSecurity' -Data $es
             (Verdict 'Test-TPControlIntuneWindowsUpdate' 'INT-2.5').State | Should -Be 'Satisfied'
+    Context 'INT-2.6 judges the assigned Office policies against the approved CIS Intune for Office macro core' {
+        BeforeAll {
+            $script:OffCat = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config' 'cis-intune-office-macro.json') -Raw | ConvertFrom-Json -Depth 10
+            $script:OffList = @(@{ id = 'o1'; name = 'Office hardening'; platforms = 'windows10'; templateReference = @{ templateFamily = 'none'; templateDisplayName = '' }; assignments = $script:Assigned })
+            # One Office setting as configurationPolicies/{id}/settings?$expand=settingDefinitions returns it:
+            # an ADMX-backed choice instance (value <id>_1 / <id>_0) with its definition and options named.
+            # $Option adds the dropdown child Office uses for VBA Macro Notification Settings.
+            function script:OfficeSetting { param($S, [string] $State, [string] $Option, [switch] $NoDefinitions)
+                $id = "user_vendor_msft_policy_config_$($S.AppKey)~policy~l_microsoftoffice~l_security~l_trustcenter_$($S.Node)"
+                $children = @(); $defs = @(@{ '@odata.type' = '#microsoft.graph.deviceManagementConfigurationChoiceSettingDefinition'; id = $id; displayName = "$($S.Title) (User)"
+                    options = @(@{ itemId = "${id}_0"; displayName = 'Disabled' }, @{ itemId = "${id}_1"; displayName = 'Enabled' }) })
+                if ($Option) {
+                    $cid = "${id}_l_empty19"
+                    $labels = @('Enable all macros (not recommended)', 'Disable all with notification', 'Disable all except digitally signed macros', 'Disable all without notification')
+                    $opts = @(for ($i = 0; $i -lt $labels.Count; $i++) { @{ itemId = "${cid}_$($i + 1)"; displayName = $labels[$i] } })
+                    $pick = @($opts | Where-Object { $_.displayName -eq $Option })
+                    $val = if ($pick.Count) { $pick[0].itemId } else { $opts += @{ itemId = "${cid}_9"; displayName = $Option }; "${cid}_9" }
+                    $children = @(@{ '@odata.type' = '#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance'; settingDefinitionId = $cid; choiceSettingValue = @{ value = $val; children = @() } })
+                    $defs += @{ '@odata.type' = '#microsoft.graph.deviceManagementConfigurationChoiceSettingDefinition'; id = $cid; displayName = 'VBA Macro Notification Settings'; options = $opts }
+                }
+                $out = @{ id = '0'; settingInstance = @{ '@odata.type' = '#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance'
+                    settingDefinitionId = $id; choiceSettingValue = @{ value = "${id}_$State"; children = $children } } }
+                if (-not $NoDefinitions) { $out.settingDefinitions = $defs }
+                $out
+            }
+            # Every catalog setting in its required state, with overrides by CIS number:
+            # $null leaves it out, '0'/'1' sets that state, 'vba:<label>' picks the VBA option.
+            function script:OfficePayload { param([hashtable] $Override = @{}, [switch] $NoDefinitions)
+                @(foreach ($s in $script:OffCat.Settings) {
+                    $state = [string]@($s.Compliant)[0]; $opt = if ($s.Kind -eq 'Dropdown') { 'Disable all except digitally signed macros' } else { '' }
+                    if ($Override.ContainsKey($s.Cis)) {
+                        $o = $Override[$s.Cis]; if ($null -eq $o) { continue }
+                        if ($o -like 'vba:*') { $opt = $o.Substring(4) } else { $state = $o }
+                    }
+                    OfficeSetting $s $state $opt -NoDefinitions:$NoDefinitions
+                }) }
+            function script:OfficeVerdict { param([hashtable] $Graph) Run $Graph; Verdict 'Test-TPControlIntuneOfficeMacro' 'INT-2.6' }
+            $script:GpOffice = @(@{ id = 'g1'; displayName = 'Office ADMX'; assignments = $script:Assigned })
+            $script:GpOfficeValues = @(@{ id = 'v1'; enabled = $true; definition = @{ id = 'd1'; displayName = 'Block macros from running in Office files from the Internet'; categoryPath = '\Microsoft Word 2016\Word Options\Security\Trust Center'; classType = 'user' } })
+            $script:GpOtherValues = @(@{ id = 'v2'; enabled = $true; definition = @{ id = 'd2'; displayName = 'Prevent the usage of OneDrive for file storage'; categoryPath = '\OneDrive'; classType = 'machine' } })
+        }
+        It 'the catalog is the approved Level 1 core: 27 settings for Word, Excel, PowerPoint and Access, each sourced, and the approval names it' {
+            @($script:OffCat.Settings).Count | Should -Be 27
+            @($script:OffCat.Settings.Cis | Select-Object -Unique).Count | Should -Be 27
+            foreach ($s in $script:OffCat.Settings) {
+                $s.Level | Should -Be 1
+                $s.App | Should -BeIn @('Word', 'Excel', 'PowerPoint', 'Access')
+                $s.Kind | Should -BeIn @('Toggle', 'Dropdown')
+                @($s.Compliant).Count | Should -Be 1
+                [string]$s.Source | Should -Match '^https://learn\.microsoft\.com/'
+            }
+            # Easy to get backwards: the Protected View and network trusted-location policies are met by DISABLED.
+            @($script:OffCat.Settings | Where-Object { $_.Title -match 'Protected View|Trusted Locations on the network' } | ForEach-Object { @($_.Compliant)[0] } | Select-Object -Unique) | Should -Be @('0')
+            @($script:OffCat.Settings | Where-Object Kind -eq 'Dropdown').Cis | Should -Be @('2.2.4.7.2.7', '2.6.6.6.2.8', '2.11.8.7.2.10')
+            foreach ($o in $script:OffCat.NotInApprovedSubset) { ([string]$o.Reason).Length | Should -BeGreaterThan 20 }
+            $b = & $script:Mod { Get-TPIntuneOfficeMacroBaseline }
+            $b | Should -Not -BeNullOrEmpty
+            $b.Name | Should -Be 'CIS Microsoft Intune for Office Benchmark v1.1.0'
+        }
+        It 'every setting in its required state is Satisfied, read with the definitions expanded and no new scope' {
+            $f = OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList; 'configurationPolicies/o1/settings' = (OfficePayload) }
+            $f.State | Should -Be 'Satisfied'
+            $f.Detail | Should -Match '27 of 27 settings'
+            @(& $script:Mod { $script:SeenUris } | Where-Object { $_ -match 'configurationPolicies/o1/settings\?\$expand=settingDefinitions' }).Count | Should -Be 1
+            @(& $script:Mod { Get-TPGraphScopeList }) | Should -Contain 'DeviceManagementConfiguration.Read.All'
+            $raw = @((Get-TPRawData -Key 'Intune-EndpointSecurity').Data.OfficePolicies)
+            $raw.Count | Should -Be 1
+            $raw[0].OfficeSettingsStatus | Should -Be 'Read'
+        }
+        It 'a setting in the other state is a shortfall (Below), and Partial beside settings met' {
+            $f = OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList; 'configurationPolicies/o1/settings' = (OfficePayload @{ '2.2.4.7.2.6' = '0'; '2.11.8.7.2.2.5' = '1' }) }
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Set to a state the benchmark does not accept: 2\.2\.4\.7\.2\.6 Excel Block macros'
+            $f.Detail | Should -Match '2\.11\.8\.7\.2\.2\.5 Word Turn off Protected View for attachments opened from Outlook \(Office hardening \(Enabled\); requires Disabled\)'
+        }
+        It 'a setting no assigned policy sets is a shortfall (the not-configured rule), with the Office default named' {
+            $f = OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList; 'configurationPolicies/o1/settings' = (OfficePayload @{ '2.2.4.7.2.8' = $null }) }
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Not set by any assigned Office policy, which the benchmark requires: 2\.2\.4\.7\.2\.8 Excel Prevent Excel from running XLM macros \(not configured:'
+        }
+        It 'the VBA option is judged by name: a weaker option or the stricter no-notification option is Below, an unknown option is not assessed' {
+            (OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList; 'configurationPolicies/o1/settings' = (OfficePayload @{ '2.11.8.7.2.10' = 'vba:Enable all macros (not recommended)' }) }).State | Should -Be 'Partial'
+            $f = OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList; 'configurationPolicies/o1/settings' = (OfficePayload @{ '2.11.8.7.2.10' = 'vba:Disable all without notification' }) }
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'stricter than the benchmark'
+            $f = OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList; 'configurationPolicies/o1/settings' = (OfficePayload @{ '2.11.8.7.2.10' = 'vba:Some future option' }) }
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'a value this assessment does not recognize for 2\.11\.8\.7\.2\.10'
+        }
+        It 'without the expanded definitions a setting is still matched by its ADMX policy name and its _1 / _0 suffix, and a VBA option without a name is never credited' {
+            $f = OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList; 'configurationPolicies/o1/settings' = (OfficePayload -NoDefinitions) }
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match '24 of 27 settings'
+            $f.Detail | Should -Match 'option not read'
+        }
+        It 'an unrecognized state value is not assessed, never Satisfied' {
+            $f = OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList; 'configurationPolicies/o1/settings' = (OfficePayload -NoDefinitions -Override @{ '2.2.4.7.2.6' = '7'; '2.2.4.7.2.7' = $null; '2.6.6.6.2.8' = $null; '2.11.8.7.2.10' = $null }) }
+            $f.State | Should -Not -Be 'Satisfied'
+            $f.Detail | Should -Match 'does not recognize for 2\.2\.4\.7\.2\.6'
+        }
+        It 'no Settings Catalog Office policy and no Administrative Templates Office policy is a Gap; an unassigned Office policy does not count' {
+            $f = OfficeVerdict @{ 'groupPolicyConfigurations\?' = @(@{ id = 'g2'; displayName = 'OneDrive ADMX'; assignments = $script:Assigned }); 'groupPolicyConfigurations/g2/definitionValues' = $script:GpOtherValues }
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'Office cloud policy service'
+            $unassigned = @(@{ id = 'o1'; name = 'Office hardening'; platforms = 'windows10'; templateReference = @{ templateFamily = 'none' }; assignments = @() })
+            (OfficeVerdict @{ 'configurationPolicies\?' = $unassigned; 'configurationPolicies/o1/settings' = (OfficePayload) }).State | Should -Be 'Gap'
+            @(& $script:Mod { $script:SeenUris } | Where-Object { $_ -match 'configurationPolicies/o1/settings' }).Count | Should -Be 0 -Because 'an unassigned policy is not read'
+            # Graph returns an unassigned policy as "assignments": []; it was recorded as "not reported" and counted as assigned.
+            @((Get-TPRawData -Key 'Intune-EndpointSecurity').Data.EndpointSecurityPolicies)[0].IsAssigned | Should -BeFalse
+        }
+        It 'Office settings only in Administrative Templates policies are not assessed, never a Gap' {
+            $f = OfficeVerdict @{ 'groupPolicyConfigurations\?' = $script:GpOffice; 'groupPolicyConfigurations/g1/definitionValues' = $script:GpOfficeValues }
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'only in Administrative Templates policy\(ies\) \(Office ADMX\)'
+            $g = @((Get-TPRawData -Key 'Intune-EndpointSecurity').Data.AdminTemplatePolicies)
+            $g[0].OfficeDefinitionCount | Should -Be 1
+        }
+        It 'a compliant Settings Catalog policy beside an Administrative Templates Office policy is not assessed, never Satisfied' {
+            $f = OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList; 'configurationPolicies/o1/settings' = (OfficePayload)
+                                  'groupPolicyConfigurations\?' = $script:GpOffice; 'groupPolicyConfigurations/g1/definitionValues' = $script:GpOfficeValues }
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'Administrative Templates policy\(ies\) that hold Office settings \(Office ADMX\)'
+        }
+        It 'a settings read that fails leaves the control not assessed, recorded on the policy' {
+            & $script:Mod { $script:FailSettings = $true }
+            try {
+                $f = OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList }
+                $f.State | Should -Be 'NotApplicable'
+                @((Get-TPRawData -Key 'Intune-EndpointSecurity').Data.OfficePolicies)[0].OfficeSettingsStatus | Should -Be 'Failed'
+            } finally { & $script:Mod { $script:FailSettings = $false } }
+        }
+        It 'a results file from before the Office read, or a withdrawn approval, is not assessed' {
+            Clear-TPState
+            Set-TPRawData -Key 'Intune-EndpointSecurity' -Data ([pscustomobject]@{ Success = $true; Data = [pscustomobject]@{ SectionStatus = [pscustomobject]@{ EndpointSecurityPolicies = 'Collected' }; EndpointSecurityPolicies = @() } })
+            $f = Verdict 'Test-TPControlIntuneOfficeMacro' 'INT-2.6'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match '^OfficePolicies was not collected; not assessed\.'
+            Mock -ModuleName 'TenantPosture' -CommandName Get-TPIntuneOfficeMacroBaseline -MockWith { $null }
+            $f = OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList; 'configurationPolicies/o1/settings' = (OfficePayload @{ '2.2.4.7.2.6' = '0' }) }
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'because no Office macro configuration standard is approved'
+        }
+        It 'the approval gate returns no catalog when the approval is empty or names another version' {
+            $tmp = Join-Path ([IO.Path]::GetTempPath()) ('tp-off-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.json')
+            try {
+                Set-Content -LiteralPath $tmp -Value '{ "IntuneOfficeMacroBaseline": { "Benchmark": "" } }' -Encoding utf8
+                (& $script:Mod { param($p) Get-TPIntuneOfficeMacroBaseline -StandardsPath $p } $tmp) | Should -BeNullOrEmpty
+                Set-Content -LiteralPath $tmp -Value '{ "IntuneOfficeMacroBaseline": { "Benchmark": "CIS Microsoft Intune for Office Benchmark v1.0.0" } }' -Encoding utf8
+                (& $script:Mod { param($p) Get-TPIntuneOfficeMacroBaseline -StandardsPath $p } $tmp) | Should -BeNullOrEmpty
+            } finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
         }
     }
     It 'INT-4.4 reads the iOS passcodeRequired (an iOS-only fleet failed)' {

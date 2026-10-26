@@ -473,10 +473,10 @@ Describe 'System Security Plan (NIST SP 800-171 Rev 2)' {
         }
 
         It 'keeps the DEV-* checks out of controls.json' {
-            # The 207 is a stated product number. Nist171 was added to
+            # The 208 is a stated product number. Nist171 was added to
             # device-controls.json, not to controls.json, and the two files stay
             # separate.
-            $script:Controls.Count | Should -Be 207
+            $script:Controls.Count | Should -Be 208
             foreach ($c in $script:Controls) {
                 $c.ControlId | Should -Not -BeLike 'DEV-*'
             }

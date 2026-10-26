@@ -354,7 +354,7 @@ $script:ExportedFunctions = @(
     # ── Evaluators — Intune ───────────────────────────────────────────────────
     'Test-TPControlIntune',
     'Test-TPControlIntuneEDR', 'Test-TPControlIntuneASR',
-    'Test-TPControlIntuneFirewall', 'Test-TPControlIntuneMacEncryption',
+    'Test-TPControlIntuneFirewall', 'Test-TPControlIntuneOfficeMacro', 'Test-TPControlIntuneMacEncryption',
     'Test-TPControlIntuneWindowsUpdate', 'Test-TPControlIntuneEnrollmentRestrictions',
     'Test-TPControlIntuneAppConfig', 'Test-TPControlIntuneConditionalLaunch',
     'Test-TPControlIntuneWindowsLAPS', 'Test-TPControlIntuneWindowsHello',
