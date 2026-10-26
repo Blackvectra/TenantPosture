@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **[Benchmarks] Every control is mapped to a configuration benchmark or says why not.** 133 of 204 controls cite at least
+  one: CIS Microsoft 365 v7.0.0 and CISA ScubaGear 2.0.0 as before, plus (new, `Config/benchmark-mappings.json`) the CIS
+  Intune for Defender Antivirus benchmark, Microsoft's recommended EOP and Defender for Office 365 settings, Microsoft
+  Zero Trust guidance and assessment checks, NIST SP 800-177r1 and the DISA Entra ID STIG. ScubaGear citations were added
+  for DEF-2.4, INT-1.2 and PVW-4.1, and AAD-2.3's relation corrected to Partial. The other 71 are listed with the reason
+  no benchmark item describes what they check (`docs/TP-BENCHMARK-MAP.md`). Five evaluators were tightened so their
+  citations hold: SPO-1.5 (authentication context not credited), SPO-3.3 (version expiry of 30 days or more, or none),
+  TMS-3.4 (an enabled DLP rule required), TMS-4.1 (recordings expire within 120 days) and INT-1.5 (not assessed, never a
+  three-setting pass, while the CIS antivirus benchmark is approved).
+
 - **[Baseline effectiveness] The sign-in log now says whether MFA and the legacy-authentication block held.** A new
   collector, `AAD-SignInEvidence` (no new Graph scope; Microsoft requires Entra ID P1 or P2 to read sign-in logs through
   Graph), reads the last 30 days through the beta sign-in endpoint with server-side filters: successful sign-ins through

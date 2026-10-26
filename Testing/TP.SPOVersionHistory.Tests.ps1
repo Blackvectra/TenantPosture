@@ -32,9 +32,23 @@ Describe 'SPO-3.3 version-history control discriminates' {
     }
 
     It 'Satisfied when a manual major-version limit is adequate (>= 100)' {
-        Set-SPO -TenantSettingsSPO @{ EnableAutoExpirationVersionTrim = $false; MajorVersionLimit = 500 }
+        Set-SPO -TenantSettingsSPO @{ EnableAutoExpirationVersionTrim = $false; MajorVersionLimit = 500; ExpireVersionsAfterDays = 0 }
         Test-TPControlSPOVersionHistory
         State | Should -Be 'Satisfied'
+    }
+
+    It 'judges how long a manual limit keeps versions: no expiration or 30 days or more (Microsoft)' {
+        Set-SPO -TenantSettingsSPO @{ EnableAutoExpirationVersionTrim = $false; MajorVersionLimit = 500; ExpireVersionsAfterDays = 30 }
+        Test-TPControlSPOVersionHistory
+        State | Should -Be 'Satisfied'
+        Clear-TPState
+        Set-SPO -TenantSettingsSPO @{ EnableAutoExpirationVersionTrim = $false; MajorVersionLimit = 500; ExpireVersionsAfterDays = 29 }
+        Test-TPControlSPOVersionHistory
+        State | Should -Be 'Partial'
+        Clear-TPState
+        Set-SPO -TenantSettingsSPO @{ EnableAutoExpirationVersionTrim = $false; MajorVersionLimit = 500 }
+        Test-TPControlSPOVersionHistory
+        State | Should -Be 'NotApplicable'
     }
 
     It 'Gap when the manual limit is too low and auto-trim is off' {

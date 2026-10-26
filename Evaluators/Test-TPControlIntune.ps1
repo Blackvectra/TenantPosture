@@ -269,6 +269,12 @@ function Test-TPControlIntune {
             if ($read.Count -lt $av.Count) {
                 $unknown += "the antivirus settings of $($av.Count - $read.Count) of $($av.Count) assigned policy(ies) could not be read, so real-time, cloud-delivered and PUA protection are not established."
             }
+            # While the approved benchmark is in force it IS the expected state, so
+            # three settings passing cannot stand for it: without every stored value
+            # (a results file from before that read) the control is not assessed.
+            if ($null -ne $baseline) {
+                $unknown += "the $($baseline.Name) ($($baseline.Profile)), the approved standard, because the assigned policies' setting values were not stored (a results file from before that read, or a value read that did not complete); only real-time, cloud-delivered and PUA protection were judged."
+            }
             if ($maps.Count -gt 0) {
                 $label = @{ RealTimeProtection = 'Real-time protection'; CloudProtection = 'Cloud-delivered protection'; PuaProtection = 'PUA protection' }
                 foreach ($row in @(Test-TPAvSettingSet -SettingMaps $maps)) {

@@ -1361,7 +1361,7 @@
           "13.5"
         ],
         "CIS": "",
-        "SCuBA": "",
+        "SCuBA": "MS.AAD.3.7v1",
         "NIST": "AC-3, CM-7",
         "CMMC": "AC.L1-3.1.2",
         "MITRE": [
@@ -2350,6 +2350,7 @@
           "9.7"
         ],
         "CIS": "",
+        "SCuBA": "MS.SECURITYSUITE.6.1v1",
         "NIST": "SI-8",
         "CMMC": "SI.L1-3.14.2",
         "MITRE": [
@@ -5002,7 +5003,7 @@
     {
       "ControlId": "TMS-4.1",
       "Title": "Meeting Recording Expiration Configured",
-      "Description": "Meeting recordings in Teams are configured to expire after 60-90 days rather than persisting indefinitely.",
+      "Description": "Meeting recordings in Teams expire automatically within 120 days (Microsoft's default for new recordings) rather than persisting indefinitely or for years.",
       "BusinessRisk": "Meeting recordings capture sensitive discussions, strategic planning, and personnel matters. Recordings that never expire accumulate indefinitely and expand the blast radius of any SharePoint/OneDrive compromise.",
       "Severity": "Medium",
       "Workload": "TMS",
@@ -5261,6 +5262,7 @@
           "8.5"
         ],
         "CIS": "",
+        "SCuBA": "MS.SECURITYSUITE.5.1v1",
         "NIST": "AU-2, AU-12",
         "CMMC": "AU.L2-3.3.1",
         "MITRE": [

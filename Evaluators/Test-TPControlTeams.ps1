@@ -471,10 +471,27 @@ function Test-TPControlTeamsChatCopy {
     $teamsPolicies  = @($dlp | Where-Object { @(Get-TPObjectField -Item $_ -Key 'Workloads' -Default @()) -match 'Teams' })
     $enabledTeams   = @($teamsPolicies | Where-Object { (Get-TPObjectField -Item $_ -Key 'Enabled' -Default $false) -eq $true })
 
-    if ($enabledTeams.Count -gt 0) {
+    # An enforcing policy applies only its enabled rules (Get-TPDlpRuleStates), so
+    # one with no enabled rule inspects nothing; the same rule DEF-4.5 applies.
+    $teamsNames = (@($enabledTeams | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '?') }) -join ', ')
+    $liveRules  = @()
+    if ($enabledTeams.Count -gt 0 -and (Test-TPSectionCollected $pvw 'DLPRules')) {
+        $liveRules = @(Get-TPDlpRuleStates -Policies $enabledTeams -Rules @(Get-TPObjectField -Item $pvw.Data -Key 'DLPRules' -Default @()) |
+            Where-Object { $_.State -eq 'Enforcing' })
+    }
+    if ($enabledTeams.Count -gt 0 -and -not (Test-TPSectionCollected $pvw 'DLPRules')) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "$($enabledTeams.Count) enabled DLP policy(ies) cover the Teams workload ($teamsNames), but DLP rules were not collected, so whether any of them has an enabled rule was not assessed. An enforcing policy with no enabled rule inspects nothing."
+    } elseif ($enabledTeams.Count -gt 0 -and $liveRules.Count -eq 0) {
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
+            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "$($enabledTeams.Count) enabled DLP policy(ies) cover the Teams workload ($teamsNames) but none has an enabled rule, so chat content is not inspected." `
+            -CurrentValue "$($enabledTeams.Count) enabled Teams DLP policies, 0 enabled rules" `
+            -RequiredValue 'An enabled DLP policy covering the Teams workload with at least one enabled rule' -Remediation $ctrl.Remediation
+    } elseif ($enabledTeams.Count -gt 0) {
         Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "$($enabledTeams.Count) enabled DLP policy(ies) cover the Teams workload, so sensitive content in chat is inspected."
+            -Detail "$($enabledTeams.Count) enabled DLP policy(ies) cover the Teams workload ($teamsNames) with $($liveRules.Count) enabled rule(s): $(($liveRules | ForEach-Object { "$($_.Rule) [$($_.Policy)]" }) -join ', '). Sensitive content in chat is inspected by those rules."
     } elseif ($teamsPolicies.Count -gt 0) {
         Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
@@ -500,10 +517,14 @@ function Test-TPControlTeamsMeetingRecordingScope {
     $expiry = Get-TPObjectField -Item $meet -Key 'NewMeetingRecordingExpirationDays' -Default $null
     if ($null -eq $expiry) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'NewMeetingRecordingExpirationDays (global meeting policy) was not collected; not assessed.'
-    } elseif ([int]$expiry -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Meeting recordings auto-expire after $expiry days — recordings are not retained indefinitely."
+    } elseif ([int]$expiry -gt 0 -and [int]$expiry -le 120) {
+        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Meeting recordings auto-expire after $expiry days, within Microsoft's 120-day default — recordings are not retained indefinitely." -CurrentValue "NewMeetingRecordingExpirationDays = $expiry"
+    } elseif ([int]$expiry -gt 120) {
+        # A finite but long expiry (the setting accepts up to 99,999 days) keeps
+        # recordings for longer than Microsoft's default for new recordings.
+        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "Meeting recordings auto-expire after $expiry days, longer than Microsoft's 120-day default for new recordings, so recorded content stays in OneDrive and SharePoint longer than the default." -CurrentValue "NewMeetingRecordingExpirationDays = $expiry" -RequiredValue 'An expiration of 120 days or less (Microsoft''s default)' -Remediation $ctrl.Remediation
     } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Meeting recordings never auto-expire (retention set to unlimited). Recorded meeting content accumulates in OneDrive/SharePoint indefinitely, expanding the data-at-rest exposure.' -CurrentValue 'NewMeetingRecordingExpirationDays = -1 (never expires)' -RequiredValue 'A finite expiration (e.g. 60-120 days)' -Remediation $ctrl.Remediation
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Meeting recordings never auto-expire (retention set to unlimited). Recorded meeting content accumulates in OneDrive/SharePoint indefinitely, expanding the data-at-rest exposure.' -CurrentValue 'NewMeetingRecordingExpirationDays = -1 (never expires)' -RequiredValue 'An expiration of 120 days or less (Microsoft''s default)' -Remediation $ctrl.Remediation
     }
 }
 

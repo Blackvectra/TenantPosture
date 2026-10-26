@@ -133,6 +133,7 @@
         'Get-TPControlStatus',
         'Get-TPAsrRuleModes',
         'Get-TPScubaAlignment',
+        'Get-TPBenchmarkMapping',
         'Publish-TPReportSite',
         'Publish-TPActionPlan',
         'Get-TPFindingLimitKind',
