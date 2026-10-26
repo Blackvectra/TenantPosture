@@ -48,6 +48,10 @@ function Invoke-TPCollectPurview {
             LabelPolicies           = @()
             RetentionLabels         = @()
             CommCompliancePolicies  = @()
+            # Communication compliance RULES (PVW-2.2): which locations each
+            # policy's rule captures, read from the rule XML, so a policy is
+            # credited for Copilot interactions only when its rule names them.
+            CommComplianceRules     = @()
             InformationBarriersMode = $null
             # The reason a section failed, by section name, so the finding that
             # depends on it can say what to fix (Get-TPSectionNotCollectedDetail).
@@ -64,6 +68,7 @@ function Invoke-TPCollectPurview {
                 LabelPolicies           = 'NotRun'
                 RetentionLabels         = 'NotRun'
                 CommCompliancePolicies  = 'NotRun'
+                CommComplianceRules     = 'NotRun'
                 InformationBarriersMode = 'NotRun'
             }
         }
@@ -267,7 +272,7 @@ function Invoke-TPCollectPurview {
         # in Exchange Online), and records Collected / Failed on its own so a
         # failed query is never read as "none configured".
         $scc = {
-            param([string] $Section, [string] $Cmdlet, [scriptblock] $Project)
+            param([string] $Section, [string] $Cmdlet, [scriptblock] $Project, [hashtable] $Params = @{})
             $cmd = Get-TPExoCommand -Name $Cmdlet -Session SecurityCompliance
             # Not resolvable in the Security & Compliance session is a failed
             # section, logged by name. Returning silently left it NotRun, and
@@ -287,7 +292,7 @@ function Invoke-TPCollectPurview {
                 return
             }
             try {
-                $rows = @(& $cmd.Command -ErrorAction Stop)
+                $rows = @(& $cmd.Command @Params -ErrorAction Stop)
                 & $Project $rows
                 $result.Data.SectionStatus[$Section] = 'Collected'
             } catch {
@@ -357,16 +362,43 @@ function Invoke-TPCollectPurview {
             })
         }
 
-        # Communication compliance policies (PVW-2.2).
+        # Communication compliance policies (PVW-2.2). Guid joins a policy to
+        # its rules (a rule's Policy property); ReviewMailbox is where the
+        # policy's matches are sent for review. ReviewMailboxRead says whether
+        # the property was returned at all, so an absent one is never read as
+        # "no review mailbox".
         & $scc 'CommCompliancePolicies' 'Get-SupervisoryReviewPolicyV2' {
             param($rows)
             $result.Data.CommCompliancePolicies = @($rows | Where-Object { $_ } | ForEach-Object {
+                $mbxRead = ($null -ne $_.PSObject.Properties['ReviewMailbox'])
                 @{
-                    Name    = [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '')
-                    Enabled = Get-TPObjectField -Item $_ -Key 'Enabled' -Default $null
+                    Name              = [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '')
+                    Guid              = [string](Get-TPObjectField -Item $_ -Key 'Guid' -Default '')
+                    Enabled           = Get-TPObjectField -Item $_ -Key 'Enabled' -Default $null
+                    ReviewMailboxRead = $mbxRead
+                    ReviewMailbox     = $(if ($mbxRead) { [string](Get-TPObjectField -Item $_ -Key 'ReviewMailbox' -Default '') } else { $null })
                 }
             })
         }
+
+        # Communication compliance rules (PVW-2.2). Microsoft's Zero Trust
+        # Assessment test 35039 reads the locations a rule captures from the
+        # JSON values inside its RuleXml (Workloads, 'Copilot' for Microsoft
+        # Copilot interactions); RuleXml is returned only with -IncludeRuleXml.
+        # Only the workload names are kept, never the XML (it can carry the
+        # reviewed users and keyword lists).
+        & $scc 'CommComplianceRules' 'Get-SupervisoryReviewRule' {
+            param($rows)
+            $result.Data.CommComplianceRules = @($rows | Where-Object { $_ } | ForEach-Object {
+                $wl = Get-TPCommComplianceRuleWorkloads -RuleXml ([string](Get-TPObjectField -Item $_ -Key 'RuleXml' -Default ''))
+                @{
+                    Name        = [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '')
+                    Policy      = [string](Get-TPObjectField -Item $_ -Key 'Policy' -Default '')
+                    RuleXmlRead = [bool]$wl.Read
+                    Workloads   = @($wl.Workloads)
+                }
+            })
+        } @{ IncludeRuleXml = $true }
 
         # Information barriers mode (PVW-2.3): Legacy / SingleSegment / MultiSegment.
         & $scc 'InformationBarriersMode' 'Get-PolicyConfig' {
@@ -384,4 +416,48 @@ function Invoke-TPCollectPurview {
     }
 
     Set-TPRawData -Key 'Purview' -Data $result
+}
+
+# Reads the workloads a communication compliance rule captures from its
+# RuleXml, the way Microsoft's Zero Trust Assessment test 35039 does: every
+# <value> element whose text is a JSON object or array is parsed and its
+# Workloads entries collected. Read is $false when the XML is empty or cannot
+# be parsed, so an unread rule is never taken to capture nothing. The XML is
+# read with DTD processing prohibited and no resolver.
+function Get-TPCommComplianceRuleWorkloads {
+    [CmdletBinding()]
+    param([AllowEmptyString()][AllowNull()][string] $RuleXml)
+    $out = @{ Read = $false; Workloads = @() }
+    if ([string]::IsNullOrWhiteSpace($RuleXml)) { return $out }
+    $settings = [System.Xml.XmlReaderSettings]::new()
+    $settings.DtdProcessing = [System.Xml.DtdProcessing]::Prohibit
+    $settings.XmlResolver = $null
+    $settings.ConformanceLevel = [System.Xml.ConformanceLevel]::Fragment
+    $doc = [System.Xml.XmlDocument]::new()
+    $doc.XmlResolver = $null
+    $sr = $null; $xr = $null
+    try {
+        $sr = [System.IO.StringReader]::new("<root>$RuleXml</root>")
+        $xr = [System.Xml.XmlReader]::Create($sr, $settings)
+        $doc.Load($xr)
+    } catch {
+        return $out
+    } finally {
+        if ($xr) { $xr.Dispose() }
+        if ($sr) { $sr.Dispose() }
+    }
+    $found = [System.Collections.Generic.List[string]]::new()
+    foreach ($v in @($doc.GetElementsByTagName('value'))) {
+        $text = ([string]$v.InnerText).Trim()
+        if ($text -notmatch '^[\{\[]') { continue }
+        try { $json = $text | ConvertFrom-Json -ErrorAction Stop } catch { continue }
+        foreach ($item in @($json)) {
+            foreach ($w in @(Get-TPObjectField -Item $item -Key 'Workloads' -Default @())) {
+                if ($null -ne $w -and "$w" -ne '' -and -not $found.Contains([string]$w)) { $found.Add([string]$w) }
+            }
+        }
+    }
+    $out.Read = $true
+    $out.Workloads = @($found)
+    $out
 }

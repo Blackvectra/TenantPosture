@@ -54,14 +54,23 @@ function Invoke-TPCollectIntuneAppProtection {
                     # so they are read through Get-TPObjectField: a bare dot-read
                     # throws on an absent hashtable key under StrictMode even with
                     # a trailing '??' (see Invoke-TPGraphRequest.ps1 header).
-                    $deviceComplianceRequired = [bool](Get-TPObjectField -Item $p -Key 'deviceComplianceRequired' -Default $false)
+                    # A property Graph did not return is stored as $null (not read),
+                    # never as the value that would fail or pass the check.
+                    $dcr                      = Get-TPObjectField -Item $p -Key 'deviceComplianceRequired' -Default $null
+                    $deviceComplianceRequired = $(if ($null -eq $dcr) { $null } else { [bool]$dcr })
                     $minimumRequiredOsVersion = [string](Get-TPObjectField -Item $p -Key 'minimumRequiredOsVersion' -Default '')
-                    $maximumPinRetries        = [int](Get-TPObjectField -Item $p -Key 'maximumPinRetries' -Default 0)
-                    $periodOfflineBeforeWipe  = Get-TPObjectField -Item $p -Key 'periodOfflineBeforeWipeIsEnforced' -Default $false
+                    $mpr                      = Get-TPObjectField -Item $p -Key 'maximumPinRetries' -Default $null
+                    $maximumPinRetries        = $(if ($null -eq $mpr) { $null } else { [int]$mpr })
+                    # ISO 8601 durations (Graph Duration), kept as returned:
+                    # periodOfflineBeforeAccessCheck is the conditional launch
+                    # "Offline grace period / Block access", periodOfflineBeforeWipeIsEnforced
+                    # the "Offline grace period / Wipe data".
+                    $periodOfflineBeforeAccess = Get-TPObjectField -Item $p -Key 'periodOfflineBeforeAccessCheck' -Default $null
+                    $periodOfflineBeforeWipe   = Get-TPObjectField -Item $p -Key 'periodOfflineBeforeWipeIsEnforced' -Default $null
                     $condLaunch = @()
                     if ($deviceComplianceRequired -eq $true) { $condLaunch += 'DeviceComplianceRequired' }
                     if ($minimumRequiredOsVersion)           { $condLaunch += 'MinimumRequiredOsVersion' }
-                    if ($maximumPinRetries -gt 0)             { $condLaunch += 'MaximumPinRetries' }
+                    if ($null -ne $maximumPinRetries -and $maximumPinRetries -gt 0) { $condLaunch += 'MaximumPinRetries' }
                     if ($periodOfflineBeforeWipe)             { $condLaunch += 'PeriodOfflineBeforeWipe' }
                     # managedAppPolicies also returns app CONFIGURATION and WIP
                     # policies; only *ManagedAppProtection types protect data.
@@ -77,6 +86,8 @@ function Invoke-TPCollectIntuneAppProtection {
                         DeviceComplianceRequired  = $deviceComplianceRequired
                         MinimumRequiredOsVersion  = $minimumRequiredOsVersion
                         MaximumPinRetries         = $maximumPinRetries
+                        PeriodOfflineBeforeAccessCheck    = $(if ($null -eq $periodOfflineBeforeAccess) { $null } else { [string]$periodOfflineBeforeAccess })
+                        PeriodOfflineBeforeWipeIsEnforced = $(if ($null -eq $periodOfflineBeforeWipe) { $null } else { [string]$periodOfflineBeforeWipe })
                         IsAssigned                = Get-TPObjectField -Item $p -Key 'isAssigned' -Default $null
                         ConditionalLaunchSettings = @($condLaunch)
                     }

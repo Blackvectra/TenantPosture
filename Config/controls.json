@@ -3181,7 +3181,7 @@
     {
       "ControlId": "PVW-2.2",
       "Title": "Communication Compliance Policy Active",
-      "Description": "At least one communication compliance policy is active for regulatory monitoring.",
+      "Description": "An enabled communication compliance policy with a review mailbox has a rule that captures Microsoft Copilot interactions (Microsoft Zero Trust Assessment test 35039). Other communication compliance policies are reported as context.",
       "BusinessRisk": "In regulated industries (finance, healthcare, government), unmonitored communications create compliance liability.",
       "Severity": "Low",
       "Workload": "PVW",
@@ -4396,7 +4396,7 @@
     {
       "ControlId": "INT-3.3",
       "Title": "Conditional Launch Policies Configured",
-      "Description": "App protection policies include conditional launch settings to block jailbroken devices and enforce OS version requirements.",
+      "Description": "Every assigned iOS/iPadOS and Android app protection policy meets the conditional launch rows of Microsoft's App Protection Data Protection Framework, Level 2, that state a value: jailbroken/rooted devices blocked, a minimum OS version that blocks access, at most 5 PIN attempts, an offline grace period of at most 10080 minutes before access is blocked and at most 30 days before org data is wiped. Not applicable when the tenant has no iOS/iPadOS or Android app protection policy and no enrolled mobile device.",
       "BusinessRisk": "Jailbroken and rooted devices bypass OS security controls. Without conditional launch, compromised devices access corporate apps with full permissions.",
       "Severity": "High",
       "Workload": "INT",

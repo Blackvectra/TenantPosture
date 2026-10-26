@@ -739,28 +739,85 @@ function Test-TPControlIntuneConditionalLaunch {
     if (-not $int -or -not $int.Success -or -not (Test-TPSectionCollected $int 'AppProtectionPolicies')) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'App protection policies were not collected; not assessed.'; return
     }
-    # Jailbreak / root blocking and the PIN-retry and offline-wipe limits
-    # are on by DEFAULT in every app protection policy, so their presence
-    # proved nothing (every policy passed). The setting an admin must choose
-    # is a minimum OS version for the apps to open.
-    $prot = @(Select-TPAssignedPolicies @(@(Get-TPObjectField -Item $int.Data -Key 'AppProtectionPolicies' -Default @()) | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'Type' -Default '') -match 'ManagedAppProtection$' }))
+    # Judged against Microsoft's App Protection Data Protection Framework, Level 2
+    # (enterprise enhanced; it includes every Level 1 setting), conditional launch,
+    # owner's decision 2026-10-26. Only the rows whose value Microsoft states and
+    # Graph v1.0 returns are judged, on every assigned iOS/iPadOS and Android app
+    # protection policy:
+    #   Jailbroken/rooted devices: Block access (L1)    deviceComplianceRequired = true
+    #     (the portal offers Block access or Wipe data for this row; both meet it)
+    #   Min OS version: Block access (L2)               minimumRequiredOsVersion set
+    #     (Microsoft gives a format and an N-1 recommendation, not a value, so the
+    #     version itself is not judged)
+    #   Max PIN attempts: 5 (L1)                         maximumPinRetries 1..5
+    #   Offline grace period: 10080 min / Block (L1)     periodOfflineBeforeAccessCheck <= 10080 min
+    #   Offline grace period: 30 days / Wipe (L2)        periodOfflineBeforeWipeIsEnforced <= 30 days
+    # Every other Level 2 conditional launch row is named as not read. App protection
+    # applies to iOS/iPadOS and Android apps; a tenant with neither a mobile policy
+    # nor an enrolled mobile device has nothing for this control to govern.
+    $all  = @(@(Get-TPObjectField -Item $int.Data -Key 'AppProtectionPolicies' -Default @()) | Where-Object { $null -ne $_ })
+    $prot = @(Select-TPAssignedPolicies @($all | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'Type' -Default '') -match '(?i)(ios|android)ManagedAppProtection$' }))
+    $notRead = 'Level 2 conditional launch rows this check does not read: Disabled account; Min OS version against Microsoft''s N-1 guidance (only that a minimum is set); Android Min patch version, Play Integrity (SafetyNet) attestation and hardware-backed key, Require threat scan on apps, Require device lock, Samsung Knox device attestation.'
+    $req = "Every assigned iOS/iPadOS and Android app protection policy: Jailbroken/rooted devices blocked; Min OS version set (Block access); Max PIN attempts 5 or fewer; Offline grace period Block access 10080 minutes or less; Offline grace period Wipe data 30 days or less (Microsoft App Protection Framework, Level 2). $notRead"
     if ($prot.Count -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail 'No assigned app protection policy exists, so no conditional launch check applies to corporate apps on mobile devices.' -Remediation $ctrl.Remediation
+        $dc = Get-TPRawData -Key 'Intune-DeviceCompliance'
+        $mobile = if ($dc -and $dc.Success) { Get-TPEnrolledPlatformCount -Raw $dc -Pattern '^(iOS|iPadOS|Android)' } else { $null }
+        if ($mobile -eq 0) {
+            Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+                -Detail "No assigned iOS/iPadOS or Android app protection policy exists and no iOS, iPadOS or Android device is enrolled in Intune (enrolled: $(Get-TPEnrolledPlatformSummary -Raw $dc)). App protection conditional launch applies to iOS/iPadOS and Android apps, so it governs nothing here. Phones reaching company data without enrolling would not appear in the inventory; INT-1.4 judges app protection coverage."
+        } elseif ($null -eq $mobile) {
+            Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+                -Detail 'No assigned iOS/iPadOS or Android app protection policy exists, and the managed-device inventory was not read, so whether any mobile device is in use is unknown. Not assessed.'
+        } else {
+            Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+                -Detail "$mobile iOS/iPadOS or Android device(s) are enrolled, but no assigned iOS/iPadOS or Android app protection policy exists, so no conditional launch check applies to corporate apps on them." `
+                -CurrentValue 'No assigned iOS/iPadOS or Android app protection policy' -RequiredValue $req -Remediation $ctrl.Remediation
+        }
         return
     }
-    $withOs = @($prot | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'MinimumRequiredOsVersion' -Default '') })
-    if ($withOs.Count -eq $prot.Count) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "Every assigned app protection policy ($($prot.Count)) blocks apps on devices below a minimum OS version, in addition to the default jailbreak / root block."
-    } elseif ($withOs.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
-            -Detail "$($withOs.Count) of $($prot.Count) assigned app protection policies set a minimum OS version; apps under the others open on any OS version." -Remediation $ctrl.Remediation
-    } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail 'No assigned app protection policy sets a minimum OS version, so corporate apps open on out-of-support, unpatched mobile OS versions (only the default jailbreak / root block applies).' `
-            -CurrentValue "$($prot.Count) policy(ies), none with a minimum OS version" -RequiredValue 'Conditional launch: minimum OS version (block access)' -Remediation $ctrl.Remediation
+    $nameOf = { param($p) $n = [string](Get-TPObjectField -Item $p -Key 'DisplayName' -Default ''); if ($n) { $n } else { [string](Get-TPObjectField -Item $p -Key 'Id' -Default 'unnamed policy') } }
+    $dur = {
+        param($v)
+        if ($null -eq $v -or "$v" -eq '') { return $null }
+        try { $t = [System.Xml.XmlConvert]::ToTimeSpan([string]$v) } catch { return $null }
+        if ($t -le [TimeSpan]::Zero) { return $null }
+        $t
     }
+    # Each row: a judge returning 'Met', 'Short' or 'Unread' for one policy.
+    $rows = @(
+        @{ Name = 'Jailbroken/rooted devices blocked'; Judge = {
+            param($p) $v = Get-TPObjectField -Item $p -Key 'DeviceComplianceRequired' -Default $null
+            if ($null -eq $v) { 'Unread' } elseif ($v -eq $true) { 'Met' } else { 'Short' } } }
+        @{ Name = 'Min OS version set (Block access)'; Judge = {
+            param($p) if (-not ($p -is [System.Collections.IDictionary] -and $p.Contains('MinimumRequiredOsVersion')) -and $null -eq $p.PSObject.Properties['MinimumRequiredOsVersion']) { return 'Unread' }
+            if ([string](Get-TPObjectField -Item $p -Key 'MinimumRequiredOsVersion' -Default '')) { 'Met' } else { 'Short' } } }
+        @{ Name = 'Max PIN attempts 5 or fewer'; Judge = {
+            param($p) $v = Get-TPObjectField -Item $p -Key 'MaximumPinRetries' -Default $null
+            if ($null -eq $v) { 'Unread' } elseif ([int]$v -ge 1 -and [int]$v -le 5) { 'Met' } elseif ([int]$v -le 0) { 'Unread' } else { 'Short' } } }
+        @{ Name = 'Offline grace period Block access 10080 minutes or less'; Judge = {
+            param($p) $t = & $dur (Get-TPObjectField -Item $p -Key 'PeriodOfflineBeforeAccessCheck' -Default $null)
+            if ($null -eq $t) { 'Unread' } elseif ($t.TotalMinutes -le 10080) { 'Met' } else { 'Short' } } }
+        @{ Name = 'Offline grace period Wipe data 30 days or less'; Judge = {
+            param($p) $t = & $dur (Get-TPObjectField -Item $p -Key 'PeriodOfflineBeforeWipeIsEnforced' -Default $null)
+            if ($null -eq $t) { 'Unread' } elseif ($t.TotalDays -le 30) { 'Met' } else { 'Short' } } }
+    )
+    # A row no policy meets is not configured anywhere: Gap (the not-configured
+    # rule). Partial only when every row is met somewhere and some policy falls short.
+    $verified = @(); $short = @(); $unread = @(); $noneMet = $false
+    foreach ($r in $rows) {
+        $s = @(); $u = @()
+        foreach ($p in $prot) {
+            $v = & $r.Judge $p
+            if ($v -eq 'Short') { $s += (& $nameOf $p) } elseif ($v -eq 'Unread') { $u += (& $nameOf $p) }
+        }
+        if ($s.Count -eq $prot.Count) { $noneMet = $true }
+        if ($s.Count) { $short += "$($r.Name): not met by $($s.Count) of $($prot.Count) policy(ies) ($(@($s | Select-Object -First 5) -join ', ')$(if ($s.Count -gt 5) { ", and $($s.Count - 5) more" }))." }
+        if ($u.Count) { $unread += "$($r.Name): value not returned or not recognized for $($u.Count) policy(ies) ($(@($u | Select-Object -First 5) -join ', ')$(if ($u.Count -gt 5) { ", and $($u.Count - 5) more" }))." }
+        if (-not $s.Count -and -not $u.Count) { $verified += "$($r.Name) in all $($prot.Count) assigned iOS/iPadOS and Android app protection policy(ies)." }
+    }
+    $cur = if ($short.Count) { "Shortfalls on $($short.Count) of $($rows.Count) Level 2 conditional launch rows" } elseif ($unread.Count) { "$($unread.Count) of $($rows.Count) rows not read" } else { "All $($rows.Count) judged Level 2 conditional launch rows met in $($prot.Count) policy(ies)" }
+    $mode = if ($noneMet) { 'Gap' } else { 'Auto' }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unread -CurrentValue $cur -RequiredValue $req -ShortfallState $mode
 }
 
 # ── INT-4.1 Windows LAPS Configured ──────────────────────────────────────────

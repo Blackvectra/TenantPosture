@@ -235,15 +235,83 @@ function Test-TPControlPurviewCommCompliance {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail (Get-TPSectionNotCollectedDetail -Raw $pvw -Section 'CommCompliancePolicies' -CollectorSource 'Purview-CommCompliancePolicies')
         return
     }
-    # A policy explicitly Enabled = $false is not active; unknown counts.
+    # Owner's decision (2026-10-26): judged as Microsoft's Zero Trust
+    # Assessment test 35039 judges it. Satisfied needs a policy that is
+    # Enabled = $true, has a ReviewMailbox, and has a rule whose XML captures
+    # Microsoft Copilot interactions (Workloads 'Copilot'). Any other policy
+    # is context, never the verdict. An enabled policy whose Enabled or
+    # ReviewMailbox was not returned, or whose rules were not read, leaves the
+    # control not assessed rather than a pass or a Gap.
     $all = @($pvw.Data['CommCompliancePolicies'] ?? @())
-    $policies = @($all | Where-Object { (Get-TPObjectField -Item $_ -Key 'Enabled' -Default $null) -ne $false })
-    if ($policies.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($policies.Count) communication compliance policy(ies) active."
-    } else {
-        $what = if ($all.Count -gt 0) { "$($all.Count) communication compliance policy(ies) exist but all are turned off." } else { 'No communication compliance policies configured.' }
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$what Required for regulatory environments (finance, healthcare, government)." -Remediation $ctrl.Remediation
+    $req = 'An enabled communication compliance policy (Enabled = True) with a ReviewMailbox and a rule that captures Microsoft Copilot interactions (Workloads includes Copilot)'
+    $nameOf = { param($p) $n = [string](Get-TPObjectField -Item $p -Key 'Name' -Default ''); if ($n) { $n } else { '(unnamed)' } }
+    $enabled  = @($all | Where-Object { (Get-TPObjectField -Item $_ -Key 'Enabled' -Default $null) -eq $true })
+    $enUnread = @($all | Where-Object { $null -eq (Get-TPObjectField -Item $_ -Key 'Enabled' -Default $null) })
+    $context  = if ($all.Count -gt 0) { " Communication compliance policies read: $($all.Count) ($($enabled.Count) enabled)." } else { '' }
+
+    if ($all.Count -eq 0) {
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No communication compliance policies configured, so Microsoft Copilot interactions are not monitored.' -CurrentValue 'No communication compliance policy' -RequiredValue $req -Remediation $ctrl.Remediation
+        return
     }
+    if ($enabled.Count -eq 0) {
+        if ($enUnread.Count -gt 0) {
+            Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "Communication compliance policy state was not returned for $($enUnread.Count) policy(ies) ($((@($enUnread | ForEach-Object { & $nameOf $_ }) | Select-Object -First 5) -join ', ')); not assessed.$context"
+        } else {
+            Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($all.Count) communication compliance policy(ies) exist but all are turned off, so Microsoft Copilot interactions are not monitored." -CurrentValue 'All communication compliance policies disabled' -RequiredValue $req -Remediation $ctrl.Remediation
+        }
+        return
+    }
+    if (-not (Test-TPSectionCollected $pvw 'CommComplianceRules')) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail ((Get-TPSectionNotCollectedDetail -Raw $pvw -Section 'CommComplianceRules' -CollectorSource 'Purview-CommComplianceRules') + ' Which locations the enabled policies capture (Microsoft Copilot interactions) was not read.' + $context)
+        return
+    }
+    $rules = @($pvw.Data['CommComplianceRules'] ?? @())
+    $rulesOf = {
+        param($p)
+        # Joined by the policy's Guid, as test 35039 joins them; a rule whose
+        # Policy matches no policy read is reported, never credited.
+        $g = [string](Get-TPObjectField -Item $p -Key 'Guid' -Default '')
+        @($rules | Where-Object {
+            $rp = [string](Get-TPObjectField -Item $_ -Key 'Policy' -Default '')
+            $rp -and $g -and [string]::Equals($rp, $g, [System.StringComparison]::OrdinalIgnoreCase)
+        })
+    }
+    $hasCopilot = { param($r) @(Get-TPObjectField -Item $r -Key 'Workloads' -Default @()) -contains 'Copilot' }
+
+    $passing = [System.Collections.Generic.List[string]]::new()
+    $copilotNoMailbox = [System.Collections.Generic.List[string]]::new()
+    $notEstablished = [System.Collections.Generic.List[string]]::new()
+    foreach ($p in $enabled) {
+        $pn = & $nameOf $p
+        $pr = @(& $rulesOf $p)
+        $copilot = @($pr | Where-Object { & $hasCopilot $_ })
+        $unreadRules = @($pr | Where-Object { -not [bool](Get-TPObjectField -Item $_ -Key 'RuleXmlRead' -Default $false) })
+        $mbxRead = [bool](Get-TPObjectField -Item $p -Key 'ReviewMailboxRead' -Default $false)
+        $mbx = [string](Get-TPObjectField -Item $p -Key 'ReviewMailbox' -Default '')
+        if ($copilot.Count -gt 0) {
+            if ($mbx) { $passing.Add("$pn (review mailbox $mbx)") }
+            elseif (-not $mbxRead) { $notEstablished.Add("$pn captures Copilot interactions but its ReviewMailbox was not returned") }
+            else { $copilotNoMailbox.Add($pn) }
+        } elseif ($unreadRules.Count -gt 0) {
+            $notEstablished.Add("$pn has $($unreadRules.Count) rule(s) whose XML was not read")
+        }
+    }
+    if ($passing.Count -gt 0) {
+        $shown = @($passing | Select-Object -First 5) -join '; '
+        $more = if ($passing.Count -gt 5) { " and $($passing.Count - 5) more" } else { '' }
+        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Communication compliance monitors Microsoft Copilot interactions: $shown$more.$context" -CurrentValue "Enabled policy with a Copilot rule and a review mailbox: $shown$more" -RequiredValue $req
+        return
+    }
+    $policyIds = @($all | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Guid' -Default '') } | Where-Object { $_ })
+    $orphanCopilot = @($rules | Where-Object { (& $hasCopilot $_) -and -not ($policyIds -contains [string](Get-TPObjectField -Item $_ -Key 'Policy' -Default '')) })
+    if ($orphanCopilot.Count -gt 0) { $notEstablished.Add("$($orphanCopilot.Count) Copilot rule(s) belong to a policy that could not be matched to one read") }
+    if ($enUnread.Count -gt 0) { $notEstablished.Add("the state of $($enUnread.Count) policy(ies) was not returned") }
+    if ($notEstablished.Count -gt 0) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "No enabled communication compliance policy was confirmed to capture Microsoft Copilot interactions with a review mailbox. Not assessed: $(@($notEstablished) -join '; ').$context"
+        return
+    }
+    $why = if ($copilotNoMailbox.Count -gt 0) { "Enabled policy(ies) capture Copilot interactions but have no review mailbox: $(@($copilotNoMailbox | Select-Object -First 5) -join ', ')." } else { "None of the $($enabled.Count) enabled policy(ies) has a rule that captures Microsoft Copilot interactions ($(@($enabled | ForEach-Object { & $nameOf $_ } | Select-Object -First 5) -join ', '))." }
+    Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "Communication compliance does not monitor Microsoft Copilot interactions. $why$context" -CurrentValue 'No enabled policy with a Copilot rule and a review mailbox' -RequiredValue $req -Remediation $ctrl.Remediation
 }
 
 # ── PVW-2.3 Information Barriers Mode ────────────────────────────────────────

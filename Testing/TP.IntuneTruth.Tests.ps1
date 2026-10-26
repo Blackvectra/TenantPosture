@@ -229,6 +229,66 @@ Describe 'Intune controls count what enforces something' {
         Run @{ 'managedAppPolicies' = @(@{ '@odata.type' = '#microsoft.graph.iosManagedAppProtection'; id = 'p'; displayName = 'iOS MAM'; maximumPinRetries = 5; periodOfflineBeforeWipeIsEnforced = 'P90D'; isAssigned = $true }) }
         (Verdict 'Test-TPControlIntuneConditionalLaunch' 'INT-3.3').State | Should -Be 'Gap'
     }
+    Context 'INT-3.3 judges conditional launch against the App Protection Framework, Level 2 (owner, 2026-10-26)' {
+        BeforeAll {
+            # An app protection policy as Graph v1.0 returns it from deviceAppManagement/managedAppPolicies.
+            function script:Mam { param([string] $Type = 'iosManagedAppProtection', [string] $Name = 'iOS MAM', [hashtable] $Over = @{})
+                $p = @{ '@odata.type' = "#microsoft.graph.$Type"; id = $Name; displayName = $Name; isAssigned = $true
+                        deviceComplianceRequired = $true; minimumRequiredOsVersion = '17.0'; maximumPinRetries = 5
+                        periodOfflineBeforeAccessCheck = 'PT720M'; periodOfflineBeforeWipeIsEnforced = 'P30D' }
+                foreach ($k in $Over.Keys) { if ($null -eq $Over[$k]) { $p.Remove($k) } else { $p[$k] = $Over[$k] } }
+                $p }
+            function script:Int33 { param([object[]] $Policies, [object[]] $Devices = @())
+                Run @{ 'managedAppPolicies' = $Policies; 'managedDevices' = $Devices }
+                Verdict 'Test-TPControlIntuneConditionalLaunch' 'INT-3.3' }
+        }
+        It 'every judged Level 2 row met on iOS and Android is Satisfied, and the unread rows are named' {
+            $f = Int33 @((Mam), (Mam 'androidManagedAppProtection' 'Android MAM' @{ minimumRequiredOsVersion = '13.0'; periodOfflineBeforeAccessCheck = 'P7D'; periodOfflineBeforeWipeIsEnforced = 'P1D' }))
+            $f.State | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'Jailbroken/rooted devices blocked in all 2'
+            $f.RequiredValue | Should -Match 'does not read: Disabled account'
+            $f.RequiredValue | Should -Match 'Samsung Knox'
+        }
+        It 'each boundary: 10080 minutes and 30 days pass, one more fails; six PIN attempts fail' {
+            (Int33 @(Mam -Over @{ periodOfflineBeforeAccessCheck = 'PT10080M' })).State | Should -Be 'Satisfied'
+            (Int33 @(Mam -Over @{ periodOfflineBeforeAccessCheck = 'PT10081M' })).State | Should -Be 'Gap'
+            (Int33 @(Mam -Over @{ periodOfflineBeforeWipeIsEnforced = 'P31D' })).State | Should -Be 'Gap' -Because 'Microsoft''s default of 90 days is Level 1, not Level 2'
+            $f = Int33 @(Mam -Over @{ maximumPinRetries = 6 })
+            $f.State | Should -Be 'Gap'
+            $f.Detail | Should -Match 'Max PIN attempts 5 or fewer: not met by 1 of 1'
+            (Int33 @(Mam -Over @{ deviceComplianceRequired = $false })).State | Should -Be 'Gap'
+            (Int33 @(Mam -Over @{ minimumRequiredOsVersion = $null })).State | Should -Be 'Gap'
+        }
+        It 'a row met by one policy and missed by another is Partial, naming the policy' {
+            $f = Int33 @((Mam), (Mam 'androidManagedAppProtection' 'Android MAM' @{ minimumRequiredOsVersion = '' }))
+            $f.State | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Min OS version set \(Block access\): not met by 1 of 2 policy\(ies\) \(Android MAM\)'
+        }
+        It 'a duration Graph did not return, or one that is not ISO 8601, is not assessed, never met and never short' {
+            (Int33 @(Mam -Over @{ periodOfflineBeforeAccessCheck = $null })).State | Should -Be 'NotApplicable'
+            $f = Int33 @(Mam -Over @{ periodOfflineBeforeWipeIsEnforced = '30 days' })
+            $f.State | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'Not assessed: Offline grace period Wipe data'
+            (Int33 @(Mam -Over @{ deviceComplianceRequired = $null })).State | Should -Be 'NotApplicable'
+        }
+        It 'a results file from before the offline grace periods were read is not assessed' {
+            Clear-TPState
+            Set-TPRawData -Key 'Intune-AppProtection' -Data @{ Success = $true; Data = @{ SectionStatus = @{ AppProtectionPolicies = 'Collected' }
+                AppProtectionPolicies = @(@{ Type = '#microsoft.graph.iosManagedAppProtection'; DisplayName = 'old'; IsAssigned = $true; DeviceComplianceRequired = $true; MinimumRequiredOsVersion = '16.0'; MaximumPinRetries = 5 }) } }
+            (Verdict 'Test-TPControlIntuneConditionalLaunch' 'INT-3.3').State | Should -Be 'NotApplicable'
+        }
+        It 'no mobile policy and no enrolled mobile device is not applicable, saying so; enrolled phones make it a Gap' {
+            $f = Int33 @() @(@{ id = 'w1'; operatingSystem = 'Windows'; complianceState = 'compliant' })
+            $f.State | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'no iOS, iPadOS or Android device is enrolled'
+            (Int33 @() @(@{ id = 'a1'; operatingSystem = 'Android'; complianceState = 'compliant' })).State | Should -Be 'Gap'
+            # A Windows MAM policy is not an iOS/Android app protection policy.
+            (Int33 @(Mam 'windowsManagedAppProtection' 'Win MAM') @(@{ id = 'w1'; operatingSystem = 'Windows'; complianceState = 'compliant' })).State | Should -Be 'NotApplicable'
+        }
+        It 'an unassigned policy is not judged' {
+            (Int33 @(Mam -Over @{ isAssigned = $false }) @(@{ id = 'i1'; operatingSystem = 'iOS'; complianceState = 'compliant' })).State | Should -Be 'Gap'
+        }
+    }
     It 'INT-3.1: the Windows Mobile block Intune ships in every tenant is not a restriction' {
         # Live tenant, 2026-09-25: passed on "windowsMobile: platform blocked" alone.
         $d = $script:Defaults.Clone(); $d[1] = $d[1].Clone()
