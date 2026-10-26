@@ -347,6 +347,13 @@
       "Reason": "Test code: an instance property read whose name comes from a literal list in the test or from the object's own keys; no external input chooses the name and no static member is reached."
     },
     {
+      "Path": "Testing/TP.SignInEvidence.Tests.ps1",
+      "Rule": "InjectionRisk.Create",
+      "Text": "[scriptblock]::Create($b)",
+      "Count": 1,
+      "Reason": "Test harness: the script block is built from code written in the test or from this repository's own parsed source, to stand in for a command or bind a parameter; no tenant or external input reaches it."
+    },
+    {
       "Path": "Testing/TP.TeamsTruth.Tests.ps1",
       "Rule": "InjectionRisk.Create",
       "Text": "[scriptblock]::Create(\"param(`$Identity) `$script:TeamsObj['$n']\")",

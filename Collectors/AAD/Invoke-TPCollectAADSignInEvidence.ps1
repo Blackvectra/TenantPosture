@@ -74,13 +74,43 @@ function ConvertTo-TPSignInEvidenceEvent {
         ClientAppUsed       = [string](Get-TPNestedProperty -Object $SignIn -Path 'clientAppUsed' -Default '')
         IsInteractive       = Get-TPNestedProperty -Object $SignIn -Path 'isInteractive' -Default $null
         ErrorCode           = Get-TPNestedProperty -Object $SignIn -Path 'status.errorCode' -Default $null
+        # The authentication steps, so an earlier MFA claim can be told from a
+        # single-factor sign-in: Microsoft documents that authenticationRequirement
+        # alone reads single-factor when a previous MFA claim was accepted.
+        # $null means the property was not returned; @() means none were listed.
+        AuthDetails         = ConvertTo-TPSignInAuthDetails -SignIn $SignIn
     }
 }
 
+function ConvertTo-TPSignInAuthDetails {
+    # Method, step, success and result detail of each authentication step.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [AllowNull()] [object] $SignIn)
+    $raw = Get-TPObjectField -Item $SignIn -Key 'authenticationDetails' -Default $null
+    if ($null -eq $raw) {
+        $present = ($SignIn -is [System.Collections.IDictionary] -and $SignIn.Contains('authenticationDetails')) -or
+                   ($SignIn -isnot [System.Collections.IDictionary] -and $null -ne $SignIn.PSObject.Properties['authenticationDetails'])
+        if ($present) { return ,@() }
+        return $null
+    }
+    $rows = [System.Collections.Generic.List[object]]::new()
+    foreach ($d in @($raw)) {
+        if ($null -eq $d) { continue }
+        $rows.Add([ordered]@{
+            Method    = [string](Get-TPObjectField -Item $d -Key 'authenticationMethod' -Default '')
+            Step      = [string](Get-TPObjectField -Item $d -Key 'authenticationStepRequirement' -Default '')
+            Succeeded = Get-TPObjectField -Item $d -Key 'succeeded' -Default $null
+            Result    = [string](Get-TPObjectField -Item $d -Key 'authenticationStepResultDetail' -Default '')
+        })
+    }
+    return ,$rows.ToArray()
+}
+
 function Read-TPSignInEvidencePages {
-    # Pages one filtered read up to a cap. Returns the events kept and whether
-    # pages remained; throws on any failed request so the caller fails the
-    # section rather than reporting a partial list as whole.
+    # Pages one filtered read up to a cap. Returns the events kept, whether
+    # pages remained, and the error of a request that failed: events read
+    # before a failure are kept, because a bypass already found stays proven,
+    # and the caller fails the section so the list is never reported whole.
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $Uri,
@@ -88,24 +118,30 @@ function Read-TPSignInEvidencePages {
     )
     $events = [System.Collections.Generic.List[object]]::new()
     $next = $Uri; $pages = 0
-    while ($next -and $pages -lt $MaxPages) {
-        $resp = Invoke-TPGraphRequest -Method GET -Uri $next -ErrorAction Stop
-        $raw = $null
-        if ($resp -is [System.Collections.IDictionary]) {
-            if ($resp.Contains('value')) { $raw = $resp['value'] }
-        } elseif ($null -ne $resp -and $null -ne $resp.PSObject.Properties['value']) {
-            $raw = $resp.PSObject.Properties['value'].Value
+    $err = ''
+    try {
+        while ($next -and $pages -lt $MaxPages) {
+            $resp = Invoke-TPGraphRequest -Method GET -Uri $next -ErrorAction Stop
+            $raw = $null
+            if ($resp -is [System.Collections.IDictionary]) {
+                if ($resp.Contains('value')) { $raw = $resp['value'] }
+            } elseif ($null -ne $resp -and $null -ne $resp.PSObject.Properties['value']) {
+                $raw = $resp.PSObject.Properties['value'].Value
+            }
+            if ($null -eq $raw) { throw "Graph returned no 'value' collection for the sign-in read." }
+            foreach ($s in @($raw)) {
+                $e = ConvertTo-TPSignInEvidenceEvent -SignIn $s
+                if ($null -ne $e) { $events.Add($e) }
+            }
+            # Flat key lookup: Get-TPNestedProperty would split '@odata.nextLink'.
+            $next = [string](Get-TPObjectField -Item $resp -Key '@odata.nextLink' -Default '')
+            $pages++
         }
-        if ($null -eq $raw) { throw "Graph returned no 'value' collection for the sign-in read." }
-        foreach ($s in @($raw)) {
-            $e = ConvertTo-TPSignInEvidenceEvent -SignIn $s
-            if ($null -ne $e) { $events.Add($e) }
-        }
-        # Flat key lookup: Get-TPNestedProperty would split '@odata.nextLink'.
-        $next = [string](Get-TPObjectField -Item $resp -Key '@odata.nextLink' -Default '')
-        $pages++
+    } catch {
+        $err = $_.Exception.Message
+        if (-not $err) { $err = 'The sign-in read failed.' }
     }
-    [ordered]@{ Events = $events.ToArray(); Truncated = [bool]$next; Pages = $pages }
+    [ordered]@{ Events = $events.ToArray(); Truncated = [bool]$next; Pages = $pages; Error = $err }
 }
 
 function Test-TPSignInPremiumError {
@@ -155,14 +191,14 @@ function Invoke-TPCollectAADSignInEvidence {
     try {
         # ── Single-factor interactive successes (read first: a licensing
         #    refusal here is the same answer for both reads) ──────────────
-        try {
-            $f = "createdDateTime ge $since and status/errorCode eq 0 and authenticationRequirement eq 'singleFactorAuthentication'"
-            $r = Read-TPSignInEvidencePages -Uri ($base + [uri]::EscapeDataString($f)) -MaxPages $MaxPages
-            $result.Data.Sections.SingleFactor.Events    = @($r.Events)
-            $result.Data.Sections.SingleFactor.Truncated = [bool]$r.Truncated
+        $f = "createdDateTime ge $since and status/errorCode eq 0 and authenticationRequirement eq 'singleFactorAuthentication'"
+        $r = Read-TPSignInEvidencePages -Uri ($base + [uri]::EscapeDataString($f)) -MaxPages $MaxPages
+        $result.Data.Sections.SingleFactor.Events    = @($r.Events)
+        $result.Data.Sections.SingleFactor.Truncated = [bool]$r.Truncated
+        if (-not $r.Error) {
             $result.Data.SectionStatus.SingleFactor = 'Collected'
-        } catch {
-            $why = $_.Exception.Message
+        } else {
+            $why = $r.Error
             $result.Data.SectionStatus.SingleFactor = 'Failed'
             if (Test-TPSignInPremiumError -Message $why) {
                 $result.Data.Available = $false
@@ -183,14 +219,13 @@ function Invoke-TPCollectAADSignInEvidence {
             foreach ($app in $script:TPLegacyClientApps) {
                 $q = $app.Replace("'", "''")
                 foreach ($kind in @('', " and signInEventTypes/any(t: t eq 'nonInteractiveUser')")) {
-                    try {
-                        $f = "createdDateTime ge $since and status/errorCode eq 0 and clientAppUsed eq '$q'$kind"
-                        $r = Read-TPSignInEvidencePages -Uri ($base + [uri]::EscapeDataString($f)) -MaxPages $MaxPages
-                        foreach ($e in @($r.Events)) { $legacy.Add($e) }
-                        if ($r.Truncated) { $truncated = $true }
-                    } catch {
+                    $f = "createdDateTime ge $since and status/errorCode eq 0 and clientAppUsed eq '$q'$kind"
+                    $r = Read-TPSignInEvidencePages -Uri ($base + [uri]::EscapeDataString($f)) -MaxPages $MaxPages
+                    foreach ($e in @($r.Events)) { $legacy.Add($e) }
+                    if ($r.Truncated) { $truncated = $true }
+                    if ($r.Error) {
                         $failed = $true
-                        & $note "LegacyAuth ($app$(if ($kind) { ', non-interactive' })): $($_.Exception.Message)"
+                        & $note "LegacyAuth ($app$(if ($kind) { ', non-interactive' })): $($r.Error)"
                     }
                 }
             }

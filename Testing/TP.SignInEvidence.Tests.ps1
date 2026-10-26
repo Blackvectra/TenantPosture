@@ -40,13 +40,19 @@ $row = {
        userDisplayName = $upn; userType = 'member'; appDisplayName = 'Mail client'; resourceId = $resource
        resourceDisplayName = 'Office 365 Exchange Online'; clientAppUsed = $client; isInteractive = $true
        ipAddress = '203.0.113.9'; location = @{ city = 'Somewhere'; countryOrRegion = 'US' }
-       deviceDetail = @{ operatingSystem = 'Windows' }; status = @{ errorCode = 0 } }
+       deviceDetail = @{ operatingSystem = 'Windows' }; status = @{ errorCode = 0 }
+       authenticationDetails = @(@{ authenticationMethod = 'Password'; authenticationStepRequirement = 'Primary authentication'
+                                    succeeded = $true; authenticationStepResultDetail = 'Correct password'; authenticationStepDateTime = '2026-10-20T10:00:00Z' }) }
 }
 if ($s -eq 'Premium') { throw 'Authentication_RequestFromNonPremiumTenantOrB2CTenant: Neither tenant is B2C or tenant doesn''t have premium license' }
 if ($s -eq 'Denied')  { throw 'Response status code does not indicate success: 403 (Forbidden). Authorization_RequestDenied' }
 if ($f -like "*authenticationRequirement eq 'singleFactorAuthentication'*") {
     if ($s -eq 'SingleFactor') { return @{ value = @(& $row 'alice@contoso.test' 'AAAA0000-0000-0000-0000-000000000001' 'Browser' '00000003-0000-0000-c000-000000000000') } }
     if ($s -eq 'Paged') { return @{ value = @(); '@odata.nextLink' = 'https://graph.microsoft.com/beta/auditLogs/signIns?$skiptoken=next' } }
+    if ($s -eq 'SecondPageFails') {
+        return @{ value = @(& $row 'alice@contoso.test' 'AAAA0000-0000-0000-0000-000000000001' 'Browser' '00000003-0000-0000-c000-000000000000')
+                  '@odata.nextLink' = 'https://graph.microsoft.com/beta/auditLogs/signIns?$skiptoken=fails' }
+    }
     return @{ value = @() }
 }
 if ($f -like "*clientAppUsed eq 'IMAP4'*") {
@@ -55,6 +61,7 @@ if ($f -like "*clientAppUsed eq 'IMAP4'*") {
         return @{ value = @(& $row 'bob@contoso.test' 'bbbb0000-0000-0000-0000-000000000002' 'IMAP4' '00000002-0000-0ff1-ce00-000000000000') }
     }
 }
+if ($Uri -like '*skiptoken=fails*') { throw 'Request timed out' }
 if ($Uri -like '*skiptoken=next*') { return @{ value = @(); '@odata.nextLink' = 'https://graph.microsoft.com/beta/auditLogs/signIns?$skiptoken=next' } }
 return @{ value = @() }
 '@
@@ -80,9 +87,12 @@ return @{ value = @() }
                 SectionStatus = @{ LegacyAuth = $LegacyStatus; SingleFactor = $SingleStatus }
                 Sections = @{ LegacyAuth = @{ Truncated = $LegacyTruncated; Events = @($Legacy) }; SingleFactor = @{ Truncated = $SingleTruncated; Events = @($Single) } } } } }
         }
+        # A single-factor sign-in as the collector stores it: by default its
+        # recorded steps show a password and nothing else.
         function script:Ev {
-            param([string] $Upn, [string] $Uid, [string] $Client = 'IMAP4', [string] $Resource = '00000002-0000-0ff1-ce00-000000000000')
-            @{ UserPrincipalName = $Upn; UserId = $Uid; ClientAppUsed = $Client; AppDisplayName = 'App'; ResourceId = $Resource }
+            param([string] $Upn, [string] $Uid, [string] $Client = 'IMAP4', [string] $Resource = '00000002-0000-0ff1-ce00-000000000000',
+                  [object[]] $Auth = @(@{ Method = 'Password'; Step = 'Primary authentication'; Succeeded = $true; Result = 'Correct password' }))
+            @{ UserPrincipalName = $Upn; UserId = $Uid; ClientAppUsed = $Client; AppDisplayName = 'App'; ResourceId = $Resource; AuthDetails = $Auth }
         }
     }
 
@@ -111,6 +121,23 @@ return @{ value = @() }
             $e[0].ErrorCode | Should -Be 0
             foreach ($k in @('ipAddress', 'IpAddress', 'location', 'Location', 'deviceDetail', 'DeviceDetail')) { $e[0].Contains($k) | Should -BeFalse }
             ($c.Raw | ConvertTo-Json -Depth 10) | Should -Not -Match '203\.0\.113\.9|Somewhere'
+        }
+
+        It 'keeps the authentication steps, so an earlier MFA claim can be told from a single factor' {
+            $c = Collect 'SingleFactor'
+            $d = @(@($c.Raw.Data.Sections.SingleFactor.Events)[0].AuthDetails)
+            $d.Count | Should -Be 1
+            $d[0].Method | Should -Be 'Password'
+            $d[0].Step | Should -Be 'Primary authentication'
+            $d[0].Contains('authenticationStepDateTime') | Should -BeFalse
+        }
+
+        It 'keeps the events read before a later page failed, and fails the section' {
+            $c = Collect 'SecondPageFails'
+            $c.Raw.Data.SectionStatus.SingleFactor | Should -Be 'Failed'
+            @($c.Raw.Data.Sections.SingleFactor.Events).Count | Should -Be 1
+            $c.Raw.Data.Available | Should -BeTrue
+            (Judge 'SingleFactorSuccess' 'AllUsers' @{ 'AAD-SignInEvidence' = $c.Raw }).State | Should -Be 'Ineffective'
         }
 
         It 'stores user ids lower-case so the emergency-access record matches' {
@@ -208,6 +235,38 @@ return @{ value = @() }
             (Judge 'SingleFactorSuccess' 'PrivilegedRoles' $ev).State | Should -Be 'Unknown'
             $ev.Remove('AAD-DirectoryRoles')
             (Judge 'SingleFactorSuccess' 'PrivilegedRoles' $ev).State | Should -Be 'Unknown'
+        }
+
+        It 'does not count a single-factor sign-in whose steps show an earlier MFA claim' {
+            $claim = @(@{ Method = 'Previously satisfied'; Step = 'Multifactor authentication'; Succeeded = $true; Result = 'MFA requirement satisfied by claim in the token' })
+            $j = Judge 'SingleFactorSuccess' 'AllUsers' (Evidence -Single @(Ev 'alice@contoso.test' 'a1' 'Browser' -Auth $claim))
+            $j.State | Should -Be 'Effective'
+            $j.Detail | Should -Match 'show MFA in their authentication steps'
+            $push = @(@{ Method = 'Password'; Step = 'Primary authentication'; Succeeded = $true; Result = '' }, @{ Method = 'Mobile app notification'; Step = 'MFA'; Succeeded = $true; Result = 'MFA successfully completed' })
+            (Judge 'SingleFactorSuccess' 'AllUsers' (Evidence -Single @(Ev 'alice@contoso.test' 'a1' 'Browser' -Auth $push))).State | Should -Be 'Effective'
+            # A second factor that failed is not MFA.
+            $denied = @(@{ Method = 'Password'; Step = 'Primary authentication'; Succeeded = $true; Result = '' }, @{ Method = 'Text message'; Step = 'MFA'; Succeeded = $false; Result = 'Invalid authentication' })
+            (Judge 'SingleFactorSuccess' 'AllUsers' (Evidence -Single @(Ev 'alice@contoso.test' 'a1' 'Browser' -Auth $denied))).State | Should -Be 'Ineffective'
+        }
+
+        It 'never calls a sign-in with no recorded steps a bypass or a pass' {
+            $j = Judge 'SingleFactorSuccess' 'AllUsers' (Evidence -Single @(Ev 'alice@contoso.test' 'a1' 'Browser' -Auth @()))
+            $j.State | Should -Be 'Unknown'
+            $j.Detail | Should -Match 'carried no authentication steps'
+            $j2 = Judge 'SingleFactorSuccess' 'AllUsers' (Evidence -Single @((Ev 'alice@contoso.test' 'a1' 'Browser' -Auth @()), (Ev 'bob@contoso.test' 'b1' 'Browser')))
+            $j2.State | Should -Be 'Ineffective'
+            $j2.Detail | Should -Match 'bob@contoso\.test'
+            $j2.Detail | Should -Not -Match 'alice@contoso\.test \('
+        }
+
+        It 'treats unread PIM eligibility as an incomplete holder list' {
+            $ev = Evidence -Single @((Ev 'admin@contoso.test' 'a1' 'Browser'))
+            $ev['AAD-DirectoryRoles'] = @{ Success = $true; Data = @{ SectionStatus = @{ RoleAssignments = 'Collected'; RoleEligibilitySchedules = 'Failed' }; AllPrivilegedAssignments = @(@{ PrincipalId = 'a1' }) } }
+            (Judge 'SingleFactorSuccess' 'PrivilegedRoles' $ev).State | Should -Be 'Ineffective'
+            $ev['AAD-DirectoryRoles'].Data.AllPrivilegedAssignments = @(@{ PrincipalId = 'zz' })
+            $j = Judge 'SingleFactorSuccess' 'PrivilegedRoles' $ev
+            $j.State | Should -Be 'Unknown'
+            $j.Detail | Should -Match 'PIM-eligible'
         }
 
         It 'refuses a scope that does not belong to the check' {

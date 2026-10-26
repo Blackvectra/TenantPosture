@@ -71,6 +71,7 @@ function Get-TPSignInEffectiveness {
 
     # ── Scope ──
     $label = ''
+    $holdersComplete = $true
     switch ($Scope) {
         'All'        { $label = 'legacy-client sign-ins' }
         'Exchange'   {
@@ -93,6 +94,12 @@ function Get-TPSignInEffectiveness {
             if (-not $rolesOk -or $rolesStatus -ne 'Collected') {
                 return & $out 'Unknown' 'Privileged role assignments were not collected, so the single-factor sign-ins of role holders cannot be picked out.'
             }
+            # PIM-eligible administrators come from a separate read. Without it
+            # the holder list is short, so a bypass found still counts but no
+            # bypass is not established. An absent key (an older results file)
+            # replays as collected, the collector doctrine's rule.
+            $eligStatus = [string](Get-TPNestedProperty -Object $roles -Path 'Data.SectionStatus.RoleEligibilitySchedules' -Default 'Collected')
+            if ($eligStatus -ne 'Collected') { $holdersComplete = $false }
             $pool = @(Get-TPNestedProperty -Object $roles -Path 'Data.AllPrivilegedAssignments' -Default @())
             if ($pool.Count -eq 0) { $pool = @(Get-TPNestedProperty -Object $roles -Path 'Data.PrivRoles' -Default @()) }
             $holders = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
@@ -116,6 +123,25 @@ function Get-TPSignInEffectiveness {
         $asideNote = " $($setAside.Count) sign-in(s) by approved emergency-access account(s) were set aside: $($asideUsers -join ', ')."
     }
 
+    # ── Single-factor: an earlier MFA claim is not a bypass ──
+    # Microsoft: authenticationRequirement can read single-factor when a
+    # previous MFA claim was accepted; check the authentication steps too.
+    $mfaNote = ''; $unverified = @()
+    if ($Check -eq 'SingleFactorSuccess') {
+        $mfaShown = @(); $confirmed = @()
+        foreach ($e in $events) {
+            switch (Get-TPSignInMfaEvidence -SignIn $e) {
+                'Mfa'          { $mfaShown += $e }
+                'SingleFactor' { $confirmed += $e }
+                default        { $unverified += $e }
+            }
+        }
+        $events = $confirmed
+        if ($mfaShown.Count -gt 0) { $mfaNote += " $($mfaShown.Count) sign-in(s) recorded as single-factor show MFA in their authentication steps (an earlier MFA claim) and were not counted." }
+        if ($unverified.Count -gt 0) { $mfaNote += " $($unverified.Count) sign-in(s) carried no authentication steps, so whether an earlier MFA claim covered them is not established." }
+    }
+    $asideNote = "$mfaNote$asideNote"
+
     if ($events.Count -gt 0) {
         $byUser = @($events | Group-Object { [string](Get-TPObjectField -Item $_ -Key 'UserPrincipalName' -Default '(no UPN)') } | Sort-Object Count -Descending)
         $named = @($byUser | Select-Object -First 5 | ForEach-Object {
@@ -127,7 +153,7 @@ function Get-TPSignInEffectiveness {
             "$($_.Name) ($($_.Count); $($how -join ', '))"
         })
         $more = if ($byUser.Count -gt 5) { " and $($byUser.Count - 5) more" } else { '' }
-        $partial = if (-not $complete) { ' The read was not complete, so there may be more.' } else { '' }
+        $partial = if (-not $complete -or -not $holdersComplete) { ' The read was not complete, so there may be more.' } else { '' }
         return & $out 'Ineffective' "$($events.Count) successful $label by $($byUser.Count) account(s) in $window`: $($named -join '; ')$more.$partial$asideNote"
     }
     if ($status -ne 'Collected') {
@@ -136,5 +162,41 @@ function Get-TPSignInEffectiveness {
     if ($truncated) {
         return & $out 'Unknown' "The sign-in read for $label stopped at its page cap with none in scope found, so the absence of a bypass is not established.$asideNote"
     }
+    if (-not $holdersComplete) {
+        return & $out 'Unknown' "PIM-eligible role assignments were not collected, so the holder list is incomplete and the absence of a bypass is not established.$asideNote"
+    }
+    if ($unverified.Count -gt 0) {
+        return & $out 'Unknown' "No confirmed $label in $window, but some could not be checked for an earlier MFA claim.$asideNote"
+    }
     return & $out 'Effective' "No successful $label in $window. The protection held for the sign-ins that happened; that is not proof no client could get through.$asideNote"
+}
+
+function Get-TPSignInMfaEvidence {
+    <#
+    .SYNOPSIS
+        Mfa when a sign-in's authentication steps show a second factor or a
+        satisfied MFA requirement, SingleFactor when the steps were recorded
+        and show neither, Unknown when no steps were recorded.
+    .DESCRIPTION
+        The method names and result details are the ones Microsoft lists for
+        the Authentication Details of a sign-in (howto-mfa-reporting). A step
+        whose requirement is multifactor and that succeeded is MFA whatever
+        its method is called.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)] [AllowNull()] [object] $SignIn)
+    $rows = @(Get-TPObjectField -Item $SignIn -Key 'AuthDetails' -Default $null | Where-Object { $null -ne $_ })
+    if ($rows.Count -eq 0) { return 'Unknown' }
+    $mfaMethod = '^(Mobile app notification|OATH verification code|Text message|Phone call|FIDO2 security key|Passkey|Windows Hello for Business|Passwordless phone sign-in|Microsoft Authenticator|Temporary Access Pass|Previously satisfied)'
+    $mfaResult = '(?i)\bMFA\b.*\b(satisfied|completed|successfully)\b'
+    foreach ($d in $rows) {
+        $ok = Get-TPObjectField -Item $d -Key 'Succeeded' -Default $null
+        if ($ok -eq $false) { continue }
+        $method = [string](Get-TPObjectField -Item $d -Key 'Method' -Default '')
+        $step   = [string](Get-TPObjectField -Item $d -Key 'Step' -Default '')
+        $result = [string](Get-TPObjectField -Item $d -Key 'Result' -Default '')
+        if ($method -match $mfaMethod -or $result -match $mfaResult -or $step -match '(?i)multi.?factor|\bMFA\b') { return 'Mfa' }
+    }
+    return 'SingleFactor'
 }

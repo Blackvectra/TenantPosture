@@ -6,7 +6,8 @@
   collector, `AAD-SignInEvidence` (no new Graph scope; Microsoft requires Entra ID P1 or P2 to read sign-in logs through
   Graph), reads the last 30 days through the beta sign-in endpoint with server-side filters: successful sign-ins through
   any of the 13 legacy authentication clients Microsoft lists, interactive and non-interactive, and successful interactive
-  sign-ins that needed only one factor. Five baseline rows now report effectiveness instead of Unknown: AAD-1.2 and
+  sign-ins that needed only one factor, counted as a bypass only when the sign-in's recorded authentication steps show no
+  MFA (Microsoft documents that a sign-in can read single-factor when an earlier MFA claim was accepted). Five baseline rows now report effectiveness instead of Unknown: AAD-1.2 and
   CIS-5.2.2.1 (MFA for all users, for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (legacy authentication
   tenant-wide, to Exchange Online, to SharePoint Online). One bypass is Ineffective, naming up to five accounts; Effective
   needs a complete read with none; a truncated, failed or unlicensed read is Unknown with the reason. Approved
