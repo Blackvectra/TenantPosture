@@ -294,13 +294,13 @@ Intune > Devices > Compliance > macOS > Create policy > System Security > Requir
 **License required:** M365 Business Premium or Intune Plan 1
 
 **Description:**
-Windows Update for Business rings or compliance policy ensures devices receive security updates on schedule.
+Every assigned Windows Update for Business ring in Intune sets the five Level 1 Windows Update for Business values of the CIS Microsoft Intune for Windows 11 Benchmark v5.0.0: automatic updates on (104.1), feature updates deferred 180 days or more (104.2), preview builds disabled (104.3, set through a Settings Catalog policy because an update ring has no documented setting for it, and no ring on a pre-release channel), a scheduled install day of every day (104.4), and users blocked from pausing updates (104.5).
 
 **Business risk:**
 Unpatched endpoints are the most exploited attack surface. Without managed update policy, critical patches may sit unapplied for months.
 
 **Remediation:**
-Intune > Devices > Windows update rings > Create update ring with feature and quality update schedules.
+In the Intune admin center, Devices > By platform > Windows > Manage updates > Windows updates > Update rings, assign a ring to every Windows device and set in each: Automatic update behavior = Auto install and restart at a scheduled time with Scheduled install day = Every day; Feature update deferral period = 180 days or more; Enable pre-release builds = Not configured; Option to pause Windows updates = Disable. Then assign a Settings Catalog policy that sets Windows Update For Business > Manage preview builds = Disable Preview builds. The finding names each ring and setting that falls short.
 
 **Framework mappings:**
 

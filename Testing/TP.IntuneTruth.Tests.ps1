@@ -215,6 +215,146 @@ Describe 'Intune controls count what enforces something' {
             $f.Detail | Should -Match 'settings were not read'
         }
     }
+    Context 'INT-2.5 judges every assigned update ring against the CIS Intune for Windows 11 v5.0.0 Windows Update for Business values' {
+        BeforeAll {
+            # An update ring as Graph returns it from deviceManagement/deviceConfigurations?$expand=assignments.
+            function script:Ring { param([string] $Id = 'r1', [string] $Name = 'Ring A', [hashtable] $Override = @{}, [string[]] $Omit = @())
+                $r = @{ '@odata.type' = '#microsoft.graph.windowsUpdateForBusinessConfiguration'; id = $Id; displayName = $Name; assignments = $script:Assigned
+                    automaticUpdateMode = 'autoInstallAndRebootAtScheduledTime'; featureUpdatesDeferralPeriodInDays = 180; qualityUpdatesDeferralPeriodInDays = 0
+                    businessReadyUpdatesOnly = 'all'; prereleaseFeatures = 'userDefined'; userPauseAccess = 'disabled'
+                    installationSchedule = @{ '@odata.type' = '#microsoft.graph.windowsUpdateScheduledInstall'; scheduledInstallDay = 'everyday'; scheduledInstallTime = '03:00:00.0000000' } }
+                foreach ($k in $Override.Keys) { $r[$k] = $Override[$k] }
+                foreach ($k in $Omit) { $r.Remove($k) }
+                $r
+            }
+            $script:Mpb = 'device_vendor_msft_policy_config_update_managepreviewbuilds'
+            # A general Settings Catalog policy (template family none) setting Update CSP nodes.
+            function script:WuVerdict { param([object[]] $Rings, [object[]] $CatalogSettings = @((Setting $script:Mpb "$($script:Mpb)_0")), [switch] $NoCatalog)
+                $g = @{ 'deviceConfigurations' = @($Rings) }
+                if (-not $NoCatalog) {
+                    $g['configurationPolicies\?'] = @(@{ id = 'wu1'; name = 'WUfB catalog'; platforms = 'windows10'; templateReference = @{ templateFamily = 'none'; templateDisplayName = '' }; assignments = $script:Assigned })
+                    $g['configurationPolicies/wu1/settings'] = @($CatalogSettings)
+                }
+                Run $g
+                Verdict 'Test-TPControlIntuneWindowsUpdate' 'INT-2.5'
+            }
+        }
+        It 'a ring meeting the four ring values, with Manage preview builds disabled in a Settings Catalog policy, is Satisfied; the ring values ride the list request' {
+            $f = WuVerdict @(Ring)
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'Ring A meets CIS 104\.1 .*CIS 104\.2 \(feature updates deferred 180 days\).*CIS 104\.4 .*CIS 104\.5'
+            $f.Detail | Should -Match 'CIS 104\.3 Manage preview builds is Disable preview builds \(WUfB catalog\)'
+            @(& $script:Mod { $script:SeenUris } | Where-Object { $_ -match 'deviceConfigurations' }).Count | Should -Be 1 -Because 'no per-ring read'
+            @(& $script:Mod { $script:SeenUris } | Where-Object { $_ -match 'configurationPolicies/wu1/settings' }).Count | Should -Be 1
+            $ring = @((Get-TPRawData -Key 'Intune-DeviceCompliance').Data.UpdatePolicies)[0]
+            $ring.WufbSettings.InstallationSchedule.ScheduledInstallDay | Should -Be 'everyday'
+            @((Get-TPRawData -Key 'Intune-DeviceCompliance').Data.ConfigurationProfiles)[0].Keys | Should -Not -Contain 'WufbSettings'
+        }
+        It '104.2 boundary: 179 days is a shortfall, 180 and 365 are met' {
+            $f = WuVerdict @(Ring -Override @{ featureUpdatesDeferralPeriodInDays = 179 })
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Shortfall: .*CIS 104\.2 Defer Feature Updates Period in Days: in Ring A feature updates deferred 179 days \(180 or more required\)'
+            (WuVerdict @(Ring -Override @{ featureUpdatesDeferralPeriodInDays = 365 })).State | Should -Be 'Satisfied'
+        }
+        It '104.1: a ring left at the Windows default sets nothing (shortfall, the default is never credited); every documented mode is met' {
+            foreach ($v in 'windowsDefault', 'userDefined') {
+                $f = WuVerdict @(Ring -Override @{ automaticUpdateMode = $v })
+                $f.State  | Should -Be 'Partial'
+                $f.Detail | Should -Match "CIS 104\.1 Allow Auto Update: in Ring A automatic update behavior is not set \($v\)"
+            }
+            # Windows applies a scheduled day only to modes 3 and 4 (CIS 104.4's warning), so the
+            # other modes meet 104.1 here and the schedule is judged on its own.
+            foreach ($v in 'notifyDownload', 'autoInstallAtMaintenanceTime', 'autoInstallAndRebootAtMaintenanceTime', 'autoInstallAndRebootWithoutEndUserControl') {
+                (WuVerdict @(Ring -Override @{ automaticUpdateMode = $v })).Detail | Should -Match 'Ring A meets CIS 104\.1'
+            }
+        }
+        It '104.4: a weekday, an active-hours schedule or no schedule is a shortfall; only Every day is met' {
+            $f = WuVerdict @(Ring -Override @{ installationSchedule = @{ '@odata.type' = '#microsoft.graph.windowsUpdateScheduledInstall'; scheduledInstallDay = 'tuesday'; scheduledInstallTime = '03:00:00' } })
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'scheduled install day is tuesday \(every day required\)'
+            (WuVerdict @(Ring -Override @{ automaticUpdateMode = 'autoInstallAtMaintenanceTime'; installationSchedule = @{ '@odata.type' = '#microsoft.graph.windowsUpdateActiveHoursInstall'; activeHoursStart = '08:00:00'; activeHoursEnd = '17:00:00' } })).Detail |
+                Should -Match 'installs around active hours, so no scheduled install day is set'
+            (WuVerdict @(Ring -Override @{ installationSchedule = $null })).Detail | Should -Match 'no installation schedule is set'
+        }
+        It '104.5: users allowed to pause, or the option not configured, is a shortfall' {
+            (WuVerdict @(Ring -Override @{ userPauseAccess = 'enabled' })).Detail | Should -Match 'CIS 104\.5 .*users may pause updates'
+            $f = WuVerdict @(Ring -Override @{ userPauseAccess = 'notConfigured' })
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'option to pause updates is not configured'
+        }
+        It '104.3: a ring on a pre-release channel, or a catalog policy enabling preview builds, is a shortfall' {
+            $f = WuVerdict @(Ring -Override @{ businessReadyUpdatesOnly = 'windowsInsiderBuildSlow' })
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'CIS 104\.3 Manage preview builds: in Ring A the ring enables pre-release builds \(Beta Channel\)'
+            $f.Detail | Should -Not -Match 'is Disable preview builds'
+            $f = WuVerdict @(Ring) -CatalogSettings @((Setting $script:Mpb "$($script:Mpb)_2"))
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'CIS 104\.3: WUfB catalog sets Manage preview builds to enable preview builds'
+        }
+        It 'a Settings Catalog policy turning automatic updates off or allowing pause defeats the ring: shortfall' {
+            $aau = 'device_vendor_msft_policy_config_update_allowautoupdate'; $pause = 'device_vendor_msft_policy_config_update_setdisablepauseuxaccess'
+            $f = WuVerdict @(Ring) -CatalogSettings @((Setting $script:Mpb "$($script:Mpb)_0"), (Setting $aau "${aau}_5"), (Setting $pause "${pause}_0"))
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'CIS 104\.1: WUfB catalog turns off automatic updates'
+            $f.Detail | Should -Match 'CIS 104\.5: WUfB catalog lets users pause updates'
+        }
+        It 'Manage preview builds not established is not assessed, never Satisfied: no catalog policy, an unread one, or one that sets nothing' {
+            $f = WuVerdict @(Ring) -NoCatalog
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'pages disagree on whether a ring writes that setting'
+            @($f.FrameworkIds).Count | Should -BeGreaterThan 0
+            & $script:Mod { $script:FailSettings = $true }
+            try {
+                $f = WuVerdict @(Ring)
+                $f.State  | Should -Be 'NotApplicable'
+                $f.Detail | Should -Match 'the settings of WUfB catalog were not read'
+                @((Get-TPRawData -Key 'Intune-EndpointSecurity').Data.UpdateSettingsPolicies)[0].SettingsStatus | Should -Be 'Failed'
+            } finally { & $script:Mod { $script:FailSettings = $false } }
+            # A catalog policy setting no Update node is not kept as an Update policy.
+            $f = WuVerdict @(Ring) -CatalogSettings @((Setting 'device_vendor_msft_policy_config_browser_allowautofill' 'device_vendor_msft_policy_config_browser_allowautofill_0'))
+            $f.State | Should -Be 'NotApplicable'
+            @((Get-TPRawData -Key 'Intune-EndpointSecurity').Data.UpdateSettingsPolicies).Count | Should -Be 0
+        }
+        It 'every ring is judged: one ring falling short beside a compliant ring is Partial naming it; nothing met is a Gap' {
+            $f = WuVerdict @((Ring), (Ring -Id 'r2' -Name 'Ring B' -Override @{ featureUpdatesDeferralPeriodInDays = 30 }))
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'in Ring B feature updates deferred 30 days'
+            @($f.AffectedObjects | Where-Object { $_.Ring -eq 'Ring B' -and $_.Cis -eq '104.2' }).Count | Should -Be 1
+            $bad = Ring -Override @{ automaticUpdateMode = 'windowsDefault'; featureUpdatesDeferralPeriodInDays = 0; userPauseAccess = 'enabled'; businessReadyUpdatesOnly = 'windowsInsiderBuildFast'
+                installationSchedule = @{ '@odata.type' = '#microsoft.graph.windowsUpdateActiveHoursInstall'; activeHoursStart = '08:00:00'; activeHoursEnd = '17:00:00' } }
+            $f = WuVerdict @($bad) -NoCatalog
+            $f.State  | Should -Be 'Gap'
+            $f.Severity | Should -Be 'High'
+        }
+        It 'no assigned ring is a Gap (unassigned rings are named, not counted)' {
+            $r = Ring; $r.assignments = @()
+            $f = WuVerdict @($r)
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match '1 unassigned ring\(s\) were not counted'
+        }
+        It 'a value Graph did not return, an unrecognized value, or a results file from before the read is not assessed, never Satisfied and never a Gap' {
+            $f = WuVerdict @(Ring -Omit @('userPauseAccess'))
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'CIS 104\.5 .*userPauseAccess was not returned'
+            (WuVerdict @(Ring -Override @{ featureUpdatesDeferralPeriodInDays = 'soon' })).State | Should -Be 'NotApplicable'
+            (WuVerdict @(Ring -Override @{ userPauseAccess = 'sometimes' })).State | Should -Be 'NotApplicable'
+            Clear-TPState
+            Set-TPRawData -Key 'Intune-DeviceCompliance' -Data ([pscustomobject]@{ Success = $true; Data = [pscustomobject]@{
+                UpdatePolicies = @([pscustomobject]@{ Id = 'r1'; DisplayName = 'Old ring'; Platform = '#microsoft.graph.windowsUpdateForBusinessConfiguration'; IsAssigned = $true }) } })
+            $f = Verdict 'Test-TPControlIntuneWindowsUpdate' 'INT-2.5'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'settings were not read'
+        }
+        It 'a replayed results file (JSON round trip) keeps the verdict' {
+            WuVerdict @(Ring) | Out-Null
+            $dc = (Get-TPRawData -Key 'Intune-DeviceCompliance') | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
+            $es = (Get-TPRawData -Key 'Intune-EndpointSecurity') | ConvertTo-Json -Depth 20 | ConvertFrom-Json -Depth 20
+            Clear-TPState
+            Set-TPRawData -Key 'Intune-DeviceCompliance' -Data $dc
+            Set-TPRawData -Key 'Intune-EndpointSecurity' -Data $es
+            (Verdict 'Test-TPControlIntuneWindowsUpdate' 'INT-2.5').State | Should -Be 'Satisfied'
+        }
+    }
     It 'INT-4.4 reads the iOS passcodeRequired (an iOS-only fleet failed)' {
         Run @{ 'deviceCompliancePolicies' = @(@{ '@odata.type' = '#microsoft.graph.iosCompliancePolicy'; id = 'c1'; displayName = 'iOS'; passcodeRequired = $true; osMinimumVersion = '17.0'; assignments = $script:Assigned })
                'managedDevices' = @(@{ id = 'ip1'; operatingSystem = 'iOS'; complianceState = 'compliant' }) }

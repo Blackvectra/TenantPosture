@@ -2,7 +2,8 @@
 #
 # Invoke-TPCollectIntuneEndpointSecurity.ps1
 # Collects Intune Endpoint Security policies (LAPS, ASR, Firewall, EDR, Antivirus),
-# with the setting values of assigned ASR, Antivirus, Firewall and LAPS policies.
+# with the setting values of assigned ASR, Antivirus, Firewall and LAPS policies, and
+# the Policy CSP Update values of assigned general Settings Catalog policies for Windows.
 #
 # READ-ONLY: GET-only Graph calls. Does not create, modify, or remove configuration.
 #
@@ -53,6 +54,11 @@ function Invoke-TPCollectIntuneEndpointSecurity {
             AntivirusPolicies         = @()
             # Aggregate union with TemplateType field — used by legacy INT-1.5 evaluator
             EndpointSecurityPolicies  = @()
+            # Assigned general Settings Catalog policies (no endpoint-security template) for
+            # Windows that set a Policy CSP Update node, with every Update value they set,
+            # or whose settings could not be read (SettingsStatus Failed). INT-2.5 reads
+            # Manage preview builds here: an update ring has no such setting.
+            UpdateSettingsPolicies    = @()
         }
     }
 
@@ -163,6 +169,42 @@ function Invoke-TPCollectIntuneEndpointSecurity {
                     }
                 }
 
+                # A general Settings Catalog policy (template family none) for Windows: read its
+                # settings once and keep it only when it sets a Policy CSP Update node
+                # (./Device/Vendor/MSFT/Policy/Config/Update/*, definition ids containing
+                # "_policy_config_update_"). A failed read is kept as Failed, because it may
+                # set one. Same scope as the reads above (DeviceManagementConfiguration.Read.All).
+                if (-not $bucket -and $tplFamily -in @($null, '', 'none') -and $entry.IsAssigned -ne $false -and $entry.Id -and
+                    ($entry.Platforms -eq '' -or $entry.Platforms -match 'windows')) {
+                    try {
+                        $sUri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$($entry.Id)/settings"
+                        $sAll = @(); $sPages = 0
+                        while ($sUri -and $sPages -lt 20) {
+                            $sPage = Invoke-TPGraphRequest -Method GET -Uri $sUri -ErrorAction Stop
+                            if ($sPage.value) { $sAll += $sPage.value }
+                            $sUri = $sPage['@odata.nextLink']
+                            $sPages++
+                        }
+                        $vals = Get-TPAvSettingValues -Settings $sAll
+                        $upd = [ordered]@{}
+                        foreach ($k in @($vals.Keys)) { if ([string]$k -match '_policy_config_update_') { $upd[$k] = $vals[$k] } }
+                        if ($upd.Count -gt 0 -or $sUri) {
+                            $result.Data.UpdateSettingsPolicies += @{
+                                Id = $entry.Id; DisplayName = $entry.DisplayName; Platforms = $entry.Platforms; IsAssigned = $entry.IsAssigned
+                                SettingValues = $upd; SettingsStatus = $(if ($sUri) { 'Partial' } else { 'Read' })
+                            }
+                        }
+                    } catch {
+                        $result.Data.UpdateSettingsPolicies += @{
+                            Id = $entry.Id; DisplayName = $entry.DisplayName; Platforms = $entry.Platforms; IsAssigned = $entry.IsAssigned
+                            SettingValues = $null; SettingsStatus = 'Failed'
+                        }
+                        if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                            Register-TPException -Source 'Intune-EndpointSecurity-UpdateSettings' -Message $_.Exception.Message
+                        }
+                    }
+                }
+
                 $result.Data.EndpointSecurityPolicies += $entry
 
                 switch ($bucket) {
@@ -240,6 +282,8 @@ function Invoke-TPCollectIntuneEndpointSecurity {
             EndpointDetectionPolicies = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
             AntivirusPolicies         = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
             EndpointSecurityPolicies  = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
+            # Fed by configurationPolicies alone: the legacy intents carry no Update settings.
+            UpdateSettingsPolicies    = $(if ($cfgFailed) { 'Failed' } else { 'Collected' })
         }
 
         $result.Success = $true

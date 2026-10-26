@@ -643,26 +643,219 @@ function Test-TPControlIntuneMacEncryption {
 }
 
 # ── INT-2.5 Windows Update Compliance Policy ─────────────────────────────────
+# The five Level 1 Windows Update for Business recommendations of the CIS Microsoft
+# Intune for Windows 11 Benchmark v5.0.0 (owner's decision, 2026-10-26), judged on every
+# ASSIGNED update ring (Graph windowsUpdateForBusinessConfiguration). Each CIS setting is
+# a Policy CSP Update node; the ring property that writes it (Microsoft Learn: Intune
+# "Update rings policy settings", the CSP reference each ring setting names):
+#   104.1 Allow Auto Update = Enabled, never 5 "Turn off automatic updates"
+#         -> automaticUpdateMode (Update/AllowAutoUpdate). The five modes Graph documents
+#         map to CSP 0-4 (notifyDownload 0 ... autoInstallAndRebootWithoutEndUserControl
+#         4); a ring cannot write 5. userDefined ("no intent") and windowsDefault ("Reset
+#         to Windows default") set nothing, which the not-configured rule makes a
+#         shortfall: the Windows default (auto install and restart) is named, never credited.
+#   104.2 Defer Feature Updates Period in Days >= 180
+#         -> featureUpdatesDeferralPeriodInDays (Update/DeferFeatureUpdatesPeriodInDays).
+#   104.3 Manage preview builds = 0 "Disable preview builds" (Update/ManagePreviewBuilds).
+#         Microsoft's ring settings reference maps the ring's "Enable pre-release builds"
+#         to BranchReadinessLevel (businessReadyUpdatesOnly), and one Intune education
+#         page maps it to ManagePreviewBuilds: the pages disagree, and no ring property is
+#         documented to write Disable. So a ring selecting an Insider channel is a
+#         shortfall, and Disable is credited only from an assigned Settings Catalog policy
+#         that sets ManagePreviewBuilds to 0 (Intune-EndpointSecurity UpdateSettingsPolicies).
+#   104.4 Scheduled Install Day = Every day (CSP 0) -> installationSchedule of type
+#         windowsUpdateScheduledInstall with scheduledInstallDay "everyday". Windows applies
+#         the day only with AllowAutoUpdate 3 or 4; an active-hours schedule sets no day,
+#         which the benchmark audits as not set.
+#   104.5 Block "Pause Updates" ability = Block (SetDisablePauseUXAccess = 1)
+#         -> userPauseAccess "disabled" (Intune: "Option to pause Windows updates: Disable").
+# A Settings Catalog policy that sets one of these nodes to a value the benchmark does
+# not accept is a shortfall too, because on the device it is the same CSP value.
+# Assignment groups are not resolved: "every assigned ring" is every ring with an assignment.
+function Get-TPWufbRingVerdict {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $Ring)
+    $name = [string](Get-TPObjectField -Item $Ring -Key 'DisplayName' -Default '')
+    if (-not $name) { $name = [string](Get-TPObjectField -Item $Ring -Key 'Id' -Default 'unnamed ring') }
+    $ws = Get-TPObjectField -Item $Ring -Key 'WufbSettings' -Default $null
+    $has = {
+        param($o, [string] $k)
+        if ($o -is [System.Collections.IDictionary]) { return $o.Contains($k) }
+        return ($null -ne $o -and $null -ne $o.PSObject.Properties[$k])
+    }
+    $rows = [System.Collections.Generic.List[object]]::new()
+    $add = { param($cis, $title, $state, $text) $rows.Add([pscustomobject]@{ Ring = $name; Cis = $cis; Setting = $title; State = $state; Text = $text }) }
+    if ($null -eq $ws) {
+        foreach ($c in @(@('104.1', 'Allow Auto Update'), @('104.2', 'Defer Feature Updates Period in Days'), @('104.3', 'Manage preview builds'), @('104.4', 'Scheduled Install Day'), @('104.5', 'Block "Pause Updates" ability'))) {
+            & $add $c[0] $c[1] 'NotRead' 'the ring''s settings were not read (a results file from before they were collected)'
+        }
+        return @($rows)
+    }
+    # 104.1
+    if (-not (& $has $ws 'AutomaticUpdateMode')) { & $add '104.1' 'Allow Auto Update' 'NotRead' 'automaticUpdateMode was not returned' }
+    else {
+        $v = [string](Get-TPObjectField -Item $ws -Key 'AutomaticUpdateMode' -Default '')
+        $labels = @{ notifyDownload = 'Notify download'; autoInstallAtMaintenanceTime = 'Auto install at maintenance time'; autoInstallAndRebootAtMaintenanceTime = 'Auto install and restart at maintenance time'
+                     autoInstallAndRebootAtScheduledTime = 'Auto install and restart at a scheduled time'; autoInstallAndRebootWithoutEndUserControl = 'Auto install and restart without end-user control' }
+        if ($labels.ContainsKey($v)) { & $add '104.1' 'Allow Auto Update' 'Met' "automatic updates on ($($labels[$v]))" }
+        elseif ($v -in @('', 'userDefined', 'windowsDefault')) { & $add '104.1' 'Allow Auto Update' 'Short' "automatic update behavior is not set ($(if ($v) { $v } else { 'empty' })); Windows defaults to auto install and restart, but nothing enforces it" }
+        else { & $add '104.1' 'Allow Auto Update' 'Unrecognized' "automaticUpdateMode '$v' is not a value Microsoft documents" }
+    }
+    # 104.2
+    if (-not (& $has $ws 'FeatureUpdatesDeferralPeriodInDays')) { & $add '104.2' 'Defer Feature Updates Period in Days' 'NotRead' 'featureUpdatesDeferralPeriodInDays was not returned' }
+    else {
+        $raw = Get-TPObjectField -Item $ws -Key 'FeatureUpdatesDeferralPeriodInDays' -Default $null
+        $n = 0
+        if ($null -eq $raw -or "$raw" -eq '') { & $add '104.2' 'Defer Feature Updates Period in Days' 'Short' 'no feature update deferral is set' }
+        elseif ("$raw" -match '^\d+$' -and [int]::TryParse("$raw", [System.Globalization.NumberStyles]::None, [cultureinfo]::InvariantCulture, [ref]$n)) {
+            if ($n -ge 180) { & $add '104.2' 'Defer Feature Updates Period in Days' 'Met' "feature updates deferred $n days" }
+            else { & $add '104.2' 'Defer Feature Updates Period in Days' 'Short' "feature updates deferred $n days (180 or more required)" }
+        } else { & $add '104.2' 'Defer Feature Updates Period in Days' 'Unrecognized' "featureUpdatesDeferralPeriodInDays '$raw' is not a whole number" }
+    }
+    # 104.3 (the ring's part: a pre-release channel)
+    if (-not (& $has $ws 'BusinessReadyUpdatesOnly')) { & $add '104.3' 'Manage preview builds' 'NotRead' 'businessReadyUpdatesOnly was not returned' }
+    else {
+        $v = [string](Get-TPObjectField -Item $ws -Key 'BusinessReadyUpdatesOnly' -Default '')
+        $insider = @{ windowsInsiderBuildFast = 'Dev Channel'; windowsInsiderBuildSlow = 'Beta Channel'; windowsInsiderBuildRelease = 'Release Preview' }
+        if ($insider.ContainsKey($v)) { & $add '104.3' 'Manage preview builds' 'Short' "the ring enables pre-release builds ($($insider[$v]))" }
+        elseif ($v -in @('', 'userDefined', 'all', 'businessReadyOnly')) { & $add '104.3' 'Manage preview builds' 'NoPrerelease' 'no pre-release channel selected' }
+        else { & $add '104.3' 'Manage preview builds' 'Unrecognized' "businessReadyUpdatesOnly '$v' is not a value Microsoft documents" }
+    }
+    # 104.4
+    if (-not (& $has $ws 'InstallationSchedule')) { & $add '104.4' 'Scheduled Install Day' 'NotRead' 'installationSchedule was not returned' }
+    else {
+        $sch = Get-TPObjectField -Item $ws -Key 'InstallationSchedule' -Default $null
+        $type = [string](Get-TPObjectField -Item $sch -Key 'Type' -Default '')
+        $day = [string](Get-TPObjectField -Item $sch -Key 'ScheduledInstallDay' -Default '')
+        $days = @('sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday')
+        if ($null -eq $sch) { & $add '104.4' 'Scheduled Install Day' 'Short' 'no installation schedule is set' }
+        elseif ($type -match 'windowsUpdateActiveHoursInstall$') { & $add '104.4' 'Scheduled Install Day' 'Short' 'the ring installs around active hours, so no scheduled install day is set' }
+        elseif ($type -match 'windowsUpdateScheduledInstall$') {
+            if ($day -eq 'everyday') { & $add '104.4' 'Scheduled Install Day' 'Met' 'scheduled install day is every day' }
+            elseif ($day -in $days) { & $add '104.4' 'Scheduled Install Day' 'Short' "scheduled install day is $day (every day required)" }
+            elseif ($day -in @('', 'userDefined')) { & $add '104.4' 'Scheduled Install Day' 'Short' 'no scheduled install day is set' }
+            else { & $add '104.4' 'Scheduled Install Day' 'Unrecognized' "scheduledInstallDay '$day' is not a value Microsoft documents" }
+        } else { & $add '104.4' 'Scheduled Install Day' 'Unrecognized' "installation schedule type '$type' is not one Microsoft documents" }
+    }
+    # 104.5
+    if (-not (& $has $ws 'UserPauseAccess')) { & $add '104.5' 'Block "Pause Updates" ability' 'NotRead' 'userPauseAccess was not returned' }
+    else {
+        $v = [string](Get-TPObjectField -Item $ws -Key 'UserPauseAccess' -Default '')
+        if ($v -eq 'disabled') { & $add '104.5' 'Block "Pause Updates" ability' 'Met' 'users cannot pause updates' }
+        elseif ($v -eq 'enabled') { & $add '104.5' 'Block "Pause Updates" ability' 'Short' 'users may pause updates' }
+        elseif ($v -in @('', 'notConfigured')) { & $add '104.5' 'Block "Pause Updates" ability' 'Short' 'the option to pause updates is not configured, so users may pause updates (the Windows default)' }
+        else { & $add '104.5' 'Block "Pause Updates" ability' 'Unrecognized' "userPauseAccess '$v' is not a value Microsoft documents" }
+    }
+    return @($rows)
+}
+
+# INT-2.5's Settings Catalog half: every value an assigned general Settings Catalog policy
+# sets on the five Update nodes. Matched by the CSP node at the end of the setting
+# definition id; a choice value ends with "_<CSP value>" and an integer is the number.
+function Get-TPWufbCatalogFindings {
+    [CmdletBinding()]
+    param([AllowNull()] [object[]] $Policies)
+    $out = [ordered]@{ Short = @(); Unrecognized = @(); DisablePreview = @(); Unread = @() }
+    foreach ($p in @($Policies | Where-Object { $null -ne $_ })) {
+        $name = [string](Get-TPObjectField -Item $p -Key 'DisplayName' -Default '')
+        if (-not $name) { $name = [string](Get-TPObjectField -Item $p -Key 'Id' -Default 'unnamed policy') }
+        $probe = Get-TPIntunePolicySettingMatches -Policy $p -Pattern '(^|_)update_allowautoupdate$'
+        if (-not $probe.Read) { $out.Unread += $name }
+        foreach ($node in 'allowautoupdate', 'deferfeatureupdatesperiodindays', 'managepreviewbuilds', 'scheduledinstallday', 'setdisablepauseuxaccess') {
+            $m = Get-TPIntunePolicySettingMatches -Policy $p -Pattern "(^|_)update_$node`$"
+            foreach ($v in $m.Values) {
+                $n = -1
+                if ($v -match '(?:^|_)(\d{1,9})$') { $n = [int]$Matches[1] }
+                if ($n -lt 0) { $out.Unrecognized += "$name ($node = $v)"; continue }
+                switch ($node) {
+                    'allowautoupdate'                 { if ($n -eq 5) { $out.Short += "CIS 104.1: $name turns off automatic updates (Allow Auto Update = 5)." } elseif ($n -gt 5) { $out.Unrecognized += "$name (Allow Auto Update = $n)" } }
+                    'deferfeatureupdatesperiodindays' { if ($n -lt 180) { $out.Short += "CIS 104.2: $name defers feature updates $n days (180 or more required)." } }
+                    'managepreviewbuilds'             { if ($n -eq 0) { $out.DisablePreview += $name } elseif ($n -le 3) { $out.Short += "CIS 104.3: $name sets Manage preview builds to $(@('', 'disable once the next release is public', 'enable preview builds', 'left to user selection')[$n]) (Disable preview builds required)." } else { $out.Unrecognized += "$name (Manage preview builds = $n)" } }
+                    'scheduledinstallday'             { if ($n -ge 1 -and $n -le 7) { $out.Short += "CIS 104.4: $name sets Scheduled Install Day to one day of the week (every day required)." } elseif ($n -gt 7) { $out.Unrecognized += "$name (Scheduled Install Day = $n)" } }
+                    'setdisablepauseuxaccess'         { if ($n -eq 0) { $out.Short += "CIS 104.5: $name lets users pause updates (Block ""Pause Updates"" ability = 0)." } elseif ($n -gt 1) { $out.Unrecognized += "$name (Block Pause Updates = $n)" } }
+                }
+            }
+        }
+    }
+    return $out
+}
+
 function Test-TPControlIntuneWindowsUpdate {
     [CmdletBinding()] param()
     $cid = 'INT-2.5'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
     $int = Get-TPRawData -Key 'Intune-DeviceCompliance'
-    if (-not $int -or -not $int.Success) { Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune compliance data not collected'; return }
+    if (-not $int -or -not $int.Success) { Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Intune compliance data not collected'; return }
     # Empty is not clean. The collector reported success, but this section
     # may not have landed — a failed sub-query leaves it absent or empty,
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-TPSectionCollected $int 'UpdatePolicies')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'UpdatePolicies was not collected; not assessed.'
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'UpdatePolicies was not collected; not assessed.'
         return
     }
-    $winUpdatePolicies = @(Select-TPAssignedPolicies @(Get-TPObjectField -Item $int.Data -Key 'UpdatePolicies' -Default @()))
-    if ($winUpdatePolicies.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($winUpdatePolicies.Count) assigned Windows Update for Business ring(s)."
-    } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No Windows Update for Business policy found in Intune. Endpoints may not receive security updates on a managed schedule. Verify via Windows Update rings.' -Remediation $ctrl.Remediation
+    $allRings = @(Get-TPObjectField -Item $int.Data -Key 'UpdatePolicies' -Default @() | Where-Object { $null -ne $_ })
+    $rings = @(Select-TPAssignedPolicies $allRings)
+    $note = if ($allRings.Count -gt $rings.Count) { " $($allRings.Count - $rings.Count) unassigned ring(s) were not counted." } else { '' }
+    if ($rings.Count -eq 0) {
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "No assigned Windows Update for Business ring found in Intune.$note Endpoints may not receive security updates on a managed schedule. Verify via Windows Update rings." -Remediation $ctrl.Remediation
+        return
     }
+    # One verdict list per ring, kept with the ring (two rings may share a name).
+    $perRing = @($rings | ForEach-Object { ,@(Get-TPWufbRingVerdict -Ring $_) })
+    $rows = @($perRing | ForEach-Object { $_ })
+    # The Settings Catalog half (Manage preview builds, and any catalog value that defeats a ring).
+    $es = Get-TPRawData -Key 'Intune-EndpointSecurity'
+    $catRead = ($es -and $es.Success -and (Test-TPSectionCollected $es 'UpdateSettingsPolicies'))
+    $cat = if ($catRead) { Get-TPWufbCatalogFindings -Policies @(Select-TPAssignedPolicies @(Get-TPObjectField -Item $es.Data -Key 'UpdateSettingsPolicies' -Default @())) } else { $null }
+
+    $verified = @(); $short = @(); $notEst = @(); $affected = @()
+    foreach ($ringRows in $perRing) {
+        $mine = @($ringRows | Where-Object { $_.Cis -ne '104.3' })
+        $name = [string]@($ringRows)[0].Ring
+        $met = @($mine | Where-Object State -eq 'Met')
+        if ($met.Count) { $verified += "$name meets $(@($met | ForEach-Object { "CIS $($_.Cis) ($($_.Text))" }) -join ', ')." }
+        foreach ($x in @($mine | Where-Object State -eq 'Short')) {
+            $short += "CIS $($x.Cis) $($x.Setting): in $name $($x.Text)."
+            $affected += [ordered]@{ Ring = $name; Cis = $x.Cis; Setting = $x.Setting; Observed = $x.Text }
+        }
+        foreach ($x in @($mine | Where-Object { $_.State -in @('NotRead', 'Unrecognized') })) { $notEst += "CIS $($x.Cis) $($x.Setting) in ${name}: $($x.Text)." }
+    }
+    # 104.3, judged across the rings and the Settings Catalog together.
+    $pre = @($rows | Where-Object Cis -eq '104.3')
+    foreach ($x in @($pre | Where-Object State -eq 'Short')) {
+        $short += "CIS 104.3 Manage preview builds: in $($x.Ring) $($x.Text)."
+        $affected += [ordered]@{ Ring = $x.Ring; Cis = '104.3'; Setting = $x.Setting; Observed = $x.Text }
+    }
+    foreach ($x in @($pre | Where-Object { $_.State -in @('NotRead', 'Unrecognized') })) { $notEst += "CIS 104.3 Manage preview builds in $($x.Ring): $($x.Text)." }
+    if ($null -ne $cat) {
+        $short += @($cat.Short)
+        foreach ($u in @($cat.Unrecognized)) { $notEst += "A Settings Catalog Update value is not one Microsoft documents: $u." }
+    }
+    $ringPreOk = (@($pre | Where-Object State -ne 'NoPrerelease').Count -eq 0)
+    $catPreShort = ($null -ne $cat -and @($cat.Short | Where-Object { $_ -like 'CIS 104.3:*' }).Count -gt 0)
+    if ($ringPreOk -and -not $catPreShort) {
+        if ($null -eq $cat) {
+            $notEst += 'CIS 104.3 Manage preview builds: an update ring has no setting Microsoft documents as writing Disable preview builds, and the Settings Catalog policies were not read (not collected in this run or this results file).'
+        } elseif (@($cat.Unread).Count) {
+            $notEst += "CIS 104.3 Manage preview builds: the settings of $(@($cat.Unread) -join ', ') were not read, so whether one sets Manage preview builds is not established."
+        } elseif (@($cat.DisablePreview).Count) {
+            $verified += "CIS 104.3 Manage preview builds is Disable preview builds ($(@($cat.DisablePreview | Select-Object -Unique) -join ', ')), and no assigned ring selects a pre-release channel."
+        } else {
+            $notEst += 'CIS 104.3 Manage preview builds: no assigned ring selects a pre-release channel, but no assigned Settings Catalog policy sets Manage preview builds to Disable preview builds. Microsoft''s pages disagree on whether a ring writes that setting (the ring settings reference maps its pre-release option to BranchReadinessLevel), so Disable is not established.'
+        }
+    }
+    $lead = "$($rings.Count) assigned Windows Update for Business ring(s): $(@($perRing | ForEach-Object { @($_)[0].Ring }) -join ', ').$note"
+    if ($verified.Count) { $verified = @($lead) + $verified }
+    elseif ($short.Count) { $short[0] = "$lead $($short[0])" }
+    elseif ($notEst.Count) { $notEst[0] = "$lead $($notEst[0])" }
+    $cur = @($perRing | ForEach-Object {
+        "$(@($_)[0].Ring): $(@($_ | Where-Object State -eq 'Met').Count) of 4 ring settings met"
+    }) -join '; '
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $notEst `
+        -CurrentValue $cur `
+        -RequiredValue 'Every assigned update ring: automatic updates on (CIS 104.1), feature updates deferred 180 days or more (104.2), scheduled install day every day (104.4), users blocked from pausing updates (104.5); no ring on a pre-release channel and Manage preview builds = Disable preview builds in an assigned Settings Catalog policy (104.3)' `
+        -AffectedObjects $affected
 }
 
 # ── INT-3.1 Device Enrollment Restrictions Configured ────────────────────────
