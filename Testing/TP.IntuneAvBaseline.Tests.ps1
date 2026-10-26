@@ -205,10 +205,11 @@ Describe 'INT-1.5 judges the antivirus policy against the approved CIS benchmark
             $f.State | Should -Be 'NotApplicable'
             $f.Detail | Should -Match 'could not be read'
         }
-        It 'a results file from before the value read keeps the three-setting judgment' {
+        It 'a results file from before the value read is not assessed while the standard is approved: three settings never stand for it' {
             $p = AvPolicy (Payload); $p.PSObject.Properties.Remove('AvSettingValues')
             $f = Judge @($p)
-            $f.State | Should -Be 'Satisfied'
+            $f.State | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'the approved standard'
             $f.RequiredValue | Should -Match 'real-time, cloud-delivered and PUA protection'
         }
         It 'a withdrawn approval keeps the three-setting judgment' {

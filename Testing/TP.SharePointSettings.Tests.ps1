@@ -151,7 +151,7 @@ Describe 'SharePoint settings are read for the control that names them' {
         }
         It 'SPO-3.3: unread auto-trim is not "off"; a limit of 100 or more passes either way' {
             (Run 'Test-TPControlSPOVersionHistory' 'SPO-3.3' @{} @{ EnableAutoExpirationVersionTrim = $null; MajorVersionLimit = 50 }).State  | Should -Be 'NotApplicable'
-            (Run 'Test-TPControlSPOVersionHistory' 'SPO-3.3' @{} @{ EnableAutoExpirationVersionTrim = $null; MajorVersionLimit = 500 }).State | Should -Be 'Satisfied'
+            (Run 'Test-TPControlSPOVersionHistory' 'SPO-3.3' @{} @{ EnableAutoExpirationVersionTrim = $null; MajorVersionLimit = 500; ExpireVersionsAfterDays = 0 }).State | Should -Be 'Satisfied'
             (Run 'Test-TPControlSPOVersionHistory' 'SPO-3.3' @{} @{ EnableAutoExpirationVersionTrim = $false; MajorVersionLimit = $null }).State | Should -Be 'NotApplicable'
         }
         It 'the collector keeps every property it can read when the module lacks a newer one' {

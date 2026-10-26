@@ -1,0 +1,905 @@
+{
+  "version": "1.0",
+  "reviewed": "2026-10-26",
+  "purpose": "Configuration benchmarks for the controls that cite neither CIS Microsoft 365 Foundations nor CISA ScubaGear in controls.json. A control is cited only when its evaluator judges the setting the item audits and every state it scores Satisfied passes that audit (Equivalent, Subset, Stricter); every other control is listed under unmapped with the reason. CIS M365 and ScubaGear citations stay in controls.json (References.CIS, References.SCuBA).",
+  "relations": {
+    "Equivalent": "Same setting and threshold: the control passes exactly when the item passes.",
+    "Subset": "The control checks part of what the item requires; the rest is named in Unchecked.",
+    "Stricter": "The control passes only when the item passes, and can fail where the item passes."
+  },
+  "benchmarks": {
+    "CIS-INTUNE-DEFENDER-AV-1.0.0": {
+      "Name": "CIS Microsoft Intune for Microsoft Defender Antivirus Benchmark",
+      "Version": "1.0.0, Level 1 - Workstation",
+      "Publisher": "Center for Internet Security",
+      "Kind": "Configuration benchmark",
+      "Url": "https://www.cisecurity.org/benchmark/intune",
+      "Note": "Recommendation numbers only; the benchmark text is licensed and is not reproduced. Accepted values are encoded in Config/cis-intune-defender-av.json and Config/asr-required-rules.json."
+    },
+    "MS-EOP-MDO-RECOMMENDED": {
+      "Name": "Microsoft: Recommended settings for EOP and Microsoft Defender for Office 365 security",
+      "Version": "Learn page dated 2026-08-10 (Standard and Strict columns)",
+      "Publisher": "Microsoft",
+      "Kind": "Vendor recommended configuration",
+      "Url": "https://learn.microsoft.com/defender-office-365/recommended-settings-for-eop-and-office365"
+    },
+    "NIST-SP-800-177R1": {
+      "Name": "NIST SP 800-177 Rev. 1, Trustworthy Email",
+      "Version": "February 2019",
+      "Publisher": "NIST",
+      "Kind": "Government configuration guidance",
+      "Url": "https://doi.org/10.6028/NIST.SP.800-177r1"
+    },
+    "MS-ZERO-TRUST": {
+      "Name": "Microsoft Zero Trust deployment guidance and Zero Trust Assessment checks",
+      "Version": "Learn pages and microsoft/zerotrustassessment tests read 2026-10-26",
+      "Publisher": "Microsoft",
+      "Kind": "Vendor recommended configuration",
+      "Url": "https://learn.microsoft.com/security/zero-trust/",
+      "Note": "Cited only where a page or assessment test states a recommended value; the test id is given when one exists."
+    },
+    "DISA-ENTRA-ID-STIG-V1R1": {
+      "Name": "DISA Microsoft Entra ID Security Technical Implementation Guide",
+      "Version": "Version 1 Release 1, 2025-02-28 (also published by CIS as the CIS Microsoft Entra ID STIG Benchmark v1.0.0)",
+      "Publisher": "DISA",
+      "Kind": "Government configuration benchmark",
+      "Url": "https://public.cyber.mil/stigs/"
+    }
+  },
+  "controls": {
+    "AAD-1.2": [
+      {
+        "Benchmark": "DISA-ENTRA-ID-STIG-V1R1",
+        "ItemId": "V-270233",
+        "ItemTitle": "Microsoft Entra ID must be configured to use multifactor authentication (MFA).",
+        "Url": "https://www.stigviewer.com/stig/microsoft_entra_id/2025-02-28/finding/V-270233",
+        "Relation": "Subset",
+        "Why": "The check verifies a Conditional Access MFA policy whose state is On with 'All users' included and any user exclusions documented with the AO; the fix grants 'Require multifactor authentication' on All cloud apps. Satisfied requires an enabled policy including All users on All cloud apps that requires MFA (or an authentication strength, which requires MFA), with no exclusions or only exclusions on the tenant's approval record, and is stricter on apps, client types and registration.",
+        "Unchecked": "Whether the exclusion approval is documented with the authorizing official: the tool's EmergencyAccess record names an approver and dates but cannot establish that the approver is the AO, so an approved exclusion passes here and still needs the AO documentation the STIG check asks for."
+      }
+    ],
+    "AAD-11.3": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "All risky workload identities are triaged (Zero Trust Assessment test 21862)",
+        "ItemTitle": "All risky workload identities are triaged",
+        "Url": "https://learn.microsoft.com/entra/fundamentals/zero-trust-monitor-detect#all-risky-workload-identities-are-triaged",
+        "Relation": "Subset",
+        "Why": "Microsoft's check fails when identityProtection/riskyServicePrincipals returns any service principal with riskState 'atRisk' (or any servicePrincipalRiskDetection is atRisk). The evaluator reads the same collection and is Satisfied only when none is atRisk (it also fails on confirmedCompromised, which the check does not), so Satisfied passes that half of the check.",
+        "Unchecked": "The check's second half, identityProtection/servicePrincipalRiskDetections with riskState 'atRisk', is not read; an untriaged detection on a principal whose aggregate state is not atRisk would fail the check and pass here."
+      }
+    ],
+    "AAD-14.1": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Application certificates must be rotated on a regular basis (Zero Trust Assessment test 21992)",
+        "ItemTitle": "Application certificates must be rotated on a regular basis",
+        "Url": "https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-identities#application-certificates-must-be-rotated-on-a-regular-basis",
+        "Relation": "Subset",
+        "Why": "Microsoft: 'Query all of your service principals and application registrations that have certificate credentials. Make sure the certificate start date is less than 180 days' (test 21992 fails on a keyCredential whose startDateTime is more than 180 days ago). For app registrations, Satisfied requires every certificate to be unexpired with more than 30 days left and a lifetime of 180 days or less, so its start date is less than 150 days ago and the app-registration half of the check passes.",
+        "Unchecked": "Certificate credentials on service principals (the check queries both applications and servicePrincipals keyCredentials); the collector reads /applications only."
+      }
+    ],
+    "AAD-3.4": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Step 6: Configure PIM > Configure activation settings > 'Require justification'",
+        "ItemTitle": "For each privileged role ... Configure settings: Require justification",
+        "Url": "https://learn.microsoft.com/security/zero-trust/adopt/implement-privileged-access-identity#configure-activation-settings",
+        "Relation": "Subset",
+        "Why": "The guide's step sets 'Require justification' on the PIM activation settings of each privileged role, which is the Justification entry in the role policy's Enablement_EndUser_Assignment rule the evaluator reads; Satisfied means every policy for the 17 roles the tool treats as privileged (which include Microsoft's stated minimum set: Global, Privileged Role, Security, Exchange and SharePoint Administrator) has it.",
+        "Unchecked": "Roles the organization identifies as privileged beyond the tool's fixed 17-role list (for example Hybrid Identity Administrator or custom roles) are not judged when the policy-to-role map is available. The other settings in the same step (require MFA, maximum duration, approval) are separate controls (AAD-3.3, AAD-3.6, AAD-3.5)."
+      }
+    ],
+    "DEF-2.4": [
+      {
+        "Benchmark": "MS-EOP-MDO-RECOMMENDED",
+        "ItemId": "Anti-spam policy settings > Phishing detection action (PhishSpamAction)",
+        "ItemTitle": "Phishing detection action (PhishSpamAction): Default MoveToJmf, Standard Quarantine, Strict Quarantine",
+        "Url": "https://learn.microsoft.com/en-us/defender-office-365/recommended-settings-for-eop-and-office365#anti-spam-policy-settings",
+        "Relation": "Equivalent",
+        "Why": "Satisfied exactly when every in-force anti-spam policy has PhishSpamAction Quarantine, the value in both the Standard and Strict columns."
+      }
+    ],
+    "DEF-2.6": [
+      {
+        "Benchmark": "MS-EOP-MDO-RECOMMENDED",
+        "ItemId": "Anti-spam policy settings > Bulk email threshold (BulkThreshold)",
+        "ItemTitle": "Bulk email threshold (BulkThreshold): Default 7, Standard 6, Strict 5",
+        "Url": "https://learn.microsoft.com/en-us/defender-office-365/recommended-settings-for-eop-and-office365#anti-spam-policy-settings",
+        "Relation": "Equivalent",
+        "Why": "Satisfied exactly when every in-force policy is at the Standard value 6 or stricter (Strict 5); the default 7 or an unread value fails. Equivalent at the Standard column, read as 'at least as strict as'."
+      }
+    ],
+    "DEF-3.1": [
+      {
+        "Benchmark": "MS-EOP-MDO-RECOMMENDED",
+        "ItemId": "Anti-phishing policy settings for all cloud mailboxes > Show (?) for unauthenticated senders for spoof (EnableUnauthenticatedSender)",
+        "ItemTitle": "Show (?) for unauthenticated senders for spoof (EnableUnauthenticatedSender): Default, Standard and Strict Selected ($true)",
+        "Url": "https://learn.microsoft.com/en-us/defender-office-365/recommended-settings-for-eop-and-office365#anti-phishing-policy-settings-for-all-cloud-mailboxes",
+        "Relation": "Equivalent",
+        "Why": "Satisfied exactly when every in-force anti-phishing policy has the value true, which is the Standard and Strict value."
+      }
+    ],
+    "DEF-3.2": [
+      {
+        "Benchmark": "MS-EOP-MDO-RECOMMENDED",
+        "ItemId": "Anti-phishing policy settings for all cloud mailboxes > Show \"via\" tag (EnableViaTag)",
+        "ItemTitle": "Show \"via\" tag (EnableViaTag): Default, Standard and Strict Selected ($true)",
+        "Url": "https://learn.microsoft.com/en-us/defender-office-365/recommended-settings-for-eop-and-office365#anti-phishing-policy-settings-for-all-cloud-mailboxes",
+        "Relation": "Equivalent",
+        "Why": "Satisfied exactly when every in-force anti-phishing policy has the value true, which is the Standard and Strict value."
+      }
+    ],
+    "DNS-1.4": [
+      {
+        "Benchmark": "NIST-SP-800-177R1",
+        "ItemId": "Security Recommendation 5-3 (Section 5.2.6)",
+        "ItemTitle": "Receiving domains should implement protocols to signal TLS usage to clients. Receivers should implement DANE, MTA-STS (or both) for all mail servers listed in the domain's MX Resource Record set.",
+        "Url": "https://doi.org/10.6028/NIST.SP.800-177r1",
+        "Relation": "Subset",
+        "Why": "A published MTA-STS record with a retrievable policy in enforce mode is MTA-STS implemented for the domain; enforce is the mode in which, per Section 5.2.5 Table 5-2, a client rejects the connection on a TLS validation or MX matching failure.",
+        "Unchecked": "That the policy's mx: entries cover every host in the domain's MX RR set and that each MX host presents a certificate matching them; max_age; domains not in the assessed DNS domain list. (DANE alone also passes the recommendation, where DNS-1.4 would report a Gap.)"
+      }
+    ],
+    "DNS-1.6": [
+      {
+        "Benchmark": "NIST-SP-800-177R1",
+        "ItemId": "Security Recommendation 4-2 (Section 4.4.5.1)",
+        "ItemTitle": "Organizations should deploy DNSSEC for all DNS name servers and validate DNSSEC responses from all systems that receive email.",
+        "Url": "https://doi.org/10.6028/NIST.SP.800-177r1",
+        "Relation": "Subset",
+        "Why": "A DS record at the parent (or a signed enclosing zone) shows the domain's zone is DNSSEC-signed and delegated securely, which is the deploy-DNSSEC half of the recommendation for that domain.",
+        "Unchecked": "DNSSEC validation by the organization's receiving mail systems (Exchange Online's validation is Microsoft's); that the signatures actually validate (a DS with broken signatures still passes); domains not in the assessed list."
+      }
+    ],
+    "DNS-2.1": [
+      {
+        "Benchmark": "NIST-SP-800-177R1",
+        "ItemId": "Section 4.5.3, Table 4-3 'Recommended Cryptographic Key Parameters' (RSA/SHA-256 row)",
+        "ItemTitle": "RSA/SHA-256 | Approved for Government Use: YES | Recommended Length: 2048 bits | Recommended Lifetime: 1-2 years",
+        "Url": "https://doi.org/10.6028/NIST.SP.800-177r1",
+        "Relation": "Subset",
+        "Why": "On the lifetime column, DNS-2.1's 365-day limit is within the 1-2 year recommended lifetime, so every Satisfied key passes it (stricter on that part).",
+        "Unchecked": "The recommended 2048-bit length (judged by EXO-1.4 and shown here only as context) and the RSA/SHA-256 algorithm (Security Recommendation 4-3)."
+      }
+    ],
+    "EXO-4.4": [
+      {
+        "Benchmark": "MS-EOP-MDO-RECOMMENDED",
+        "ItemId": "Anti-spam policy settings > Bulk email threshold (BulkThreshold)",
+        "ItemTitle": "Bulk email threshold (BulkThreshold): Default 7, Standard 6, Strict 5",
+        "Url": "https://learn.microsoft.com/en-us/defender-office-365/recommended-settings-for-eop-and-office365#anti-spam-policy-settings",
+        "Relation": "Subset",
+        "Why": "Satisfied requires BulkThreshold <= 6 in the default policy, which meets the Standard value (6) or stricter (Strict 5).",
+        "Unchecked": "Custom and preset anti-spam policies in force (only the default policy is read); a BulkThreshold returned as null would also pass the -gt 6 test."
+      },
+      {
+        "Benchmark": "MS-EOP-MDO-RECOMMENDED",
+        "ItemId": "Anti-spam policy settings > Spam detection action (SpamAction)",
+        "ItemTitle": "Spam detection action (SpamAction): Default MoveToJmf, Standard MoveToJmf, Strict Quarantine",
+        "Url": "https://learn.microsoft.com/en-us/defender-office-365/recommended-settings-for-eop-and-office365#anti-spam-policy-settings",
+        "Relation": "Subset",
+        "Why": "Satisfied accepts MoveToJmf (the Standard value) or Quarantine (the Strict value) in the default policy; every other action fails.",
+        "Unchecked": "Custom and preset anti-spam policies in force."
+      }
+    ],
+    "INT-1.1": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Deployment > Enterprise > Define device compliance policies",
+        "ItemTitle": "Define device compliance policies: Set minimum configuration requirements. One policy for each platform.",
+        "Url": "https://learn.microsoft.com/en-us/security/zero-trust/zero-trust-identity-device-access-policies-common#deployment",
+        "Relation": "Subset",
+        "Why": "Microsoft's Enterprise-level recommendation is one compliance policy per platform; INT-1.1 Satisfied requires an assigned compliance policy for every platform that has enrolled devices, so the one-policy-per-platform part passes.",
+        "Unchecked": "The contents of each policy: the page's per-platform recommended settings (for Windows the 'Recommended compliance settings for Windows 10 and later' table: Require BitLocker, Secure Boot, code integrity, password, encryption, firewall, antivirus, Defender, machine-risk score; for iOS/Android the security configuration framework levels). A platform with no enrolled device is not required to have a policy."
+      }
+    ],
+    "INT-1.4": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Deployment > Starting point > Apply Application Protection Policies (APP) for data protection",
+        "ItemTitle": "Apply Application Protection Policies (APP) for data protection: One Intune APP per mobile device platform (Windows, iOS/iPadOS, and Android).",
+        "Url": "https://learn.microsoft.com/en-us/security/zero-trust/zero-trust-identity-device-access-policies-common#deployment",
+        "Relation": "Subset",
+        "Why": "Satisfied requires an assigned APP for iOS/iPadOS and for Android, which is the iOS/iPadOS and Android part of Microsoft's one-APP-per-platform recommendation.",
+        "Unchecked": "The Windows APP (MAM for Windows); the policy contents (the Data Protection Framework Level 1/2/3 settings the page points to); that the policies target all mobile users and the Core Microsoft Apps."
+      }
+    ],
+    "INT-1.5": [
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.1",
+        "ItemTitle": "Allow Archive Scanning (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node AllowArchiveScanning to be set by at least one assigned Antivirus policy and set to an accepted value (Allowed (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.2",
+        "ItemTitle": "Allow Behavior Monitoring (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node AllowBehaviorMonitoring to be set by at least one assigned Antivirus policy and set to an accepted value (Allowed (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.3",
+        "ItemTitle": "Allow Cloud Protection (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node AllowCloudProtection to be set by at least one assigned Antivirus policy and set to an accepted value (Allowed (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.4",
+        "ItemTitle": "Allow Email Scanning (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node AllowEmailScanning to be set by at least one assigned Antivirus policy and set to an accepted value (Allowed (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.5",
+        "ItemTitle": "Allow Full Scan Removable Drive Scanning (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node AllowFullScanRemovableDriveScanning to be set by at least one assigned Antivirus policy and set to an accepted value (Allowed (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.6",
+        "ItemTitle": "Allow On Access Protection (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node AllowOnAccessProtection to be set by at least one assigned Antivirus policy and set to an accepted value (Allowed (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.7",
+        "ItemTitle": "Allow Realtime Monitoring (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node AllowRealtimeMonitoring to be set by at least one assigned Antivirus policy and set to an accepted value (Allowed (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.8",
+        "ItemTitle": "Allow scanning of all downloaded files and attachments (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node AllowIOAVProtection to be set by at least one assigned Antivirus policy and set to an accepted value (Allowed (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.9",
+        "ItemTitle": "Allow Script Scanning (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node AllowScriptScanning to be set by at least one assigned Antivirus policy and set to an accepted value (Allowed (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.27",
+        "ItemTitle": "Check For Signatures Before Running Scan (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node CheckForSignaturesBeforeRunningScan to be set by at least one assigned Antivirus policy and set to an accepted value (Enabled (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.28",
+        "ItemTitle": "Cloud Block Level (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node CloudBlockLevel to be set by at least one assigned Antivirus policy and set to an accepted value (High (2) or High plus (4) or Zero tolerance (6)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.29",
+        "ItemTitle": "Cloud Extended Timeout (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node CloudExtendedTimeout to be set by at least one assigned Antivirus policy and set to an accepted value (an integer from 1 to 50) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.30",
+        "ItemTitle": "Days Until Aggressive Catchup Quick Scan (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node DaysUntilAggressiveCatchupQuickScan to be set by at least one assigned Antivirus policy and set to an accepted value (an integer from 7 to 7) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.32",
+        "ItemTitle": "Enable Dynamic Signature Dropped Event Reporting (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node EnableDynamicSignatureDroppedEventReporting to be set by at least one assigned Antivirus policy and set to an accepted value (Reported (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.33",
+        "ItemTitle": "Enable File Hash Computation (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node EnableFileHashComputation to be set by at least one assigned Antivirus policy and set to an accepted value (Enable (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.34",
+        "ItemTitle": "Enable Network Protection (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node EnableNetworkProtection to be set by at least one assigned Antivirus policy and set to an accepted value (Enabled (block mode) (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.35",
+        "ItemTitle": "Hide Exclusions From Local Users (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node HideExclusionsFromLocalUsers to be set by at least one assigned Antivirus policy and set to an accepted value (Hidden from local users (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.36",
+        "ItemTitle": "Oobe Enable Rtp And Sig Update (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node OobeEnableRtpAndSigUpdate to be set by at least one assigned Antivirus policy and set to an accepted value (Enabled (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.37",
+        "ItemTitle": "PUA Protection (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node PUAProtection to be set by at least one assigned Antivirus policy and set to an accepted value (On (block) (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.38",
+        "ItemTitle": "Quick Scan Include Exclusions (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node QuickScanIncludeExclusions to be set by at least one assigned Antivirus policy and set to an accepted value (Exclusions scanned (1)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.39",
+        "ItemTitle": "Real Time Scan Direction (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node RealTimeScanDirection to be set by at least one assigned Antivirus policy and set to an accepted value (Monitor all files (bi-directional) (0)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.42",
+        "ItemTitle": "Scan Parameter (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node ScanParameter to be set by at least one assigned Antivirus policy and set to an accepted value (Quick scan (1) or Full scan (2)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.43",
+        "ItemTitle": "Schedule Quick Scan Time (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node ScheduleQuickScanTime to be set by at least one assigned Antivirus policy and set to an accepted value (an integer from 1 to 1380) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.44",
+        "ItemTitle": "Schedule Scan Time (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node ScheduleScanTime to be set by at least one assigned Antivirus policy and set to an accepted value (an integer from 1 to 1380) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.45",
+        "ItemTitle": "Schedule Scan Day (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node ScheduleScanDay to be set by at least one assigned Antivirus policy and set to an accepted value (Every day (0) or 1 (1) or 2 (2) or 3 (3) or 4 (4) or 5 (5) or 6 (6) or 7 (7)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.46",
+        "ItemTitle": "Signature Update Interval (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node SignatureUpdateInterval to be set by at least one assigned Antivirus policy and set to an accepted value (an integer from 1 to 4) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.47",
+        "ItemTitle": "Submit Samples Consent (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node SubmitSamplesConsent to be set by at least one assigned Antivirus policy and set to an accepted value (Send safe samples automatically (1) or Send all samples automatically (3)) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.48",
+        "ItemTitle": "Remediation action for Moderate severity threats (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node ThreatSeverityDefaultAction_moderateseveritythreats to be set by at least one assigned Antivirus policy and set to an accepted value (Quarantine or Remove) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.49",
+        "ItemTitle": "Remediation action for High severity threats (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node ThreatSeverityDefaultAction_highseveritythreats to be set by at least one assigned Antivirus policy and set to an accepted value (Quarantine or Remove) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.50",
+        "ItemTitle": "Remediation action for Severe threats (setting name as encoded in Config/cis-intune-defender-av.json; the benchmark's own recommendation title is not reproduced here because the benchmark text is licensed and was not read in this review)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "On the approved-standard path (Config/tp-standards.json IntuneAntivirusBaseline approved and every assigned Antivirus policy's values read), Satisfied requires CSP node ThreatSeverityDefaultAction_severethreats to be set by at least one assigned Antivirus policy and set to an accepted value (Quarantine or Remove) by every assigned policy that sets it, so the item passes; Satisfied also requires the other 29 settings, so the item can pass while INT-1.5 fails.",
+        "Condition": "Holds while Config/tp-standards.json IntuneAntivirusBaseline approves this benchmark; INT-1.5 cannot pass on fewer settings while it does."
+      }
+    ],
+    "INT-2.2": [
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.10",
+        "ItemTitle": "Block abuse of exploited vulnerable signed drivers (Device) (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Block, matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.11",
+        "ItemTitle": "Block Adobe Reader from creating child processes (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Block, matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.12",
+        "ItemTitle": "Block all Office applications from creating child processes (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Audit, Warn or Block (the benchmark's 'Audit or higher'), matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.13",
+        "ItemTitle": "Block credential stealing from the Windows local security authority subsystem (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Block, matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.14",
+        "ItemTitle": "Block executable content from email client and webmail (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Block, matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.15",
+        "ItemTitle": "Block executable files from running unless they meet a prevalence, age, or trusted list criterion (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Audit, Warn or Block (the benchmark's 'Audit or higher'), matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.16",
+        "ItemTitle": "Block execution of potentially obfuscated scripts (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Audit, Warn or Block (the benchmark's 'Audit or higher'), matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.17",
+        "ItemTitle": "Block JavaScript or VBScript from launching downloaded executable content (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Block, matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.18",
+        "ItemTitle": "Block Office applications from creating executable content (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Block, matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.19",
+        "ItemTitle": "Block Office applications from injecting code into other processes (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Block, matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.20",
+        "ItemTitle": "Block Office communication application from creating child processes (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Audit, Warn or Block (the benchmark's 'Audit or higher'), matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.21",
+        "ItemTitle": "Block persistence through WMI event subscription (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Block, matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.22",
+        "ItemTitle": "Block process creations originating from PSExec and WMI commands (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Audit, Warn or Block (the benchmark's 'Audit or higher'), matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.23",
+        "ItemTitle": "Block rebooting machine in Safe Mode (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Block, matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.24",
+        "ItemTitle": "Block untrusted and unsigned processes that run from USB (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Block, matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.25",
+        "ItemTitle": "Block Win32 API calls from Office macros (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Block, matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-DEFENDER-AV-1.0.0",
+        "ItemId": "2.26",
+        "ItemTitle": "Use advanced protection against ransomware (ASR rule name as encoded in Config/asr-required-rules.json; benchmark title not reproduced, licensed text not read)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every rule in Config/asr-required-rules.json (currently the 17 rules of recommendations 2.10-2.26) to be read from the assigned ASR policies in an accepted mode; for this rule the accepted mode is Audit, Warn or Block (the benchmark's 'Audit or higher'), matching the benchmark's mode as encoded. Satisfied therefore passes this item, and the item can pass while INT-2.2 fails on another rule."
+      }
+    ],
+    "PPL-3.1": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Zero Trust Assessment test 35003",
+        "ItemTitle": "Sensitivity labels are configured",
+        "Url": "https://raw.githubusercontent.com/microsoft/zerotrustassessment/main/src/powershell/tests/Test-Assessment.35003.ps1",
+        "Relation": "Stricter",
+        "Why": "35003 passes when Get-Label returns at least one label. PPL-3.1's Satisfied requires SensitivityLabelCount > 0 from Get-Label (or from the Graph label list, whose labels are tenant labels Get-Label also returns), so 35003 passes; PPL-3.1 additionally requires an auto-labeling policy in Mode Enable, so 35003 can pass where PPL-3.1 fails."
+      }
+    ],
+    "PVW-3.4": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Zero Trust Assessment test 35030",
+        "ItemTitle": "Data loss prevention policies are enabled",
+        "Url": "https://raw.githubusercontent.com/microsoft/zerotrustassessment/main/src/powershell/tests/Test-Assessment.35030.ps1",
+        "Relation": "Stricter",
+        "Why": "35030 passes when Get-DlpCompliancePolicy returns at least one policy with Enabled = True. PVW-3.4's Satisfied requires a policy in Mode 'Enable' holding an enabled SIT rule; for DLP policies Microsoft documents enabling and disabling through -Mode (Set-DlpCompliancePolicy has no separate -Enabled; 'Set-DlpCompliancePolicy -Identity MainPII -Mode Disable ... disables the policy'), so a Mode-Enable policy is an enabled policy and 35030 passes. 35030 passes on any enabled policy, including one in test mode or with no SIT rule, where PVW-3.4 fails."
+      }
+    ],
+    "PVW-4.1": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Section 'Purview audit logging is enabled'",
+        "ItemTitle": "Purview audit logging is enabled",
+        "Url": "https://learn.microsoft.com/purview/zero-trust-purview-protect-data#purview-audit-logging-is-enabled",
+        "Relation": "Stricter",
+        "Why": "The recommendation is that audit logging (Turn auditing on or off) stays on; PVW-4.1's Satisfied requires UnifiedAuditLogIngestionEnabled = True plus per-user Audit (Premium) licensing, so it always meets the recommendation while the recommendation can be met where PVW-4.1 fails. (The ZTA test id behind this section was not located; the Learn section is cited.)"
+      }
+    ]
+  },
+  "unmapped": {
+    "AAD-10.4": {
+      "Reason": "The evaluator accepts any enabled policy with any interval and any scope. Near-misses that fail the rule: Zero Trust Assessment checks 'Privileged users have short-lived sign-in sessions' (test 21825: every privileged role covered by an enabled policy with sign-in frequency 4 hours or less) and 'Guests don't have long lived sign-in sessions' (test 21824: a policy targeting guests or external users at 24 hours or less, 1 day, or every time) - a 30-day frequency on one group is Satisfied here and fails both. DISA STIG V-270200 (session lock after 15 minutes of inactivity) is a different setting (idle session timeout), not sign-in frequency. ScubaGear 2.0.0 has no sign-in frequency rule.",
+      "EarnBy": "Add a per-population judgment: for each privileged role, an enabled policy including that role with signInFrequency type hours and value 4 or less (cite ZTA 21825), and for guests an enabled policy with includeGuestsOrExternalUsers and 24 hours or less (cite ZTA 21824). The collector would need to store signInFrequency.type and .value."
+    },
+    "AAD-11.2": {
+      "Reason": "Closest item: Microsoft Zero Trust check 'Guests are not assigned high privileged directory roles' (https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-tenants#guests-are-not-assigned-high-privileged-directory-roles; Zero Trust Assessment test 22128, which fails on any user with userType 'Guest' holding a role whose roleDefinition.isPrivileged is true, active or eligible). It fails the rule on two counts: the evaluator identifies guests by '#EXT#' in the UPN, not by userType, so a userType=Guest account without '#EXT#' (a member converted to guest, or one created as Guest through Graph) holding Global Administrator is Satisfied here and fails the check; and the tool's fixed 18-role list is narrower than Microsoft's isPrivileged set (for example Hybrid Identity Administrator, Domain Name Administrator, External Identity Provider Administrator, Password Administrator), so a guest in one of those roles is Satisfied here and fails the check. ScubaGear 2.0.0 and the DISA Entra ID STIG V1R1 have no guest-in-role rule.",
+      "EarnBy": "Have the roles collector add userType to the principal read and the role definitions' isPrivileged property (Graph v1.0 unifiedRoleDefinition), then flag any principal with userType 'Guest' (keep '#EXT#' as an additional signal) in any role with isPrivileged true, permanent or eligible. That makes it Equivalent to ZTA 22128 (stricter where '#EXT#' members are also flagged)."
+    },
+    "AAD-11.4": {
+      "Reason": "Closest item: Microsoft Zero Trust check 'Token protection policies are configured' (https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-identities#token-protection-policies-are-configured; test 21941). That check passes only on an enabled policy that includes the Windows platform, has secureSignInSession.isEnabled true, includes users (not None), and targets All resources or both Office 365 Exchange Online and the Graph/SharePoint app. The evaluator checks none of the scope conditions, so a token-protection policy on one unrelated app, or without the Windows platform, is Satisfied here and fails the check. ScubaGear 2.0.0 and the DISA STIG have no token-protection rule.",
+      "EarnBy": "Store conditions.platforms.includePlatforms, includeUsers and includeApplications (most already collected) and require, on the matching enabled policy: platform includes windows, includeUsers non-empty and not None, and includeApplications All or both 00000002-0000-0ff1-ce00-000000000000 and 00000003-0000-0ff1-ce00-000000000000. Then cite test 21941 as Equivalent."
+    },
+    "AAD-11.5": {
+      "Reason": "No configuration benchmark recommends CAE strict enforcement as a value. ScubaGear 2.0.0 and the DISA Entra ID STIG V1R1 have no CAE rule; the Learn 'Configure Microsoft Entra for increased security' checks have only 'Network validation is configured through Universal Continuous Access Evaluation', a Global Secure Access feature (Entra Internet/Private Access) that is a different setting. Microsoft's CAE documentation describes strict location enforcement as an option, not a recommended baseline value."
+    },
+    "AAD-11.6": {
+      "Reason": "ScubaGear 2.0.0 section 8 covers guest access, invitations and allowed domains, not inbound trust; the DISA Entra ID STIG V1R1 has no cross-tenant rule; the Zero Trust checks include only 'Outbound cross-tenant access settings are configured' (outbound B2B collaboration blocked by default), a different setting, and 'Guest access is protected by strong authentication methods', which suggests accepting the MFA claim for vetted partners rather than recommending it off. No benchmark states the default inbound-trust value the evaluator requires."
+    },
+    "AAD-11.7": {
+      "Reason": "Closest item: Microsoft Zero Trust check 'Conditional Access policies for Privileged Access Workstations are configured' (https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-engineering-systems#conditional-access-policies-for-privileged-access-workstations-are-configured; test 21830). It passes only when BOTH an enabled policy targeting an isPrivileged role requires compliantDevice AND an enabled policy targeting an isPrivileged role uses a device filter in exclude mode with a block grant. The evaluator passes on either one alone, on a hybrid-join requirement, on a device filter of any mode or grant, and on a policy including any one role (privileged or not), so Satisfied can fail the check. Microsoft's CA template 'Require compliant or hybrid joined device for administrators' is also narrower than the match. ScubaGear and the DISA STIG have no rule.",
+      "EarnBy": "Require both policies the check names: enabled, includeRoles containing a privileged role, grant containing compliantDevice; and enabled, includeRoles containing a privileged role, deviceFilter mode 'exclude', grant block. The collector needs to keep the device filter mode."
+    },
+    "AAD-11.8": {
+      "Reason": "ScubaGear 2.0.0 and the Zero Trust checks have no Terms of Use item. Near-miss: DISA STIG V-270209 (ENTR-ID-000150) requires the DOD Notice and Consent banner in the company branding sign-in page text, a different setting (organizational branding signInPageText), not a CA Terms of Use grant; a tenant with a ToU policy and no banner passes here and fails the STIG.",
+      "EarnBy": "Not this control: V-270209 would need a separate check of /organization/{id}/branding signInPageText for the banner text (DoD tenants only)."
+    },
+    "AAD-11.9": {
+      "Reason": "Closest item: Microsoft Zero Trust check 'Workload Identities are configured with risk-based policies' (https://learn.microsoft.com/entra/fundamentals/zero-trust-response-remediation#workload-identities-are-configured-with-risk-based-policies), whose remediation is 'Create a risk-based Conditional Access policy for workload identities'. Microsoft's automated test 21883 passes on any enabled block policy that includes service principals, which the evaluator's Satisfied state meets, but the published recommendation is a risk-based policy and the evaluator does not read the service-principal risk condition: a location-only workload identity policy is Satisfied here and is not what the recommendation asks for. Because the risk condition is the substance of the item, it is not cited. ScubaGear and the DISA STIG have no rule.",
+      "EarnBy": "Store conditions.servicePrincipalRiskLevels and require a non-empty value on the matching enabled policy (grant block); then cite the check as Equivalent."
+    },
+    "AAD-12.2": {
+      "Reason": "Closest item: Microsoft Zero Trust check 'Inactive guest identities are disabled or removed from the tenant' (https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-tenants#inactive-guest-identities-are-disabled-or-removed-from-the-tenant; test 21858: fails on any enabled guest whose lastSuccessfulSignInDateTime, or creation date when none, is more than 90 days ago). It fails the rule because the evaluator uses lastSignInDateTime, the last interactive attempt successful or not, so a guest with a failed interactive attempt last week and no successful sign-in for a year is Satisfied here and fails the check. DISA STIG V-270204 (disable accounts after 35 days of inactivity) is stricter than the 90-day threshold, so Satisfied can fail it. ScubaGear 2.0.0 has no inactive-guest rule.",
+      "EarnBy": "In the guest read, compute staleness from signInActivity.lastSuccessfulSignInDateTime (as the member read already does), fall back to createdDateTime for never-signed-in guests, and judge enabled guests only (disabled guests can be reported but not scored). That makes it Equivalent to ZTA 21858. A 35-day threshold over enabled members and guests would be needed for V-270204."
+    },
+    "AAD-12.3": {
+      "Reason": "Near-miss: DISA STIG V-270204 (ENTR-ID-000090) audits enabled users whose last sign-in is older than 35 days (or never signed in and created more than 35 days ago). The evaluator's 90-day threshold is looser and it ignores unlicensed members, so an account idle for 60 days is Satisfied here and a finding under the STIG. The Zero Trust checks cover inactive guests and stale privileged identities, not all members; ScubaGear 2.0.0 has no inactive-account rule.",
+      "EarnBy": "A STIG-mode threshold of 35 days over all enabled members (licensed or not) would earn V-270204 as Subset (guests would still be AAD-12.2's); keep the 90-day verdict for non-DoD tenants."
+    },
+    "AAD-13.1": {
+      "Reason": "Secure Score is Microsoft's own scoring of many settings, not a configuration setting, and no benchmark sets a Secure Score threshold. ScubaGear 2.0.0, the DISA STIGs and the Zero Trust checks have no such item; 'All Microsoft Entra recommendations are addressed' is a different signal (Entra recommendations, not Secure Score)."
+    },
+    "AAD-3.3": {
+      "Reason": "ScubaGear 2.0.0 section 7 (MS.AAD.7.1-7.9) has no rule on MFA at PIM activation; the DISA Entra ID STIG V1R1 rules list none (V-270255 is PIM notifications, V-270335 is permanent assignments); the Microsoft Zero Trust Assessment checks on Learn ('Configure Microsoft Entra for increased security') have no activation-MFA check. Near-miss: Microsoft Zero Trust 'Phase 1 - Secure the identity control plane', Step 6 'Configure activation settings' (https://learn.microsoft.com/security/zero-trust/adopt/implement-privileged-access-identity#configure-activation-settings) says to set 'Require MFA on activation' for each privileged role. It fails the rule because the evaluator also scores Satisfied when only a Conditional Access authentication context is required on activation (collector: RequiresMFA = mfaViaEnablement -or mfaViaAuthCtx), and the CA policy behind that context is never read, so it may require only terms of use or a compliant device, not MFA. The PIM deployment plan's table is labeled 'example settings', not a recommendation.",
+      "EarnBy": "Credit the authentication-context path only when an enabled CA policy targeting that context (conditions.applications.includeAuthenticationContextClassReferences) requires mfa or an authentication strength, or score Satisfied only from 'MultiFactorAuthentication' in enabledRules. Then cite the Zero Trust Phase 1 Step 6 'Require MFA on activation' item as Subset (unchecked: privileged roles the organization identifies beyond the tool's 17-role list)."
+    },
+    "AAD-3.6": {
+      "Reason": "No benchmark states a firm maximum PIM activation duration that 8 hours meets. ScubaGear 2.0.0 and the DISA Entra ID STIG V1R1 have no activation-duration rule, and the Zero Trust Assessment checks have none. Near-misses: Zero Trust Phase 1 Step 6 says 'Set maximum activation duration (for example: 1-4 hours for high-impact roles)', an example, and looser than the evaluator's 8-hour threshold would need to be to pass it (a 6-hour setting is Satisfied here and outside 1-4 hours); the PIM deployment plan shows 'example settings' (Global Administrator one hour, Exchange Admin two hours). Neither is a stated recommended value the 8-hour Satisfied state always meets.",
+      "EarnBy": "Not a small change: Microsoft gives only examples. If the owner adopts the Zero Trust 1-4 hour range as the requirement for the high-impact roles, tighten the threshold to 4 hours for those roles and cite Zero Trust Phase 1 Step 6 as Subset; note the collector's 'PT(\\d+)H' parse returns null for minute-only durations such as PT30M, which the evaluator then reports as not assessed."
+    },
+    "AAD-8.2": {
+      "Reason": "ScubaGear 2.0.0 has no access-review rule; the DISA Entra ID STIG V1R1 has none; the Learn 'Configure Microsoft Entra for increased security' checks have none for role reviews. The Zero Trust Assessment repository has a test 21855 'Privileged roles have access reviews' but it is unimplemented ('Planned for future release', skipped as UnderConstruction) and is not published on the Learn page, so it has no audit to match. The ID Governance deployment guide says 'Create access reviews for Global Administrators' without a configuration value, and the evaluator would pass on a review of any single role, not necessarily Global Administrator.",
+      "EarnBy": "If Microsoft publishes 21855 with criteria, read each review's scope (role definition ids) and recurrence (settings.recurrence) and require that every privileged role, at minimum Global Administrator, is covered by a recurring review."
+    },
+    "DEF-2.1": {
+      "Reason": "Not cited: the only candidate (Microsoft preset security policies) is a statement that presets apply the Standard or Strict settings, not a setting row, and the evaluator credits a preset whose Defender for Office 365 rule is off.",
+      "EarnBy": "Require both the EOP and the ATP rule of the same preset to be Enabled (when Defender for Office 365 is licensed) so that the Safe Links and Safe Attachments rows are covered too."
+    },
+    "DEF-4.3": {
+      "Reason": "ScubaGear MS.SECURITYSUITE.4.1v1 lists seven required alerts (suspicious email sending patterns, suspicious connector activity, suspicious email forwarding, messages delayed, tenant restricted from sending unprovisioned email, tenant restricted from sending email, potentially malicious URL click); none concerns OAuth consent (confirmed in the 2026-09-30 review; respected). Microsoft's default alert policy list (https://learn.microsoft.com/defender-xdr/alert-policies) contains no consent or OAuth alert, and the recommended-settings page has no alert rows. The match is also by name, so a citation would rest on wording rather than a setting.",
+      "EarnBy": "None known."
+    },
+    "DEF-4.6": {
+      "Reason": "No ScubaGear 2.0.0 rule covers phishing simulation or training. Microsoft Learn Attack simulation training articles (get started, training campaigns, FAQ) describe how to run campaigns but state no recommended configuration or frequency. It is an operational activity, not a tenant setting, so no configuration benchmark in the allowed list applies.",
+      "EarnBy": "None known."
+    },
+    "DEF-5.1": {
+      "Reason": "Microsoft's Tenant Allow/Block List articles (tenant-allow-block-list-about, -email-spoof-configure, -urls-configure) document that allow entries default to 45 days after last use and can be set to never expire, but make no recommendation against never-expiring allows. Near-misses that fail the rule because they audit different objects: ScubaGear MS.SECURITYSUITE.6.2v1 ('Allowed domains SHALL NOT be added to inbound anti-spam protection policies.', the anti-spam policy's AllowedSenderDomains) and MS.SECURITYSUITE.8.1v1 ('IP allow lists SHOULD NOT be created.', the connection filter). The recommended-settings page has no Tenant Allow/Block List row.",
+      "EarnBy": "None known."
+    },
+    "DNS-1.5": {
+      "Reason": "NIST SP 800-177 Rev. 1 Section 5.2.7 'Reporting TLS Errors to Senders' describes SMTP TLS Reporting (RFC 8460) and Table 5-4 lists its tags, but no Security Recommendation (5-1 to 5-5) asks for it; Security Recommendation 5-3 concerns signaling TLS (DANE/MTA-STS), not reporting. CISA BOD 18-01 requires STARTTLS on mail servers, SPF and DMARC p=reject, HTTPS/HSTS on web hosts and removal of SSLv2/SSLv3/3DES/RC4; it says nothing about this record or setting, so it is not a benchmark for this control."
+    },
+    "DNS-2.2": {
+      "Reason": "NIST SP 800-177 Rev. 1 does not mention CAA (searched the full text); CISA BOD 18-01 does not either. RFC 8659 defines the record but is supporting context, not a benchmark. ScubaGear has no DNS-record baseline beyond SPF/DKIM/DMARC in its EXO baseline."
+    },
+    "DNS-2.3": {
+      "Reason": "NIST SP 800-177 Rev. 1 Section 5.2.2 discusses X.509 certificate validity and revocation without recommending a renewal margin, and its Security Recommendations 5-1 to 5-5 concern TLS versions, STARTTLS, DANE/MTA-STS and certificate authentication, not expiry. CISA BOD 18-01 requires HTTPS and STARTTLS but sets no expiry margin. The 90-day figure is NRG's."
+    },
+    "DNS-2.4": {
+      "Reason": "NIST SP 800-177 Rev. 1 does not mention Certificate Transparency (searched the full text), and CISA BOD 18-01 does not either. RFC 6962 defines CT but is supporting context. The allowlist is a built-in list of public CAs, not an organization-approved one, so even a CT-monitoring benchmark item would not be met."
+    },
+    "EXO-2.3": {
+      "Reason": "ScubaGear 2.0.0 EXO and SECURITYSUITE baselines have no POP3/IMAP rule (MS.EXO.5.1v1 is SMTP AUTH only). The Microsoft EOP/Defender recommended-settings page has no protocol row. Microsoft Learn 'POP3 and IMAP4 in Exchange Online' and 'Mailbox plans in Exchange Online' describe how to disable it but state no recommended value. Near-miss: 'Best practices for configuring the Built-in security add-on for on-premises mailboxes' (https://learn.microsoft.com/exchange/standalone-eop/best-practices-for-configuring-eop, Recommended settings > Other settings, row 'POP connectivity to mailbox': Standard Disabled, Strict Disabled). The setting and value match the evaluator exactly, but that page's scope is standalone EOP protecting on-premises mailboxes, not Exchange Online cloud mailboxes, so citing it here would stretch its scope. Not cited; the owner may decide to accept it as Microsoft's stated recommendation (it would be Equivalent on the setting). DISA has no public Exchange Online STIG (the Exchange 2019 STIGs are for on-premises servers and are outside the allowed list).",
+      "EarnBy": "None in the evaluator; the obstacle is the source's scope, not the check."
+    },
+    "EXO-2.4": {
+      "Reason": "Same as EXO-2.3: no ScubaGear 2.0.0 rule, no row on the EOP/Defender recommended-settings page. Near-miss: 'Best practices for configuring the Built-in security add-on for on-premises mailboxes' (https://learn.microsoft.com/exchange/standalone-eop/best-practices-for-configuring-eop, Other settings, row 'IMAP connectivity to mailbox': Standard Disabled, Strict Disabled). Identical setting and value, but the page is scoped to standalone EOP for on-premises mailboxes, so it is not cited for Exchange Online mailboxes.",
+      "EarnBy": "None in the evaluator; the obstacle is the source's scope."
+    },
+    "EXO-2.6": {
+      "Reason": "Near-miss: Microsoft 'About shared mailboxes in Microsoft 365' (https://learn.microsoft.com/microsoft-365/admin/email/about-shared-mailboxes, Before creating a shared mailbox > Access and permissions, item 'Signing in': 'Always block sign-in for the shared mailbox account and keep it blocked.'), also stated in 'Block sign-in for shared mailbox accounts in Microsoft 365 Lighthouse'. The setting matches (accountEnabled false), but Satisfied can fail it: when AAD-Users is unavailable, or a mailbox UPN is not in AAD-Users, the collector falls back to the LicenseReconciliationNeeded/SkuAssigned heuristic and a mailbox whose account is enabled but unlicensed is never flagged, so the control can report Satisfied with sign-in enabled. No ScubaGear 2.0.0 rule covers shared mailboxes.",
+      "EarnBy": "Report Satisfied only when every shared mailbox's account state was read from AAD-Users (accountEnabled false for each); when any mailbox fell back to the license heuristic or was not found in AAD-Users and nothing was flagged, report NotApplicable. Then it can cite the 'About shared mailboxes' Signing-in recommendation as Equivalent."
+    },
+    "EXO-3.2": {
+      "Reason": "The Microsoft recommended-settings page, Outbound spam policy settings table, recommends RecipientLimitExternalPerHour 500 (Standard) / 400 (Strict), RecipientLimitInternalPerHour 1000/800, RecipientLimitPerDay 1000/800, ActionWhenThresholdReached BlockUser; the evaluator reads none of them. Its row 'Notify these users and groups if a sender is blocked due to sending outbound spam (NotifyOutboundSpam and NotifyOutboundSpamRecipients)' recommends Not selected for Standard and Strict and says to rely on the default alert policy 'User restricted from sending email' instead; the evaluator's NotifyOutboundSpam branch scores Satisfied on the value Microsoft recommends against, so the row cannot be cited (the alert-policy branch matches the comment, but a comment is not a recommended value). ScubaGear MS.SECURITYSUITE.4.1v1 lists seven required alerts, and 'User restricted from sending email' is not among them ('Tenant restricted from sending email' is a different, tenant-level alert).",
+      "EarnBy": "Judge every in-force outbound spam policy for RecipientLimitExternalPerHour 1..500, RecipientLimitInternalPerHour 1..1000, RecipientLimitPerDay 1..1000 (0 means service default and fails) and ActionWhenThresholdReached = BlockUser; keep the notification half as context. Then cite those four rows of the Outbound spam policy settings table as Equivalent at the Standard column."
+    },
+    "EXO-4.1": {
+      "Reason": "Near-miss: ScubaGear MS.SECURITYSUITE.5.2v1 'Audit logs SHALL be retained and searchable for a minimum of 3 months and retrievable for a minimum of 12 months.' Two problems: the control never establishes 12-month retrievability, and Satisfied is emitted even when custom audit retention policies were not read, in which case a policy could shorten Exchange records below 3 months and the item fails. The control also covers Exchange record types only. The 2026-09-30 SCuBA review removed the old MS.DEFENDER.6.3v1 reference because the evaluator read AuditLogAgeLimit; the evaluator has since changed, but it still does not earn 5.2. No Microsoft recommended-settings row; Microsoft documents default retention (180 days / 1 year) as behavior, not a recommendation.",
+      "EarnBy": "Return NotApplicable when Purview AuditRetentionPolicies were not read. That would allow a Subset citation of MS.SECURITYSUITE.5.2v1 for the 'searchable for 3 months' half for Exchange record types only (12-month retrievability and other record types unchecked)."
+    },
+    "EXO-8.1": {
+      "Reason": "ScubaGear 2.0.0 EXO and SECURITYSUITE baselines have no connector rule (MS.SECURITYSUITE.8.1v1 is the connection-filter IP allow list, a different object). The Microsoft recommended-settings page has no connector rows; the Learn connector articles describe configuration options without recommended values. No allowed benchmark states a TLS or scoping requirement for Exchange Online connectors.",
+      "EarnBy": "None known."
+    },
+    "EXO-9.1": {
+      "Reason": "No ScubaGear 2.0.0 rule covers mailbox holds or retention policies (MS.SECURITYSUITE.5.2v1 is audit-log retention). The Microsoft recommended-settings page has no retention row. Microsoft Learn retention and hold articles describe the features but state no recommended configuration value.",
+      "EarnBy": "None known."
+    },
+    "EXO-9.2": {
+      "Reason": "Microsoft Learn ('Change how long permanently deleted items are kept for an Exchange Online mailbox', 'Exchange Online limits', 'Mailbox plans in Exchange Online') documents 14 days as the default and 30 as the maximum, and uses 30 in examples, but never recommends it. No ScubaGear 2.0.0 rule.",
+      "EarnBy": "None known."
+    },
+    "INT-1.3": {
+      "Reason": "Searched Microsoft's Zero Trust 'Recommended compliance settings for Windows 10 and later' table, the Windows MDM security baseline (BitLocker section), and DISA Windows 11 STIG. The Zero Trust table recommends BOTH 'Require BitLocker = Require' and 'Require encryption of data storage on device = Require'; INT-1.3 is Satisfied with either one, so a policy setting only storage encryption passes INT-1.3 and fails the 'Require BitLocker' row (and vice versa). The Windows security baseline and the DISA Windows 11 STIG BitLocker rule audit the encryption configuration or state on the device, not a compliance-policy rule, which is a different setting.",
+      "EarnBy": "Require BitLockerEnabled = true in every assigned Windows compliance policy (report storageRequireEncryption as context only). That would allow a Subset/Equivalent citation of the Zero Trust row 'Device health > Windows Health Attestation Service evaluation rules > Require BitLocker: Require'; requiring both flags would also earn the 'Require encryption of data storage on device: Require' row."
+    },
+    "INT-2.1": {
+      "Reason": "Searched the Microsoft Defender for Endpoint security baseline and Windows MDM security baseline settings lists, the CIS Intune Defender AV benchmark (Config/cis-intune-defender-av.json), and Microsoft's Zero Trust common policies. No item audits that an EDR onboarding policy is assigned; the Defender for Endpoint baseline audits specific Defender settings (for example sample sharing, telemetry reporting frequency) that INT-2.1 does not read. The Zero Trust Windows compliance row 'Require the device to be at or under the machine-risk score: Medium' is a compliance-policy setting, a different setting.",
+      "EarnBy": "Read the EDR policy's settings (sample sharing, onboarding blob type) or the onboarded-device state; even then the matching baseline rows would be value checks on the Defender for Endpoint baseline, which would need encoding like the AV catalog."
+    },
+    "INT-2.3": {
+      "Reason": "The Windows MDM security baseline (Firewall section: Enable Domain/Private/Public Network Firewall = True, default inbound action Block, and so on) audits setting values; INT-2.3 reads none, so a Firewall policy that turns the firewall off is Satisfied. The Zero Trust Windows compliance row 'Firewall: Require' is a compliance-policy rule, a different setting.",
+      "EarnBy": "Read the assigned Firewall policy's settings (Settings Catalog vendor_msft_firewall_mdmstore_{domain,private,public}profile_enablefirewall and default inbound action) and require them enabled/Block; that would allow Subset citations of the Windows MDM security baseline Firewall rows."
+    },
+    "INT-2.4": {
+      "Reason": "Microsoft's Zero Trust common policies page gives recommended compliance settings for Windows, iOS/iPadOS and Android only, not macOS; no Microsoft-published macOS compliance baseline with a FileVault value was found, and ScubaGear has no Intune baseline. CIS Apple macOS and DISA macOS STIG FileVault rules audit the device's FileVault state, not an Intune compliance-policy rule, so they are a different setting."
+    },
+    "INT-2.5": {
+      "Reason": "No allowed benchmark audits the existence of an update ring. No Windows Update deferral or deadline row was found in the Windows MDM security baseline settings lists reviewed; DISA Windows 11 STIG patch rules audit the device's patch level. Any update-ring benchmark item would audit values (deferral days, deadlines) that INT-2.5 does not read."
+    },
+    "INT-3.1": {
+      "Reason": "Searched Microsoft's Intune enrollment guidance, Zero Trust common policies and the security configuration framework pages: Microsoft documents the enrollment restriction options but publishes no recommended value set. The control is Satisfied by any single restriction on any one platform, so it could not pass a value-specific item anyway."
+    },
+    "INT-3.2": {
+      "Reason": "No allowed benchmark audits that an app configuration policy exists. Microsoft's app configuration guidance (for example Outlook or Edge managed configuration) documents keys without recommending the existence of a policy as a security baseline, and the control reads no key or value."
+    },
+    "INT-3.3": {
+      "Reason": "Near-miss: Microsoft's App Protection Data Protection Framework, Level 2 Conditional launch, 'Device conditions | Min OS version | Format: Major.Minor.Build / Block access' (iOS/iPadOS) and 'Format: Major.Minor / Block access' (Android), with the note recommending the N-1 major version. INT-3.3 accepts any version (for example 9.0 on iOS), so a Satisfied verdict can fail the item's recommended value. Level 1 does not list Min OS version at all.",
+      "EarnBy": "Compare MinimumRequiredOsVersion per platform with an approved minimum (current major minus one) held in Config/tp-standards.json; with that, a Subset citation of the Level 2 Min OS version rows for iOS/iPadOS and Android would hold."
+    },
+    "INT-4.1": {
+      "Reason": "Near-miss: the Windows MDM security baseline (version 24H2) LAPS row 'Backup Directory' = 'Backup the password to Azure AD only'. INT-4.1 does not read the backup directory, so a LAPS policy set to Disabled backup or Active Directory is Satisfied and fails that row.",
+      "EarnBy": "Read the assigned LAPS policy's BackupDirectory (LAPS CSP Policies/BackupDirectory) and require Microsoft Entra ID (1); then a Subset citation of the Windows security baseline 'Backup Directory' row holds."
+    },
+    "INT-4.2": {
+      "Reason": "The Windows MDM security baseline's Windows Hello for Business section lists only 'Facial Features Use Enhanced Anti Spoofing' = true, which INT-4.2 does not read. Microsoft's Configure Windows Hello for Business page explains the tenant-wide policy is usually disabled and recommends no state for it. No allowed benchmark audits the tenant-wide enrollment policy state."
+    },
+    "INT-4.3": {
+      "Reason": "Microsoft's Zero Trust Windows compliance table lists 'Minimum OS version' with no value ('Enter appropriate values ... based on your IT and security policies'), so it states no recommended configuration value. The 90% compliance rate is an NRG threshold no allowed benchmark states. One policy with any minimum version satisfies the first half."
+    },
+    "INT-4.4": {
+      "Reason": "Microsoft's iOS/iPadOS and Android security configuration framework pages set 'Require a password' in DEVICE RESTRICTION profiles (for example iOS personal Level 1, Password > Require a password = Yes), a different setting from a compliance-policy passcode rule. The Zero Trust page's compliance table covers Windows only ('Require a password to unlock mobile devices: Require' is in the Windows table). In addition, platforms are taken from the policies, not the enrolled devices, so a tenant with enrolled iOS devices and only Android policies is Satisfied.",
+      "EarnBy": "Derive the platforms from enrolled-device counts (as INT-1.1 does) so every enrolled mobile platform needs a passcode-requiring compliance policy; even then a citation would need a Microsoft item that audits the compliance rule rather than the device restriction."
+    },
+    "PPL-3.2": {
+      "Reason": "ScubaGear 2.0.0 MS.SECURITYSUITE.3.2v1 lists Exchange, OneDrive, SharePoint, Teams chat and Devices, not the Copilot location. Zero Trust Assessment 35030 'Data loss prevention policies are enabled' needs an enabled policy, but PPL-3.2 counts disabled and test-mode policies (the collector records Enabled but the evaluator never filters on it), so its Satisfied can fail 35030. Microsoft's Copilot pages ('Configure a secure and governed foundation for Microsoft Copilot', 'Learn about using Microsoft Purview DLP to protect interactions with Microsoft 365 Copilot') describe when to create a Copilot-location DLP policy ('If yes, setup...'), conditionally, with no recommended value. Not cited.",
+      "EarnBy": "Count only Copilot-location policies with Mode = 'Enable' (drop the name-only match and the broad 'Applications' match unless the location is confirmed as Microsoft 365 Copilot) and require an enabled rule; that would make PPL-3.2 Stricter than ZTA 35030. No benchmark item specific to the Copilot DLP location was found."
+    },
+    "PPL-3.3": {
+      "Reason": "The 95% threshold is the tool's own heuristic. No ScubaGear 2.0.0 item, DISA STIG rule or Microsoft-published recommended configuration sets a limit on the share of users licensed for Microsoft 365 Copilot; Microsoft's Copilot deployment guidance describes per-user licensing, not a recommended scope. Not cited."
+    },
+    "PPL-3.4": {
+      "Reason": "Manual control with no verdict. ScubaGear 2.0.0 powerplatform (MS.POWERPLATFORM.1.1-6.1) mentions Power Virtual Agents only in its introduction and has no item on agent publishing channels or authentication; no Zero Trust Assessment Purview test covers Copilot Studio. Not cited."
+    },
+    "PVW-2.2": {
+      "Reason": "ScubaGear 2.0.0 (securitysuite, powerplatform) has no communication compliance item. The only Microsoft-published recommendation found is Zero Trust Assessment test 35039 'Communication compliance monitoring is configured for Microsoft Copilot' (Get-SupervisoryReviewPolicyV2 / Get-SupervisoryReviewRule -IncludeRuleXml): it passes only when an enabled policy has a rule that captures Copilot interactions and a ReviewMailbox. PVW-2.2 is Satisfied by any policy that is not explicitly disabled, with no Copilot scope and no Enabled = $true requirement (unknown counts), so its Satisfied can fail 35039. Not cited.",
+      "EarnBy": "To cite ZTA 35039 (Equivalent), read Get-SupervisoryReviewRule -IncludeRuleXml, require a policy with Enabled = $true, a rule whose XML includes the Copilot interaction location, and a ReviewMailbox; keep the generic 'any policy' check as context only."
+    },
+    "PVW-2.3": {
+      "Reason": "No allowed benchmark states a recommended information-barriers mode. ScubaGear 2.0.0 securitysuite and powerplatform have no information-barriers item; Microsoft's Zero Trust Assessment Purview tests (35001-35041) and 'Implementing Zero Trust with Microsoft Purview' mention information barriers only as an option to 'consider' with no configured value. The Learn information-barriers pages describe the modes and the legacy-to-new migration, which is feature documentation, not a recommended configuration. Not cited."
+    },
+    "PVW-2.4": {
+      "Reason": "The control never reaches a verdict, so no item can be audited by it. Near-miss: Zero Trust Assessment test 35038 'Insider Risk Management policies are enabled for risky AI usage' passes when Get-InsiderRiskPolicy returns a policy with Enabled = $true and OptInDrpForDlp = $true (Adaptive Protection). ScubaGear 2.0.0 has no insider-risk item.",
+      "EarnBy": "Microsoft's own Zero Trust Assessment reads Get-InsiderRiskPolicy from Security & Compliance PowerShell, so the evaluator's claim that IRM policies are 'not exposed to the APIs this assessment uses' is out of date (CLAUDE.md lists this as untried). Add a Purview section reading Get-InsiderRiskPolicy (Name, Enabled, OptInDrpForDlp) with SectionStatus; Satisfied when an enabled policy opts in to Adaptive Protection would be Equivalent to ZTA 35038; 'an enabled policy exists' alone would not earn it."
+    },
+    "PVW-2.5": {
+      "Reason": "Near-miss: Zero Trust Assessment test 35028 'Email retention policies are configured' passes only when a retention policy has Enabled = $true AND a non-empty ExchangeLocation read with Get-RetentionCompliancePolicy -DistributionDetail. PVW-2.5 counts disabled policies and judges the Workload property, which the ZTA test's own comment says 'always shows all workloads regardless of actual scope'. So PVW-2.5 can be Satisfied by a disabled policy, or by a policy not actually scoped to Exchange, and fail 35028. ScubaGear 2.0.0 has no content-retention item (5.2 is audit-log retention). Not cited.",
+      "EarnBy": "Collect with -DistributionDetail, count only policies with Enabled = $true, and judge coverage from the ExchangeLocation / SharePointLocation / OneDriveLocation / TeamsChannelLocation (or TeamsChatLocation) properties rather than Workload; then PVW-2.5's Exchange component would be Stricter than ZTA 35028. Also worth verifying independently: if Workload really lists every workload regardless of scope, PVW-2.5 can pass today on a tenant whose only retention policy covers one workload."
+    },
+    "PVW-2.6": {
+      "Reason": "Near-miss: Zero Trust Assessment test 35020 'Auto-labeling policies are in enforcement mode' (Learn: 'turn on at least one auto-labeling policy') passes only when a policy has Enabled = $true AND Mode = 'Enable'. Set-AutoSensitivityLabelPolicy documents -Enabled and -Mode as separate parameters, and the Purview collector stores only Name and Mode, so PVW-2.6 can be Satisfied by a Mode-Enable policy whose Enabled is False and fail 35020. ScubaGear 2.0.0 has no auto-labeling item. Not cited.",
+      "EarnBy": "Store Enabled from Get-AutoSensitivityLabelPolicy (through Get-TPObjectField, null when absent) and require Enabled = $true with Mode = 'Enable' for Satisfied (an absent Enabled from older results: not assessed). PVW-2.6 would then be Equivalent to ZTA 35020."
+    },
+    "PVW-3.2": {
+      "Reason": "Manual control with no verdict. No allowed benchmark prescribes eDiscovery role assignment or case readiness: ScubaGear 2.0.0 has no eDiscovery item, and the Zero Trust Assessment Purview tests (35001-35041) include none. Not cited."
+    },
+    "PVW-3.3": {
+      "Reason": "Manual control with no verdict, and reviewing Compliance Manager improvement actions is a process, not a configuration value. No ScubaGear 2.0.0 or Microsoft secure-configuration item covers it. Not cited."
+    },
+    "PVW-4.4": {
+      "Reason": "No allowed benchmark recommends configuring record-declaring retention labels: ScubaGear 2.0.0 has no records-management item, the Zero Trust Assessment Purview tests (35001-35041) have none, and 'Implementing Zero Trust with Microsoft Purview' says only that records management 'supports additional restrictions' for high-value content, with no configured value. Not cited."
+    },
+    "SPO-1.5": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. ScubaGear 2.0.0 has no unmanaged-device rule for SharePoint. Near-miss: Microsoft 'Recommended policies for Microsoft 365 workloads' (https://learn.microsoft.com/security/zero-trust/zero-trust-identity-device-access-policies-workloads), section 'Configure SharePoint access control to limit access by unmanaged devices', step 1: configure 'Allow limited, web-only access' or 'Block access' for unmanaged devices. That is the setting SPO-1.5 reads, but the evaluator also scores AuthenticationContext Satisfied, a value the recommendation does not list, so a Satisfied finding can fail it. Not cited.",
+      "EarnBy": "Treat ConditionalAccessPolicy = AuthenticationContext as not assessed (or Gap) instead of Satisfied. Then cite the Zero Trust step as Subset: unchecked would be step 2 (sites included in access control through Set-SPOSite -ConditionalAccessPolicy) and confirmation that the Conditional Access policy SharePoint creates is On."
+    },
+    "SPO-2.1": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. No ScubaGear 2.0.0 rule covers OneDrive sync restriction. Near-miss: Microsoft 'How SharePoint and OneDrive safeguard your data in the cloud' (https://learn.microsoft.com/sharepoint/safeguarding-your-data) lists 'Allow syncing only on computers joined to specific domains' as one way to limit download to untrusted devices. It is an option list, not a recommended configuration value, and the feature page says it applies only to Active Directory domains and points Entra-joined devices to Conditional Access instead. Not a benchmark under the brief's rule."
+    },
+    "SPO-2.3": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. The control judges no setting, so no benchmark item can be cited regardless of topic (no Satisfied state exists to pass an audit). ScubaGear 2.0.0 has no SharePoint app-store rule; its Teams app rules (MS.TEAMS.5.x) are Teams, not SharePoint.",
+      "EarnBy": "Collect the SharePoint store setting (Get-SPOTenant / app catalog settings) and judge it; even then no allowed benchmark states a value for it today."
+    },
+    "SPO-2.4": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. ScubaGear 1.x had a custom-script rule (MS.SHAREPOINT.4.2v1) but ScubaGear 2.0.0 contains no MS.SHAREPOINT.4.x rule; the id list in Config/framework-baselines/scuba-ids-v2.0.0.txt confirms it. The control judges no setting, so nothing can be cited.",
+      "EarnBy": "Enumerate sites (Get-SPOSite DenyAddAndCustomizePages) to give a real verdict; even then no allowed source in scope today audits it."
+    },
+    "SPO-2.8": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. Same near-miss as SPO-2.1: Microsoft 'How SharePoint and OneDrive safeguard your data in the cloud' mentions the domain-joined sync restriction as an option, without a recommended value, and the feature page itself steers Entra-joined fleets to Conditional Access. Not a benchmark item."
+    },
+    "SPO-3.1": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. The control judges no setting. No ScubaGear 2.0.0 or Microsoft baseline item audits site collection administrator counts."
+    },
+    "SPO-3.2": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. No ScubaGear 2.0.0 rule covers resharing notifications. Microsoft 'Turn on OneDrive file activity notifications' (https://learn.microsoft.com/sharepoint/turn-on-external-sharing-notifications) describes the setting but states no recommended value. (CIS v7.0.0 is out of scope for this exercise.)"
+    },
+    "SPO-3.3": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. Near-misses on Microsoft Learn: 'Plan version storage on document libraries' (https://learn.microsoft.com/sharepoint/plan-version-storage) marks the Automatic setting '(Recommended)', and 'Overview of version history limits for document libraries and OneDrive' (https://learn.microsoft.com/sharepoint/document-library-version-history-limits), 'Types of version limits' note 1: 'any value less than 100 versions or less than 30 days expiration time limits isn't recommended'. SPO-3.3 scores a manual setting with 100+ versions Satisfied without reading the expiration, so 100 versions with a 7-day expiration passes SPO-3.3 and fails the note; and a manual setting fails 'Automatic (Recommended)'. Not cited.",
+      "EarnBy": "In manual mode also require ExpireVersionsAfterDays = 0 (no expiration) or >= 30; the collector already reads ExpireVersionsAfterDays (Invoke-TPCollectSharePoint.ps1). Then the version-history-limits note could be cited as Equivalent (automatic, or >= 100 versions with no or >= 30-day expiration)."
+    },
+    "SPO-4.1": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. ScubaGear 2.0.0 has no rule for it. Microsoft 'Set the OneDrive retention for deleted users' (https://learn.microsoft.com/sharepoint/set-retention) and 'OneDrive retention and deletion' give the range (30-3650) and default (30) but no recommended value. The 365-day threshold is NRG's own."
+    },
+    "TMS-1.5": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. ScubaGear 2.0.0 Teams rules on recording (MS.TEAMS.1.6v1 'Meeting recording SHOULD be disabled', MS.TEAMS.1.7v2 'Record an event SHOULD NOT be set to Always record') audit different settings. No Microsoft page states a recommended retention configuration for recording locations."
+    },
+    "TMS-1.6": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. Near-misses: CISA ScubaGear MS.AAD.8.2v1 'Only users with the Guest Inviter role SHOULD be able to invite guest users' and Microsoft 'Secure external access to Microsoft Teams, SharePoint, and OneDrive with Microsoft Entra ID' (https://learn.microsoft.com/entra/architecture/9-secure-access-teams-sharepoint), 'Guest invite settings': 'It's recommended that administrators and users, in the Guest Inviter role, can invite.' Both audit allowInvitesFrom, but TMS-1.6 is Satisfied whenever Teams guest access is off, without reading allowInvitesFrom, so a tenant where everyone can invite guests passes TMS-1.6 and fails both. MS.AAD.8.2v1 is already cited by AAD-4.1, which judges allowInvitesFrom directly. Not cited.",
+      "EarnBy": "Judge allowInvitesFrom in every branch (Teams guest off no longer sufficient alone). That would let TMS-1.6 cite MS.AAD.8.2v1 (Equivalent or Stricter, depending on whether ScubaGear's check accepts 'none') but would make it duplicate AAD-4.1; the cleaner route is to leave the citation with AAD-4.1."
+    },
+    "TMS-2.1": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. ScubaGear 2.0.0 dropped its Skype rules (no MS.TEAMS.3.x in the id list). The control judges no setting."
+    },
+    "TMS-2.5": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. The control judges no setting. MS.TEAMS.1.6v1 (meeting recording disabled) and MS.TEAMS.1.7v2 (event recording not Always) audit different settings."
+    },
+    "TMS-2.6": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. No ScubaGear 2.0.0 Teams rule and no Microsoft recommended-settings page addresses channel meeting scheduling."
+    },
+    "TMS-3.1": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. No ScubaGear rule. Near-miss: Microsoft 'Configure Teams meetings with protection for highly sensitive data' (https://learn.microsoft.com/microsoftteams/configure-meetings-highly-sensitive-protection) table row 'Apply a watermark to shared content: On, Location: Label, Enforced: Yes'. That recommendation is enforced by a meeting sensitivity label for highly sensitive meetings, not by the admin policy, and 'Use Teams meeting templates, sensitivity labels, and admin policies together' says a label enforces watermarks even when the admin policy is Off. The admin toggle only makes the option available, so it is a different setting. Not cited."
+    },
+    "TMS-3.4": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. Near-miss: CISA ScubaGear MS.SECURITYSUITE.3.2v1 requires one enabled rule in an Enable-mode policy matching SSN, ITIN and Credit Card Number, with location All for Exchange, OneDrive, SharePoint, Teams and Devices (docs/TP-SCUBA-ALIGNMENT.md, DEF-4.1 note). A Teams-only policy, or one whose rules match other types, passes TMS-3.4 and fails 3.2. Microsoft's highly-sensitive meeting guidance 'Prevent copying chat content to clipboard' is a sensitivity-label setting, not DLP. Not cited.",
+      "EarnBy": "Restricting Satisfied to an Enable-mode policy whose enabled rule matches SSN, ITIN and Credit Card Number with Teams location All would allow MS.SECURITYSUITE.3.2v1 as Subset (unchecked: the other four locations); DEF-4.1/DEF-4.5 already carry that rule, so this is likely not worth it."
+    },
+    "TMS-4.1": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. ScubaGear's recording rules (MS.TEAMS.1.6v1, 1.7v2) audit whether recording is allowed, not expiration. Microsoft documents a 120-day default but states no recommended value. Note: the control's Description says 60-90 days but the evaluator accepts any positive value, so even a benchmark naming 60-90 days could not be cited without tightening the evaluator."
+    },
+    "TMS-4.4": {
+      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. No ScubaGear 2.0.0 rule covers event attendee access (MS.TEAMS.1.7v2 is event recording; MS.TEAMS.1.2v2 is anonymous users starting meetings). No Microsoft recommended-settings page states a value for EventAccessType or TownhallEventAttendeeAccess."
+    }
+  }
+}

@@ -174,9 +174,9 @@
       "CitedIdStatus": "current",
       "MigrationNewId": null,
       "Current": "MS.AAD.3.7v1",
-      "Relation": "Equivalent",
+      "Relation": "Partial",
       "RequirementStrength": "SHOULD",
-      "Note": "Managed or compliant devices required."
+      "Note": "The baseline text asks for a compliant or hybrid-joined device. ScubaGear's automated check passes only a grant of exactly compliantDevice OR domainJoinedDevice; the NRG evaluator also credits a policy requiring a compliant device alone (it checks combined coverage, client app types and narrowing), so a tenant can pass here and fail ScubaGear's check. Reviewed 2026-10-26."
     },
     {
       "Control": "AAD-3.1",
@@ -822,10 +822,10 @@
       "CitedBefore": "MS.DEFENDER.6.1v1",
       "CitedIdStatus": "migrated",
       "MigrationNewId": "MS.SECURITYSUITE.5.1v1",
-      "Current": null,
-      "Relation": "Unsupported",
-      "RequirementStrength": "",
-      "Note": "Audit (Premium) is not the unified audit logging requirement (5.1); PVW-1.1 is the NRG equivalent. Obsolete reference removed; the NRG control stays."
+      "Current": "MS.SECURITYSUITE.5.1v1",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Reviewed 2026-10-26: PVW-4.1 now scores Satisfied only when UnifiedAuditLogIngestionEnabled = True is read from the Exchange Online session, the setting 5.1 audits, beside Audit (Premium) licensing for every licensed member user; so every pass meets 5.1 and the control is stricter. PVW-1.1 remains the direct unified-audit-log control."
     },
     {
       "Control": "PVW-4.2",
@@ -980,6 +980,28 @@
       "Relation": "Equivalent",
       "RequirementStrength": "SHALL",
       "Note": "External federation restricted to allowed domains."
+    },
+    {
+      "Control": "DEF-2.4",
+      "Title": "Phishing Directed to Quarantine Not Junk",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.SECURITYSUITE.6.1v1",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-26: phishing directed to quarantine in every policy in force covers the phishing half of \"spam and phishing are not delivered to the inbox\" (6.1), the same basis on which DEF-2.5 cites it for high-confidence spam."
+    },
+    {
+      "Control": "INT-1.2",
+      "Title": "Non-Compliant Device Access Blocked via CA",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.AAD.3.7v1",
+      "Relation": "Partial",
+      "RequirementStrength": "SHOULD",
+      "Note": "Added 2026-10-26: the same judgment as AAD-2.3 (Get-TPCADeviceComplianceCoverage). ScubaGear's automated check passes only a grant of exactly compliantDevice OR domainJoinedDevice; a compliant-only policy passes here and fails that check."
     }
   ]
 }

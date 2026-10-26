@@ -789,7 +789,8 @@ Describe 'Newly implemented controls — EXO-3.4, TMS-3.4, SPO-2.5, PPL-1.3' {
         It 'Satisfied when an enabled DLP policy targets Teams' {
             Set-TPRawData -Key 'Purview' -Data (Raw 'Purview' @{
                 DLPPolicies=@([pscustomobject]@{ Name='Teams PII'; Enabled=$true; Mode='Enable'
-                                                 Workloads=@('Teams','Exchange') }) })
+                                                 Workloads=@('Teams','Exchange') })
+                DLPRules=@([pscustomobject]@{ Name='R1'; ParentPolicyName='Teams PII'; Disabled=$false }) })
             (V 'Test-TPControlTeamsChatCopy' 'TMS-3.4').State | Should -Be 'Satisfied'
         }
         It 'Partial when a Teams DLP policy exists but is not enabled' {

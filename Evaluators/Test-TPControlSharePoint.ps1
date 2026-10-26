@@ -210,6 +210,13 @@ function Test-TPControlSharePoint {
                 -Detail 'Unmanaged devices get full access to SharePoint and OneDrive, including download and sync.' `
                 -CurrentValue 'ConditionalAccessPolicy = AllowFullAccess' -RequiredValue 'AllowLimitedAccess (browser-only) or BlockAccess' `
                 -Remediation $c.Remediation -FrameworkIds $cit
+        } elseif ($cap15 -eq 'AuthenticationContext') {
+            # The restriction lives in whatever Conditional Access policy targets
+            # that authentication context, which the tool does not read; Microsoft's
+            # recommended values are AllowLimitedAccess or BlockAccess.
+            Add-TPFinding -ControlId 'SPO-1.5' -State 'NotApplicable' -Category 'SharePoint' -Title $c.Title -FrameworkIds $cit `
+                -Detail "Unmanaged device access is delegated to an authentication context (ConditionalAccessPolicy = AuthenticationContext); what it restricts depends on the Conditional Access policy that targets the context, which is not read, so it is not assessed." `
+                -CurrentValue 'ConditionalAccessPolicy = AuthenticationContext'
         } elseif ($restricting15) {
             Add-TPFinding -ControlId 'SPO-1.5' -State 'Satisfied' -Category 'SharePoint' -Title $c.Title -Severity 'Informational' `
                 -CurrentValue "ConditionalAccessPolicy = $cap15" -FrameworkIds $cit
@@ -565,10 +572,29 @@ function Test-TPControlSPOVersionHistory {
             -Detail 'Automatic version-history trimming is the org default (EnableAutoExpirationVersionTrim = $true). New document libraries keep an intelligent version set — files can be rolled back after ransomware encryption.' `
             -CurrentValue 'Automatic version expiration (intelligent retention)'
     } elseif ($majorLimit -ge 100) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "The org default keeps $majorLimit major versions per file — adequate for ransomware recovery (>= 100)." `
-            -CurrentValue "MajorVersionLimit = $majorLimit"
+        # Manual limits keep versions by count AND by age. Microsoft: fewer than
+        # 100 versions or an expiration under 30 days "isn't recommended"
+        # (SharePoint version history limits); 0 means versions never expire.
+        $expireRaw = Get-TPObjectField -Item $sp -Key 'ExpireVersionsAfterDays' -Default $null
+        $expireDays = 0
+        if ($null -eq $expireRaw -or -not [int]::TryParse([string]$expireRaw, [ref]$expireDays)) {
+            $unread = Get-TPSpoShellUnread -Shell $sp -Keys 'ExpireVersionsAfterDays'
+            Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+                -Detail "The org default keeps $majorLimit major versions per file, but how long they are kept was not read. $unread"
+        } elseif ($expireDays -eq 0 -or $expireDays -ge 30) {
+            $age = if ($expireDays -eq 0) { 'kept without an age limit' } else { "kept for $expireDays days" }
+            Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+                -Detail "The org default keeps $majorLimit major versions per file, $age — adequate for ransomware recovery (>= 100 versions, no expiration or >= 30 days)." `
+                -CurrentValue "MajorVersionLimit = $majorLimit, ExpireVersionsAfterDays = $expireDays"
+        } else {
+            Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
+                -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+                -Detail "The org default keeps $majorLimit major versions per file, but versions expire after $expireDays days. Microsoft does not recommend an expiration under 30 days: an encryption noticed later than that cannot be rolled back." `
+                -CurrentValue "MajorVersionLimit = $majorLimit, ExpireVersionsAfterDays = $expireDays" `
+                -RequiredValue 'Automatic version trimming, or >= 100 major versions with no expiration or >= 30 days' `
+                -Remediation $ctrl.Remediation
+        }
     } else {
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
             -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `

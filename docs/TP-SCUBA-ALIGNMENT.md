@@ -10,8 +10,8 @@ Checked against **ScubaGear 2.0.0** and its official migration file (`PowerShell
 
 | Relation | Meaning | Citations |
 |---|---|---|
-| Equivalent | The NRG evaluator checks the same requirement. | 24 |
-| Partial | The NRG evaluator covers part of the requirement, or a stricter or looser form of it. Read the note. | 42 |
+| Equivalent | The NRG evaluator checks the same requirement. | 23 |
+| Partial | The NRG evaluator covers part of the requirement, or a stricter or looser form of it. Read the note. | 46 |
 | Manual | The NRG control is manual or advisory; it asserts nothing about the rule. | 3 |
 | Unsupported | The NRG control does not establish this requirement. The citation stays only where the current id still exists, flagged; an obsolete id with no equivalent was removed. | 18 |
 
@@ -31,7 +31,6 @@ The old rule id no longer exists and the migrated range does not describe what t
 | EXO-3.5 Transport Rules Changes Audited | `MS.DEFENDER.6.1v1` | Transport-rule change auditing is not unified audit logging (5.1). Obsolete reference removed; the NRG control stays. |
 | EXO-4.1 Mailbox Audit Log Age Limit Sufficient | `MS.DEFENDER.6.3v1` | The mailbox audit log age limit no longer governs retention (Purview does). Obsolete reference removed; the NRG control stays. |
 | EXO-4.4 Anti-Spam Inbound Policy Properly Configured | `MS.DEFENDER.1.2v1` | SCuBA 2.0 has no rule for the anti-spam inbound policy settings NRG checks. Obsolete reference removed; the NRG control stays. |
-| PVW-4.1 Microsoft Purview Audit (Premium) Enabled | `MS.DEFENDER.6.1v1` | Audit (Premium) is not the unified audit logging requirement (5.1); PVW-1.1 is the NRG equivalent. Obsolete reference removed; the NRG control stays. |
 
 ## Equivalent
 
@@ -41,7 +40,6 @@ The old rule id no longer exists and the migrated range does not describe what t
 | AAD-1.2 MFA Required for All Users | `MS.AAD.3.2v2` | SHALL | `MS.AAD.3.2v1` (migrated) | v1 was renumbered to v2 in the migration file with the same requirement (MFA for all users). NRG also judges registration separately. |
 | AAD-10.2 Privileged Accounts Use Dedicated Cloud-Only Accounts | `MS.AAD.7.3v1` | SHALL | same | Privileged accounts are cloud-only and dedicated. |
 | AAD-11.1 Device Code Authentication Flow Blocked | `MS.AAD.3.9v1` | SHOULD | same | Device code flow blocked (for all users on all applications). |
-| AAD-2.3 Device Compliance Enforced via CA | `MS.AAD.3.7v1` | SHOULD | same | Managed or compliant devices required. |
 | AAD-3.5 PIM GA Activation Requires Approval | `MS.AAD.7.6v1` | SHALL | same | Global Administrator activation requires approval. |
 | AAD-4.1 Guest Invite Permissions Restricted | `MS.AAD.8.2v1` | SHOULD | same | Only Guest Inviters can invite guests. |
 | AAD-4.3 B2B Guest Default Permissions Restricted | `MS.AAD.8.1v1` | SHOULD | same | Guest directory access limited. |
@@ -78,6 +76,10 @@ The old rule id no longer exists and the migrated range does not describe what t
 | DEF-2.2 Zero-Hour Auto Purge Enabled | `MS.SECURITYSUITE.1.2v1` | SHALL | `MS.DEFENDER.1.2v1` (migrated) | Zero-hour auto purge is how mail is reviewed after delivery (1.2); SCuBA states the capability, NRG verifies the setting for spam, phishing and malware. |
 | DEF-2.3 Anti-Malware Common Attachments Blocked | `MS.SECURITYSUITE.1.1v1` | SHALL | `MS.EXO.9.1v2` (migrated) | SCuBA requires click-to-run attachments (at minimum .exe, .cmd, .vbe) blocked. NRG verifies the attachment filter and, once approved, the blocked-type list. |
 | DEF-2.5 High Confidence Spam to Quarantine | `MS.SECURITYSUITE.6.1v1` | SHALL | `MS.DEFENDER.1.1v1` (migrated) | High-confidence spam to quarantine overlaps "spam and phishing are not delivered to the inbox" (6.1). |
+| AAD-2.3 Device Compliance Enforced via CA | `MS.AAD.3.7v1` | SHOULD | same | Reviewed 2026-10-26: ScubaGear's automated check passes only a grant of exactly compliant device OR hybrid-joined device; NRG also credits a compliant-device-only policy, so a tenant can pass here and fail ScubaGear's check. |
+| DEF-2.4 Phishing Directed to Quarantine Not Junk | `MS.SECURITYSUITE.6.1v1` | SHALL | added 2026-10-26 | Phishing to quarantine in every policy in force covers the phishing half of "spam and phishing are not delivered to the inbox" (6.1), as DEF-2.5 covers the high-confidence spam half. |
+| INT-1.2 Non-Compliant Device Access Blocked via CA | `MS.AAD.3.7v1` | SHOULD | added 2026-10-26 | The same judgment as AAD-2.3, with the same difference from ScubaGear's automated check. |
+| PVW-4.1 Microsoft Purview Audit (Premium) Enabled | `MS.SECURITYSUITE.5.1v1` | SHALL | `MS.DEFENDER.6.1v1` (migrated), re-added 2026-10-26 | PVW-4.1 now passes only when `UnifiedAuditLogIngestionEnabled = True` is read from the Exchange Online session, the setting 5.1 audits, beside Audit (Premium) licensing; stricter than 5.1. PVW-1.1 remains the direct unified-audit-log control. |
 | DEF-3.4 Defender Alert Email Notifications Configured | `MS.SECURITYSUITE.4.2v1` | SHOULD | `MS.DEFENDER.5.2v1` (migrated) | Alerts sent to a monitored address: NRG judges recipients and, once configured, the NRG monitoring address. |
 | DEF-4.2 DLP Policy Uses Sensitive Information Types | `MS.SECURITYSUITE.3.1v1` | SHALL | `MS.DEFENDER.4.1v2` (migrated) | SCuBA requires the policy to block named types (card numbers, ITIN, SSN and others); NRG verifies detection of sensitive information types in enforcing rules and reports blocking only when read. |
 | DEF-4.5 Endpoint DLP Policy Active on Managed Devices | `MS.SECURITYSUITE.3.2v1` | SHOULD | `MS.DEFENDER.4.2v1` (migrated) | Devices are one of the locations SCuBA 3.2 lists, and 3.2 also needs one enabled rule matching SSN, ITIN and Credit Card Number; NRG checks endpoint DLP on managed devices. |

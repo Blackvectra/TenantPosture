@@ -305,9 +305,14 @@ Describe 'Baseline controls judge every component of the expected state' {
             $r = Get-TPAvSettings -Settings @(@{ settingDefinitionId = 'device_vendor_msft_policy_config_defender_allowcloudprotection'; choiceSettingValue = @{ value = 'device_vendor_msft_policy_config_defender_allowcloudprotection_9' } })
             $r.CloudProtection | Should -Be 'Unknown:9'
         }
-        It 'all three on: Satisfied' {
+        It 'all three on: Satisfied while no benchmark is approved' {
+            Mock -ModuleName TenantPosture Get-TPIntuneAvBaseline { $null }
             & $script:SetAv @((& $script:AvPol 'Read' $script:On))
             (& $script:V15i).State | Should -Be 'Satisfied'
+        }
+        It 'all three on with the benchmark approved but its values not stored: not assessed, never Satisfied' {
+            & $script:SetAv @((& $script:AvPol 'Read' $script:On))
+            $v = & $script:V15i; $v.State | Should -Be 'NotApplicable'; $v.Detail | Should -Match 'the approved standard'
         }
         It 'a policy that turns a setting off is a Partial shortfall' {
             $s = [ordered]@{ RealTimeProtection = 'On'; CloudProtection = 'Off'; PuaProtection = 'On' }
