@@ -73,12 +73,12 @@ plus a `BaselineCompliance` summary (counts by observed state, constraint and di
 
 | Tier | Rows | Checked by the tool | Manual (CIS-<number>) |
 |---|---|---|---|
-| Minimum | 114 | 46 | 68 |
+| Minimum | 114 | 47 | 67 |
 | Standard | 16 | 3 | 13 |
 | Hardened | 59 | 21 | 38 |
-| Assessment-only controls | 134 | | |
+| Assessment-only controls | 133 | | |
 
-All 160 v7.0.0 recommendations are represented; 70 rows are tool-checked controls and 119 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
+All 160 v7.0.0 recommendations are represented; 71 rows are tool-checked controls and 118 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
 
 ## Every assessment control
 
@@ -167,7 +167,7 @@ One row per control in `controls.json`; the tier column is what the test compare
 | DEF-2.5 | High Confidence Spam to Quarantine | Medium | Included (EOP) | — | **Assessment-only** |
 | DEF-2.6 | Bulk Mail Threshold Configured | Low | Included (EOP) | — | **Assessment-only** |
 | EXO-3.1 | Connection Filter Safe List Bypass Disabled | Medium | Included (M365 Business Standard+) | 2.1.13 | **Minimum** |
-| EXO-3.2 | Outbound Spam Sending Limits Configured | Medium | Included (M365 Business Standard+) | — | **Assessment-only** |
+| EXO-3.2 | Outbound Spam Sending Limits Configured | Medium | Included (M365 Business Standard+) | 2.1.15 | **Minimum** |
 | EXO-3.3 | Alert Policy — Email Forwarding Rules | High | Included (M365 Business Standard+) | — | **Assessment-only** |
 | EXO-3.4 | Alert Policy — Unusual Mail Volume | Medium | Included (M365 Business Standard+) | — | **Assessment-only** |
 | EXO-3.5 | Transport Rules Changes Audited | Medium | Included (M365 Business Standard+) | 3.1.1 | **Minimum** |
@@ -308,7 +308,6 @@ Required at their tier, always NotVerified until a control checks them.
 | `CIS-2.1.6` | Ensure Exchange Online Spam Policies are set to notify administrators | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-2.1.10` | Ensure DMARC records for all Exchange Online domains are published | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-2.1.12` | Ensure the connection filter IP allow list is not used | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-2.1.15` | Ensure outbound anti-spam message limits are in place | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-4.1` | Ensure devices without a compliance policy are marked 'not compliant' | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-4.2` | Ensure device enrollment for personally owned devices is blocked by default | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.2.1` | Ensure 'Per-user MFA' is disabled | E3 Level 1 / E5 Level 1 | Minimum |

@@ -472,7 +472,7 @@
     {
       "ControlId": "DNS-1.4",
       "Title": "MTA-STS Policy in Enforce Mode",
-      "Description": "MTA-STS DNS record and HTTPS policy file published with mode: enforce.",
+      "Description": "MTA-STS DNS record and HTTPS policy file published with mode: enforce, with mx: patterns covering every MX host of the domain.",
       "BusinessRisk": "Without MTA-STS, SMTP connections can be TLS-downgraded by on-path attackers, exposing email in transit.",
       "Severity": "Medium",
       "Workload": "DNS",
@@ -480,7 +480,7 @@
       "Automated": true,
       "CollectorDependency": "DNS-EmailRecords",
       "EvaluatorFunction": "Test-TPControlDNSMTASTS",
-      "Remediation": "Publish _mta-sts TXT record and host policy file at https://mta-sts.domain.com/.well-known/mta-sts.txt with mode: enforce.",
+      "Remediation": "Publish _mta-sts TXT record and host policy file at https://mta-sts.domain.com/.well-known/mta-sts.txt with mode: enforce and an mx: line matching every MX host of the domain.",
       "References": {
         "CISControls": [
           "3.10"
@@ -561,7 +561,7 @@
     {
       "ControlId": "DNS-2.1",
       "Title": "DKIM Key Rotation Cadence",
-      "Description": "DKIM signing keys are rotated on a documented cadence (target: <= 365 days) for each sending domain.",
+      "Description": "DKIM signing keys are rotated on a documented cadence (target: <= 365 days) for each sending domain, and are at least 2048 bits.",
       "BusinessRisk": "Long-lived DKIM keys broaden the impact of a key-compromise event and weaken DMARC reliance on DKIM signatures. Microsoft does not auto-rotate customer-managed DKIM keys, so many tenants run keys older than two years.",
       "Severity": "Medium",
       "Workload": "DNS",
@@ -1377,7 +1377,7 @@
     {
       "ControlId": "INT-1.3",
       "Title": "BitLocker Encryption Required on Windows",
-      "Description": "Windows compliance policy requires BitLocker disk encryption.",
+      "Description": "Every assigned Windows compliance policy requires BitLocker (Device Health Attestation: Require BitLocker = Require). Requiring encryption of data storage on the device is a different rule and is not counted.",
       "BusinessRisk": "Unencrypted laptops allow physical theft to result in data breach.",
       "Severity": "High",
       "Workload": "INT",
@@ -1650,7 +1650,7 @@
     {
       "ControlId": "EXO-2.6",
       "Title": "Shared Mailboxes Block Direct Sign-In",
-      "Description": "Shared mailbox accounts are blocked from direct sign-in (no active user account associated).",
+      "Description": "Every shared mailbox account is blocked from direct sign-in, as read from Entra accountEnabled; a mailbox whose account state could not be read leaves the control not assessed.",
       "BusinessRisk": "Shared mailboxes with active accounts can be signed into directly with a password, bypassing MFA. Attackers target shared mailboxes for persistence.",
       "Severity": "High",
       "Workload": "EXO",
@@ -1832,7 +1832,7 @@
     {
       "ControlId": "AAD-3.3",
       "Title": "PIM Requires MFA on Activation",
-      "Description": "PIM role management policies require MFA when users activate an eligible role assignment.",
+      "Description": "PIM role management policies require MFA when users activate an eligible role assignment (Azure MFA in the activation rules, or an authentication context whose Conditional Access policy requires MFA for all users).",
       "BusinessRisk": "Without MFA on activation, a compromised account can silently elevate to Global Admin via PIM with just a password.",
       "Severity": "High",
       "Workload": "AAD",
@@ -2188,7 +2188,7 @@
     {
       "ControlId": "AAD-7.1",
       "Title": "Password Protection Lockout Configured",
-      "Description": "Account lockout threshold is configured at 10 or fewer failed attempts.",
+      "Description": "Account lockout threshold is configured at 10 or fewer failed attempts and the lockout duration at 60 seconds or more.",
       "BusinessRisk": "High lockout thresholds allow extensive brute force attempts before accounts are locked.",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -2245,7 +2245,7 @@
     {
       "ControlId": "DEF-2.1",
       "Title": "Preset Security Policies Applied",
-      "Description": "Microsoft Standard or Strict preset security policy is active, providing baseline Defender configuration.",
+      "Description": "A Microsoft Standard or Strict preset security policy is turned on, with both its EOP rule and its Defender for Office 365 rule Enabled, and applies to every recipient.",
       "BusinessRisk": "Custom-only configurations may miss settings covered by preset policies. Presets provide Microsoft-recommended defaults as a starting floor.",
       "Severity": "Low",
       "Workload": "DEF",
@@ -2455,7 +2455,7 @@
     {
       "ControlId": "EXO-3.2",
       "Title": "Outbound Spam Sending Limits Configured",
-      "Description": "Outbound spam policy is configured with appropriate per-user sending limits and admin notification.",
+      "Description": "Every outbound spam policy in force sets Microsoft's recommended Standard sending limits or lower (500 external and 1000 internal recipients per hour, 1000 recipients per day; 0, the service default, is not a configured limit) and restricts a user who reaches one until an administrator reviews the account (ActionWhenThresholdReached BlockUser). Whether an administrator is alerted is reported as context.",
       "BusinessRisk": "Compromised accounts can send mass phishing without rate limiting. Limits and alerts provide early BEC detection.",
       "Severity": "Medium",
       "Workload": "EXO",
@@ -2463,12 +2463,12 @@
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
       "EvaluatorFunction": "Test-TPControlEXOOutboundLimits",
-      "Remediation": "Keep the default alert policy \"User restricted from sending email\" enabled with an administrator recipient (Defender portal > Policies & rules > Alert policy), or set NotifyOutboundSpam $true with NotifyOutboundSpamRecipients on every outbound spam policy in force: Set-HostedOutboundSpamFilterPolicy -Identity <policy> -NotifyOutboundSpam $true -NotifyOutboundSpamRecipients <admin>.",
+      "Remediation": "On every outbound spam policy in force: Set-HostedOutboundSpamFilterPolicy -Identity <policy> -RecipientLimitExternalPerHour 500 -RecipientLimitInternalPerHour 1000 -RecipientLimitPerDay 1000 -ActionWhenThresholdReached BlockUser (Microsoft Standard; Strict is 400, 800, 800). Keep the default alert policy \"User restricted from sending email\" enabled with an administrator recipient so a restricted user is noticed.",
       "References": {
         "CISControls": [
           "9.7"
         ],
-        "CIS": "",
+        "CIS": "2.1.15",
         "SCuBA": "",
         "NIST": "SI-8, AU-12",
         "CMMC": "SI.L2-3.14.7",
@@ -3183,7 +3183,7 @@
     {
       "ControlId": "PVW-2.5",
       "Title": "Retention Policy Covers Key Workloads",
-      "Description": "Retention policies are configured for Exchange, SharePoint, OneDrive, and Teams.",
+      "Description": "Enabled retention policies include the Exchange mailbox, SharePoint site, OneDrive account and Teams (channel message or chat) locations, judged from each policy's location properties read with -DistributionDetail, never from its Workload property.",
       "BusinessRisk": "Without retention policies, data subject to legal hold cannot be preserved. Data may be deleted before regulatory retention requirements are met.",
       "Severity": "High",
       "Workload": "PVW",
@@ -3213,7 +3213,7 @@
     {
       "ControlId": "PVW-2.6",
       "Title": "Auto-Labeling Policy Active",
-      "Description": "At least one auto-labeling policy automatically applies sensitivity labels to content without user action.",
+      "Description": "At least one auto-labeling policy is turned on (Enabled True) and enforcing (Mode Enable), so sensitivity labels are applied to content without user action.",
       "BusinessRisk": "Manual labeling is inconsistent. Sensitive data without labels is not protected by policies that depend on classification.",
       "Severity": "Medium",
       "Workload": "PVW",
@@ -3305,7 +3305,7 @@
     {
       "ControlId": "INT-2.3",
       "Title": "Windows Firewall Policy Deployed via Intune",
-      "Description": "Windows Defender Firewall is managed and enforced via Intune endpoint security policy.",
+      "Description": "Windows Defender Firewall is managed and enforced via Intune endpoint security policy: the assigned Windows Firewall policies turn on the domain, private and public network firewall.",
       "BusinessRisk": "Without managed firewall policy, users can disable the firewall or create rules that expose services to lateral movement.",
       "Severity": "High",
       "Workload": "INT",
@@ -3640,7 +3640,7 @@
     {
       "ControlId": "EXO-4.1",
       "Title": "Mailbox Audit Log Age Limit Sufficient",
-      "Description": "Mailbox audit log retention is set to at least 90 days (180 days recommended).",
+      "Description": "Mailbox auditing and Unified Audit Log ingestion are on and no custom audit retention policy keeps Exchange audit records for less than 180 days; custom audit retention policies not read leave the control not assessed.",
       "BusinessRisk": "Short audit retention prevents investigation of incidents discovered after the retention window closes. 90 days is the absolute minimum for most IR scenarios.",
       "Severity": "Medium",
       "Workload": "EXO",
@@ -3654,7 +3654,8 @@
           "8.10"
         ],
         "CIS": "",
-        "NIST": "AU-11",
+        "SCuBA": "MS.SECURITYSUITE.5.2v1",
+    "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.2",
         "MITRE": [
           "T1070.008"
@@ -3732,7 +3733,7 @@
     {
       "ControlId": "EXO-4.4",
       "Title": "Anti-Spam Inbound Policy Properly Configured",
-      "Description": "Default inbound anti-spam policy has appropriate action settings for spam, phish, and bulk mail.",
+      "Description": "The default inbound anti-spam policy moves spam to Junk Email or quarantines it (SpamAction), uses a bulk email threshold of 6 or lower (BulkThreshold), and has zero-hour auto purge on for spam and phishing (SpamZapEnabled, PhishZapEnabled).",
       "BusinessRisk": "Misconfigured inbound anti-spam allows higher volumes of spam and phishing to reach user inboxes.",
       "Severity": "Medium",
       "Workload": "EXO",
@@ -3740,7 +3741,7 @@
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
       "EvaluatorFunction": "Test-TPControlEXOAntiSpamInbound",
-      "Remediation": "Set-HostedContentFilterPolicy -Identity Default -SpamAction MoveToJmf -BulkThreshold 6 -ZapEnabled $true",
+      "Remediation": "Set-HostedContentFilterPolicy -Identity Default -SpamAction MoveToJmf -BulkThreshold 6 -SpamZapEnabled $true -PhishZapEnabled $true",
       "References": {
         "CISControls": [
           "9.7"
@@ -4459,7 +4460,7 @@
     {
       "ControlId": "AAD-11.2",
       "Title": "No Guest Accounts in Highly Privileged Roles",
-      "Description": "No guest accounts hold Global Administrator, Privileged Role Administrator, or other highly privileged directory roles.",
+      "Description": "No guest accounts (user type Guest, or #EXT# in the UPN) hold or are eligible for Global Administrator, Privileged Role Administrator, or any other directory role Microsoft marks privileged.",
       "BusinessRisk": "Guest accounts are outside the tenant's identity governance. A compromised guest account holding a privileged role provides tenant-wide administrative access from an uncontrolled identity.",
       "Severity": "Critical",
       "Workload": "AAD",
@@ -4520,7 +4521,7 @@
     {
       "ControlId": "AAD-11.4",
       "Title": "Token Protection (Session Binding) Enforced",
-      "Description": "CA policy enforces token protection to bind tokens to the originating device, blocking replay attacks.",
+      "Description": "CA policy enforces token protection for Exchange Online and SharePoint Online on Windows, binding tokens to the originating device and blocking replay attacks.",
       "BusinessRisk": "AiTM (adversary-in-the-middle) phishing steals authenticated session tokens. Without token binding, stolen tokens work from any device — effectively bypassing MFA entirely.",
       "Severity": "High",
       "Workload": "AAD",
@@ -4609,7 +4610,7 @@
     {
       "ControlId": "AAD-11.7",
       "Title": "Privileged Access Workstation or Device Scope for Admins",
-      "Description": "Conditional Access enforces that privileged role activations or admin operations occur from compliant or specifically designated devices.",
+      "Description": "Conditional Access requires a compliant device for privileged roles and blocks privileged roles on every device outside a designated device filter (privileged access workstations).",
       "BusinessRisk": "Admins authenticating from any arbitrary device — including personal laptops with no endpoint controls — expose privileged credentials to malware on unmanaged endpoints.",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -4666,7 +4667,7 @@
     {
       "ControlId": "AAD-11.9",
       "Title": "Workload Identity Conditional Access Policy",
-      "Description": "CA policies are applied to service principals and managed identities, not just user accounts.",
+      "Description": "A risk-based Conditional Access policy blocks service principals at selected workload identity risk levels.",
       "BusinessRisk": "Without CA policies on workload identities, compromised service principals face no access controls — no location restriction, no risk-based blocking, no session limits.",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -5123,7 +5124,7 @@
     {
       "ControlId": "INT-4.1",
       "Title": "Windows LAPS Deployed via Intune",
-      "Description": "Windows Local Administrator Password Solution (LAPS) is deployed via Intune, generating unique randomized local admin passwords escrowed in Entra ID.",
+      "Description": "Windows Local Administrator Password Solution (LAPS) is deployed via Intune, generating unique randomized local admin passwords escrowed in Entra ID: every assigned Windows LAPS policy sets Backup Directory to Microsoft Entra ID.",
       "BusinessRisk": "Shared or static local admin passwords enable pass-the-hash lateral movement — one compromised endpoint hands the attacker credentials that work on every other endpoint with the same password.",
       "Severity": "High",
       "Workload": "INT",
@@ -5369,7 +5370,7 @@
     {
       "ControlId": "PPL-3.1",
       "Title": "M365 Copilot Sensitivity Label Enforcement",
-      "Description": "Sensitivity labels are published with Files & emails scope and an auto-labeling policy is active, enabling Microsoft 365 Copilot to respect data classification boundaries when grounding on tenant content.",
+      "Description": "Sensitivity labels are configured and an auto-labeling policy is turned on (Enabled True) and enforcing (Mode Enable), enabling Microsoft 365 Copilot to respect data classification boundaries when grounding on tenant content. The labels' Files & emails scope is not checked.",
       "BusinessRisk": "Without sensitivity labels, Copilot can access and surface any data the user can reach — including HR files, financial records, and confidential strategies — with no awareness of sensitivity. Copilot dramatically amplifies over-sharing risk.",
       "Severity": "High",
       "Workload": "PPL",
@@ -5399,7 +5400,7 @@
     {
       "ControlId": "PPL-3.2",
       "Title": "DLP Policy Active for Copilot Interactions",
-      "Description": "At least one enabled Data Loss Prevention policy includes the Microsoft 365 Copilot location, blocking sensitive-information types in Copilot prompts and responses.",
+      "Description": "At least one enforcing Data Loss Prevention policy (Mode Enable) is scoped to the Microsoft 365 Copilot and Copilot Chat location (EnforcementPlanes CopilotExperiences) and has an enabled rule, restricting sensitive content in Copilot prompts and responses.",
       "BusinessRisk": "Without DLP covering Copilot, users can extract sensitive data by prompting Copilot to summarize, translate, or reformat confidential content — bypassing all other data controls.",
       "Severity": "High",
       "Workload": "PPL",
@@ -5554,7 +5555,7 @@
     {
       "ControlId": "AAD-12.2",
       "Title": "Stale Guest Accounts — Named List",
-      "Description": "Identifies guest accounts with no sign-in activity in 90+ days.",
+      "Description": "Identifies enabled guest accounts with no successful sign-in in 90+ days (judged from account creation when none is recorded).",
       "BusinessRisk": "Stale guest accounts from former vendors, contractors, and partners retain access to SharePoint sites, Teams channels, and any resource they were granted. Ex-partners can exfiltrate data months after their engagement ends.",
       "Severity": "High",
       "Workload": "AAD",
@@ -5983,7 +5984,7 @@
     {
       "ControlId": "AAD-14.1",
       "Title": "Application Credentials Current and Short-Lived",
-      "Description": "App registration client secrets and certificates are unexpired and issued with a bounded lifetime.",
+      "Description": "App registration client secrets and certificates are unexpired and issued with a bounded lifetime, and the tenant application management policy caps the lifetime of new ones.",
       "BusinessRisk": "A client secret is a standing bearer credential to everything its application can reach. No MFA applies to it, no Conditional Access evaluates it, and no sign-in risk is scored against it. A long-lived secret keeps working for everyone who has ever seen it — a departed administrator, a stale runbook, a CI variable, a chat message — until somebody rotates it, and nothing forces rotation. An expired credential is the other half of the same problem: the fix under outage pressure is a new secret with the longest lifetime available and no reminder set.",
       "Severity": "High",
       "Workload": "AAD",
@@ -5998,6 +5999,7 @@
           "5.4",
           "6.2"
         ],
+        "SCuBA": "MS.AAD.5.6v1",
         "NIST": "IA-5, IA-5(1), AC-2",
         "CMMC": "IA.L2-3.5.10, AC.L1-3.1.1",
         "MITRE": [

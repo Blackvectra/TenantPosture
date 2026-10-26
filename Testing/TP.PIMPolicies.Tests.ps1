@@ -48,12 +48,12 @@ return @{ value = @() }
 
         function New-Policy {
             param([string]$Id, [string[]]$EnabledRules = @('Justification'), [bool]$AuthCtx = $false,
-                  [bool]$Approval = $false, [string]$MaxDuration = 'PT8H')
+                  [bool]$Approval = $false, [string]$MaxDuration = 'PT8H', [string]$Claim = '')
             @{
                 id = $Id; displayName = 'DirectoryRole'; scopeId = '/'; scopeType = 'DirectoryRole'
                 rules = @(
                     @{ '@odata.type' = '#microsoft.graph.unifiedRoleManagementPolicyEnablementRule'; id = 'Enablement_EndUser_Assignment'; enabledRules = $EnabledRules }
-                    @{ '@odata.type' = '#microsoft.graph.unifiedRoleManagementPolicyAuthenticationContextRule'; id = 'AuthenticationContext_EndUser_Assignment'; isEnabled = $AuthCtx }
+                    @{ '@odata.type' = '#microsoft.graph.unifiedRoleManagementPolicyAuthenticationContextRule'; id = 'AuthenticationContext_EndUser_Assignment'; isEnabled = $AuthCtx; claimValue = $Claim }
                     @{ '@odata.type' = '#microsoft.graph.unifiedRoleManagementPolicyApprovalRule'; id = 'Approval_EndUser_Assignment'; setting = @{ isApprovalRequired = $Approval } }
                     @{ '@odata.type' = '#microsoft.graph.unifiedRoleManagementPolicyExpirationRule'; id = 'Expiration_EndUser_Assignment'; maximumDuration = $MaxDuration }
                 )
@@ -84,11 +84,62 @@ return @{ value = @() }
         $gov.Data.SectionStatus.PIMPolicyAssignments | Should -Be 'Collected'
     }
 
-    It 'counts MFA required via an authentication context as MFA' {
-        Set-Scenario -Policies @((New-Policy 'p-ga' -EnabledRules @('Justification') -AuthCtx $true)) -Assignments @((Asg 'p-ga' $script:GA))
-        (Get-TPRawData -Key 'AAD-IdentityGovernance').Data.PIMRolePolicies[0].RequiresMFA | Should -BeTrue
+    # An authentication context is a label: what it requires is the Conditional
+    # Access policy that targets its claim value. It counts as MFA only when an
+    # enabled policy for everyone requires MFA on that context.
+    It 'counts an authentication context as MFA only when its Conditional Access policy requires MFA of everyone' {
+        $ctxPol = { param([string[]] $Grant, [string] $State = 'enabled', [string[]] $Users = @('All'), [string] $Claim = 'c1')
+            @{ DisplayName = "ctx $Claim"; State = $State
+               Conditions = @{ ClientAppTypes = @('all'); Users = @{ IncludeUsers = $Users; ExcludeUsers = @(); ExcludeGroups = @(); ExcludeRoles = @() }
+                               Applications = @{ Include = @(); Exclude = @(); AuthenticationContext = @($Claim) } }
+               GrantControls = @{ Operator = 'OR'; BuiltInControls = $Grant } } }
+        $setCa = { param([object[]] $Pols) Set-TPRawData -Key 'AAD-CAPolicies' -Data @{ Success = $true; Data = @{ Policies = @($Pols); SectionStatus = @{ PolicyCompleteness = 'Collected' } } } }
+
+        Set-Scenario -Policies @((New-Policy 'p-ga' -EnabledRules @('Justification') -AuthCtx $true -Claim 'c1')) -Assignments @((Asg 'p-ga' $script:GA))
+        $p = (Get-TPRawData -Key 'AAD-IdentityGovernance').Data.PIMRolePolicies[0]
+        $p.RequiresMFA | Should -BeTrue
+        $p.MfaViaEnablement | Should -BeFalse
+        $p.AuthContextEnabled | Should -BeTrue
+        $p.AuthContextClaimValue | Should -Be 'c1'
+
+        & $setCa @((& $ctxPol @('mfa')))
         Test-TPControlAADPIMMFA
         (Verdict 'AAD-3.3').State | Should -Be 'Satisfied'
+
+        Clear-TPFindings; & $setCa @((& $ctxPol @('compliantDevice')))
+        Test-TPControlAADPIMMFA
+        $f = Verdict 'AAD-3.3'
+        $f.State | Should -Be 'Gap' -Because 'a context backed by a compliant-device grant does not require MFA'
+        $f.Detail | Should -Match "authentication context 'c1'"
+
+        Clear-TPFindings; & $setCa @((& $ctxPol @('mfa') -Claim 'c2'))
+        Test-TPControlAADPIMMFA
+        (Verdict 'AAD-3.3').State | Should -Be 'Gap' -Because 'no enabled policy targets c1, so it requires nothing'
+
+        Clear-TPFindings; & $setCa @((& $ctxPol @('mfa') -State 'enabledForReportingButNotEnforced'))
+        Test-TPControlAADPIMMFA
+        (Verdict 'AAD-3.3').State | Should -Be 'Gap' -Because 'a report-only policy enforces nothing'
+
+        Clear-TPFindings; & $setCa @((& $ctxPol @('mfa') -Users @('some-group-id')))
+        Test-TPControlAADPIMMFA
+        (Verdict 'AAD-3.3').State | Should -Be 'Gap' -Because 'a policy for some users leaves the other eligible users without MFA on activation'
+
+        Clear-TPFindings; Set-TPRawData -Key 'AAD-CAPolicies' -Data @{ Success = $false; Data = @{} }
+        Test-TPControlAADPIMMFA
+        (Verdict 'AAD-3.3').State | Should -Be 'NotApplicable' -Because 'the Conditional Access policies were not read'
+    }
+
+    It 'a results file from before the MFA and authentication-context routes were recorded apart is not assessed' {
+        Clear-TPState
+        Set-TPRawData -Key 'AAD-IdentityGovernance' -Data @{ Success = $true; Data = @{ PIMRolePolicies = @(
+            @{ PolicyId = 'p1'; RequiresMFA = $true; RequiresJustification = $true; MaxDurationHours = 8 }) } }
+        Test-TPControlAADPIMMFA
+        (Verdict 'AAD-3.3').State | Should -Be 'NotApplicable'
+        Clear-TPState
+        Set-TPRawData -Key 'AAD-IdentityGovernance' -Data @{ Success = $true; Data = @{ PIMRolePolicies = @(
+            @{ PolicyId = 'p1'; RequiresMFA = $false; RequiresJustification = $true; MaxDurationHours = 8 }) } }
+        Test-TPControlAADPIMMFA
+        (Verdict 'AAD-3.3').State | Should -Be 'Gap' -Because 'neither route on is a Gap whatever the file''s age'
     }
 
     It 'AAD-3.3 scores privileged roles only and names the ones without MFA' {
@@ -160,10 +211,10 @@ Describe 'Role-name resolution guard (AAD-10.2 / AAD-11.2)' {
             $priv = @($Assignments | Where-Object { $_.IsPriv })
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data @{ Success = $true; Data = @{
                 RoleAssignments = $Assignments; PrivRoles = $priv
-                SectionStatus = @{ RoleAssignments = 'Collected' } } }
+                SectionStatus = @{ RoleAssignments = 'Collected'; RoleEligibilitySchedules = 'Collected'; PrivilegedRoleFlags = 'Collected' } } }
         }
         function User([string]$Role, [bool]$Synced, [bool]$Priv = $true) {
-            @{ PrincipalType = '#microsoft.graph.user'; RoleDefinitionName = $Role; OnPremisesSyncEnabled = $Synced
+            @{ PrincipalType = '#microsoft.graph.user'; PrincipalUserType = 'Member'; RoleDefinitionName = $Role; OnPremisesSyncEnabled = $Synced
                PrincipalUPN = 'a@contoso.com'; PrincipalDisplayName = 'A'; IsPriv = $Priv }
         }
         # Microsoft first-party SP holding a hidden internal role: name never resolves.

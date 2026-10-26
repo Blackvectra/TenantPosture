@@ -80,6 +80,10 @@ function Invoke-TPCollectEXOMailboxConfig {
         # Outbound Spam Filter Policies (auto-forward blocking)
         try {
             $policies = @(Get-HostedOutboundSpamFilterPolicy -ErrorAction Stop)
+            $readLimit = { param($p, $k)
+                $v = Get-TPObjectField -Item $p -Key $k -Default $null; $n = 0
+                if ($null -ne $v -and [int]::TryParse([string]$v, [System.Globalization.NumberStyles]::Integer, [cultureinfo]::InvariantCulture, [ref]$n)) { $n } else { $null } }
+            $readText = { param($p, $k) $v = Get-TPObjectField -Item $p -Key $k -Default $null; if ($null -ne $v -and [string]$v) { [string]$v } else { $null } }
             $result.Data.OutboundSpamPolicies = @($policies | ForEach-Object {
                 @{
                     Name                          = [string]$_.Name
@@ -90,10 +94,13 @@ function Invoke-TPCollectEXOMailboxConfig {
                     # EXO-3.2: admin notification on outbound spam (CIS/MDO recommend $true)
                     NotifyOutboundSpam            = [bool](Get-TPObjectField -Item $_ -Key 'NotifyOutboundSpam' -Default $false)
                     NotifyOutboundSpamRecipients  = @(Get-TPObjectField -Item $_ -Key 'NotifyOutboundSpamRecipients' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
-                    ActionWhenThresholdReached    = [string]$_.ActionWhenThresholdReached
-                    RecipientLimitExternalPerHour = [int]($_.RecipientLimitExternalPerHour -as [int])
-                    RecipientLimitInternalPerHour = [int]($_.RecipientLimitInternalPerHour -as [int])
-                    RecipientLimitPerDay          = [int]($_.RecipientLimitPerDay -as [int])
+                    # EXO-3.2: the sending limits, kept as returned. An absent or unreadable
+                    # value stays $null (not read), never 0, which is Exchange's own value
+                    # for "use the service default" and would be judged as such.
+                    ActionWhenThresholdReached    = (& $readText $_ 'ActionWhenThresholdReached')
+                    RecipientLimitExternalPerHour = (& $readLimit $_ 'RecipientLimitExternalPerHour')
+                    RecipientLimitInternalPerHour = (& $readLimit $_ 'RecipientLimitInternalPerHour')
+                    RecipientLimitPerDay          = (& $readLimit $_ 'RecipientLimitPerDay')
                 }
             })
             # Which custom outbound policies actually apply: a custom policy

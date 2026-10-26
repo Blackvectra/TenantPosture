@@ -75,7 +75,20 @@ Describe 'Teams controls read the setting they name' {
         Clear-TPState
         Set-TPRawData -Key 'Purview' -Data @{ Success = $true; Data = @{ SectionStatus = @{ RetentionPolicies = 'Collected' }
             RetentionPolicies = @(@{ Name = 'Mail'; Enabled = $true; Workloads = @('Exchange') }) } }
-        (Verdict 'Test-TPControlTeamsRecordingRetention' 'TMS-1.5').State | Should -Be 'Gap'
+        (Verdict 'Test-TPControlTeamsRecordingRetention' 'TMS-1.5').State | Should -Be 'NotApplicable' -Because 'locations were not read; Workload cannot answer'
+    }
+    It 'TMS-1.5 judges enabled policies by location, never Workload (was: any policy whose Workload listed OneDrive and SharePoint passed)' {
+        $pol = { param($n, $en, $od, $sp, $ad) @{ Name = $n; Enabled = $en; LocationsRead = $true
+            Workloads = @('Exchange', 'SharePoint', 'OneDriveForBusiness', 'Skype', 'ModernGroup')
+            Locations = @{ Exchange = @(); SharePoint = @($sp); OneDriveForBusiness = @($od); TeamsChannel = @(); TeamsChat = @(); AdaptiveScopes = @($ad) } } }
+        $run = { param($p) Clear-TPState
+            Set-TPRawData -Key 'Purview' -Data @{ Success = $true; Data = @{ SectionStatus = @{ RetentionPolicies = 'Collected' }; RetentionPolicies = @($p) } }
+            Verdict 'Test-TPControlTeamsRecordingRetention' 'TMS-1.5' }
+        (& $run @((& $pol 'All' $true 'All' 'All' $null))).State                 | Should -Be 'Satisfied'
+        (& $run @((& $pol 'Mail' $true $null $null $null))).State                | Should -Be 'Gap' -Because 'Workload lists every workload; no location is set'
+        (& $run @((& $pol 'Off' $false 'All' 'All' $null))).State                | Should -Be 'Gap' -Because 'a disabled policy retains nothing'
+        (& $run @((& $pol 'OD' $true 'All' $null $null))).State                  | Should -Be 'Partial'
+        (& $run @((& $pol 'Scoped' $true $null $null 'Execs'))).State            | Should -Be 'NotApplicable' -Because 'adaptive scope membership is not read'
     }
     It 'TMS-3.2 does not pass lobby settings that admit guests or federated users (was: Satisfied)' {
         foreach ($case in @(@('EveryoneInCompany','Partial'), @('InvitedUsers','Partial'), @('EveryoneInSameAndFederatedCompany','Gap'), @('EveryoneInCompanyExcludingGuests','Satisfied'))) {

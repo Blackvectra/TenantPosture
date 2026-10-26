@@ -57,6 +57,9 @@ function Invoke-TPCollectM365Copilot {
             SensitivityLabelsEnabled    = $false
             SensitivityLabelCount       = 0
             AutoLabelPoliciesEnabled    = $false
+            # $true once Get-AutoSensitivityLabelPolicy was read and each policy's Enabled flag
+            # judged beside its Mode; $false when the read did not happen or failed.
+            AutoLabelPoliciesRead       = $false
 
             # DLP coverage for Copilot
             CopilotDLPPolicies          = @()
@@ -225,9 +228,12 @@ function Invoke-TPCollectM365Copilot {
                 $auto = @(Get-AutoSensitivityLabelPolicy -ErrorAction Stop)
                 $result.Data.AutoLabelPoliciesEnabled = (
                     # Simulation modes (TestWithNotifications / TestWithoutNotifications)
-                    # label nothing: only Mode 'Enable' is enforcement.
-                    @($auto | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'Mode' -Default '') -eq 'Enable' }).Count -gt 0
+                    # label nothing: only Mode 'Enable' is enforcement, and Enabled is a
+                    # separate switch (Set-AutoSensitivityLabelPolicy -Enabled), so a
+                    # Mode-Enable policy that is turned off labels nothing either.
+                    @($auto | Where-Object { $_ -and [string](Get-TPObjectField -Item $_ -Key 'Mode' -Default '') -eq 'Enable' -and (Get-TPObjectField -Item $_ -Key 'Enabled' -Default $null) -eq $true }).Count -gt 0
                 )
+                $result.Data.AutoLabelPoliciesRead = $true
             } catch {
                 $result.Errors += "AutoLabelPolicy query failed: $($_.Exception.Message)"
             }

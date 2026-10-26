@@ -167,6 +167,9 @@ function Get-TPPIMScopedPolicies {
                 RoleDefinitionId      = [string]$p.RoleDefinitionId
                 RoleName              = [string](Get-TPObjectField -Item $d -Key 'DisplayName' -Default '')
                 RequiresMFA           = Get-TPObjectField -Item $p -Key 'RequiresMFA'
+                MfaViaEnablement      = Get-TPObjectField -Item $p -Key 'MfaViaEnablement' -Default $null
+                AuthContextEnabled    = Get-TPObjectField -Item $p -Key 'AuthContextEnabled' -Default $null
+                AuthContextClaimValue = [string](Get-TPObjectField -Item $p -Key 'AuthContextClaimValue' -Default '')
                 RequiresJustification = Get-TPObjectField -Item $p -Key 'RequiresJustification'
                 RequiresApproval      = Get-TPObjectField -Item $p -Key 'RequiresApproval'
                 MaxDurationHours      = Get-TPObjectField -Item $p -Key 'MaxDurationHours'
@@ -206,6 +209,18 @@ function Test-TPCAGrantRequires {
     if ($g.Controls.Count -eq 0) { return $false }
     if ($g.Operator -eq 'OR') { return (@($g.Controls | Where-Object { $_ -notin $Any }).Count -eq 0) }
     return (@($g.Controls | Where-Object { $_ -in $Any }).Count -gt 0)
+}
+
+# Is a field present on a collected object, whatever its value? Separates "the
+# collector wrote an empty list" from "a results file from before the field was
+# collected" (Get-TPObjectField returns an empty array as $null, so it cannot).
+function Test-TPFieldPresent {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([AllowNull()] $Item, [Parameter(Mandatory)] [string] $Key)
+    if ($null -eq $Item) { return $false }
+    if ($Item -is [System.Collections.IDictionary]) { return [bool]$Item.Contains($Key) }
+    return ($null -ne $Item.PSObject.Properties[$Key])
 }
 
 function Test-TPCAAllUsers {
@@ -922,26 +937,96 @@ function Test-TPControlAADNoPermanentAdmins {
 }
 
 # ── AAD-3.3 PIM Requires MFA on Activation ───────────────────────────────────
+# PIM offers two routes: "Azure MFA" ('MultiFactorAuthentication' in the
+# enablement rule) and a Conditional Access authentication context. A context
+# is only a label; what it requires is whatever the Conditional Access policy
+# targeting its claim value grants, which may be terms of use or a compliant
+# device. So the context route counts as MFA only when an enabled policy that
+# targets the claim value requires MFA (every grant alternative MFA or an
+# authentication strength) and reaches everyone (Get-TPCAEffectiveCoverage; an
+# authentication-context policy names no application, so that reason is
+# expected). A policy with neither route is a Gap; a context whose backing
+# policy could not be judged, or a results file from before the two routes
+# were recorded apart, is not assessed.
+function Get-TPPIMAuthContextMfa {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $ClaimValue)
+    $ca = Get-TPRawData -Key 'AAD-CAPolicies'
+    if (-not $ca -or (Get-TPObjectField -Item $ca -Key 'Success' -Default $false) -ne $true) {
+        return [pscustomobject]@{ State = 'Unknown'; Why = "Conditional Access policies were not read, so what authentication context '$ClaimValue' requires is not known" }
+    }
+    $pols = @(Get-TPNestedProperty -Object $ca -Path 'Data.Policies' -Default @() | Where-Object { $null -ne $_ })
+    $ctxRead = @($pols | Where-Object { Test-TPFieldPresent -Item (Get-TPNestedProperty -Object $_ -Path 'Conditions.Applications' -Default $null) -Key 'AuthenticationContext' }).Count -eq $pols.Count
+    if ($pols.Count -gt 0 -and -not $ctxRead) {
+        return [pscustomobject]@{ State = 'Unknown'; Why = "the Conditional Access read predates the authentication-context field, so the policy behind '$ClaimValue' could not be identified" }
+    }
+    $targeting = @($pols | Where-Object {
+        [string](Get-TPObjectField -Item $_ -Key 'State' -Default '') -eq 'enabled' -and
+        @(Get-TPNestedProperty -Object $_ -Path 'Conditions.Applications.AuthenticationContext' -Default @()) -contains $ClaimValue })
+    $mfa = @($targeting | Where-Object { Test-TPCAGrantRequires -Policy $_ -Any @('mfa', 'authStrength') })
+    $cov = Get-TPCAEffectiveCoverage -Policies $mfa -RequiredClientAppTypes (Get-TPCAInteractiveClientAppTypes) -Ignore @('applies to no application')
+    switch ($cov.Kind) {
+        'Full' { return [pscustomobject]@{ State = 'Mfa'; Why = "authentication context '$ClaimValue' requires MFA for all users through $(@($cov.FullNames) -join ', ')" } }
+        'Exceptions' { return [pscustomobject]@{ State = 'Unknown'; Why = "the policy requiring MFA for authentication context '$ClaimValue' excludes $(@($cov.Exceptions).Count) principal(s) ($(@($cov.Exceptions) -join ', ')); whether any of them is eligible for the role was not read" } }
+        'Unproven' { return [pscustomobject]@{ State = 'Unknown'; Why = "the policies requiring MFA for authentication context '$ClaimValue' exclude different users or groups and group membership was not resolved" } }
+    }
+    $complete = Test-TPSectionCollected $ca 'PolicyCompleteness'
+    $narrow = @($cov.Narrowed | ForEach-Object { "'$($_.Name)' $($_.Why)" })
+    if (-not $complete) {
+        return [pscustomobject]@{ State = 'Unknown'; Why = "no enabled policy read requires MFA for every user on authentication context '$ClaimValue', but the Conditional Access list could not be proven complete" }
+    }
+    $why = if ($narrow.Count) { "authentication context '$ClaimValue' requires MFA only through a narrower policy ($($narrow -join '; '))" }
+           elseif ($targeting.Count) { "the enabled policy targeting authentication context '$ClaimValue' ($(@($targeting | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'DisplayName' -Default '?') }) -join ', ')) does not require MFA" }
+           else { "no enabled Conditional Access policy targets authentication context '$ClaimValue', so it requires nothing" }
+    return [pscustomobject]@{ State = 'NoMfa'; Why = $why }
+}
+
 function Test-TPControlAADPIMMFA {
     [CmdletBinding()] param()
     $cid = 'AAD-3.3'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
     $gov = Get-TPRawData -Key 'AAD-IdentityGovernance'
     if (-not $gov -or -not $gov.Success -or @($gov.Data['PIMRolePolicies']).Count -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'PIM policy data not collected or PIM not licensed'; return
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'PIM policy data not collected or PIM not licensed'; return
     }
     $sc = Get-TPPIMScopedPolicies -Policies $gov.Data['PIMRolePolicies']
     $scope = if ($sc.Scoped) { 'privileged-role' } else { 'PIM role' }
     $note  = if ($sc.Scoped) { '' } else { ' (Policy-to-role mapping was unavailable, so every role was scored, not only privileged ones.)' }
-    $noMFA = @($sc.Policies | Where-Object { $_.RequiresMFA -eq $false })
-    $unknown = @($sc.Policies | Where-Object { $null -eq $_.RequiresMFA })
-    if ($noMFA.Count -gt 0) {
-        $names = if ($sc.Scoped) { ' Roles: ' + (($noMFA | ForEach-Object { $_.RoleName } | Sort-Object) -join ', ') + '.' } else { '' }
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($noMFA.Count) of $(@($sc.Policies).Count) $scope policy(ies) do not require MFA (or an authentication context) on activation.$names$note" -CurrentValue "$($noMFA.Count) without MFA on activation" -RequiredValue 'MFA or authentication context required on activation' -Remediation $ctrl.Remediation
-    } elseif (@($sc.Policies).Count -eq 0 -or $unknown.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "Activation MFA setting could not be read for $($unknown.Count) $scope policy(ies); not assessed."
+    $label = { param($p) if ($sc.Scoped) { [string](Get-TPObjectField -Item $p -Key 'RoleName' -Default '?') } else { [string](Get-TPObjectField -Item $p -Key 'PolicyId' -Default '?') } }
+    $ctxCache = @{}
+    $viaMfa = @(); $viaCtx = @(); $noMfa = @(); $unknown = @()
+    foreach ($p in @($sc.Policies)) {
+        $req = Get-TPObjectField -Item $p -Key 'RequiresMFA' -Default $null
+        $enab = Get-TPObjectField -Item $p -Key 'MfaViaEnablement' -Default $null
+        $ctxOn = Get-TPObjectField -Item $p -Key 'AuthContextEnabled' -Default $null
+        $claim = [string](Get-TPObjectField -Item $p -Key 'AuthContextClaimValue' -Default '')
+        if ($enab -eq $true) { $viaMfa += $p; continue }
+        if ($req -eq $false) { $noMfa += [pscustomobject]@{ P = $p; Why = 'neither MFA nor an authentication context is required on activation' }; continue }
+        if ($null -eq $req) { $unknown += [pscustomobject]@{ P = $p; Why = 'the activation rules could not be read' }; continue }
+        # RequiresMFA is true but not through the enablement rule: the context route.
+        if ($null -eq $enab -and $null -eq $ctxOn) { $unknown += [pscustomobject]@{ P = $p; Why = 'the results file predates recording the MFA and authentication-context routes apart' }; continue }
+        if ($ctxOn -ne $true) { $noMfa += [pscustomobject]@{ P = $p; Why = 'neither MFA nor an authentication context is required on activation' }; continue }
+        if (-not $claim) { $unknown += [pscustomobject]@{ P = $p; Why = 'an authentication context is required but its claim value was not recorded' }; continue }
+        if (-not $ctxCache.ContainsKey($claim)) { $ctxCache[$claim] = Get-TPPIMAuthContextMfa -ClaimValue $claim }
+        $r = $ctxCache[$claim]
+        switch ($r.State) {
+            'Mfa'   { $viaCtx += $p }
+            'NoMfa' { $noMfa += [pscustomobject]@{ P = $p; Why = $r.Why } }
+            default { $unknown += [pscustomobject]@{ P = $p; Why = $r.Why } }
+        }
+    }
+    $total = @($sc.Policies).Count
+    $ctxNote = if ($viaCtx.Count) { " $($viaCtx.Count) through an authentication context backed by an MFA policy ($((@($ctxCache.Values | Where-Object { $_.State -eq 'Mfa' } | ForEach-Object { $_.Why }) | Sort-Object -Unique) -join '; '))." } else { '' }
+    $why = { param($list) ((@($list | Group-Object Why | ForEach-Object {
+        $names = if ($sc.Scoped) { ' (' + ((@($_.Group | ForEach-Object { & $label $_.P }) | Sort-Object -Unique) -join ', ') + ')' } else { '' }
+        "$($_.Count): $($_.Name)$names" })) -join '; ') }
+    if ($noMfa.Count -gt 0) {
+        $extra = if ($unknown.Count) { " Not assessed for $($unknown.Count) other policy(ies): $(& $why $unknown)." } else { '' }
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($noMfa.Count) of $total $scope policy(ies) do not require MFA on activation. $(& $why $noMfa).$extra$note" -CurrentValue "$($noMfa.Count) without MFA on activation" -RequiredValue 'MFA required on activation (Azure MFA, or an authentication context whose Conditional Access policy requires MFA)' -Remediation $ctrl.Remediation
+    } elseif ($total -eq 0 -or $unknown.Count -gt 0) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "Activation MFA could not be established for $($unknown.Count) $scope policy(ies): $(& $why $unknown). Not assessed.$note"
     } else {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "All $(@($sc.Policies).Count) $scope policies require MFA (or an authentication context) on activation.$note"
+        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "All $total $scope policies require MFA on activation: $($viaMfa.Count) through Azure MFA in the activation rules.$ctxNote$note"
     }
 }
 
@@ -1297,13 +1382,29 @@ function Test-TPControlAADPasswordProtection {
     if (-not $auth -or -not $auth.Success -or -not $auth.Data['PasswordProtection']) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Password protection data not collected (the Password Rule Settings read from /v1.0/groupSettings failed or did not run).'; return
     }
+    # Two components (CIS 5.2.3.8 and 5.2.3.9): a lockout threshold of 10 or
+    # fewer failed attempts, and a lockout duration of at least 60 seconds.
+    # The collector stores Microsoft's template defaults (10 and 60) when the
+    # setting was never customized, and $null for a value that was present but
+    # not a whole number; an older results file carries the duration it read.
     $pp = $auth.Data['PasswordProtection']
-    $lockout = [int]($pp.LockoutThreshold ?? 10)
-    if ($lockout -le 10) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Password lockout threshold: $lockout failed attempts."
-    } else {
-        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Low' -FrameworkIds $cit -Detail "Lockout threshold is $lockout — consider reducing to ≤10 to limit brute force window." -CurrentValue "LockoutThreshold = $lockout" -RequiredValue '≤10 failed attempts'
-    }
+    $v = @(); $sf = @(); $ne = @()
+    $rawT = Get-TPObjectField -Item $pp -Key 'LockoutThreshold' -Default $null
+    $rawD = Get-TPObjectField -Item $pp -Key 'LockoutDurationSeconds' -Default $null
+    $asInt = { param($x) $n = 0; if ($x -is [int] -or $x -is [long]) { [int]$x } elseif ($null -ne $x -and ([string]$x) -cmatch '\A[0-9]{1,9}\z' -and [int]::TryParse([string]$x, [ref]$n)) { $n } else { $null } }
+    $lockout  = & $asInt $rawT
+    $duration = & $asInt $rawD
+    if ($null -eq $lockout) { $ne += 'the lockout threshold was not read as a number.' }
+    elseif ($lockout -le 10) { $v += "Lockout threshold: $lockout failed attempts (10 or fewer)." }
+    else { $sf += "Lockout threshold is $lockout failed attempts; it must be 10 or fewer to limit the brute-force window." }
+    if ($null -eq $duration) { $ne += 'the lockout duration was not read as a number.' }
+    elseif ($duration -ge 60) { $v += "Lockout duration: $duration seconds (at least 60)." }
+    else { $sf += "Lockout duration is $duration seconds; it must be at least 60 seconds." }
+    $tTxt = if ($null -ne $lockout) { "$lockout" } else { 'not read' }
+    $dTxt = if ($null -ne $duration) { "$duration s" } else { 'not read' }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $v -Shortfalls $sf -NotEstablished $ne `
+        -CurrentValue "LockoutThreshold = $tTxt; LockoutDurationInSeconds = $dTxt" `
+        -RequiredValue 'Lockout threshold 10 or fewer failed attempts; lockout duration at least 60 seconds'
 }
 
 # ── AAD-7.2 Break-Glass Accounts Configured ───────────────────────────────────
@@ -1776,13 +1877,22 @@ function Test-TPControlAADDeviceCode {
 }
 
 # ── AAD-11.2 No Guest Users in Highly Privileged Roles ───────────────────────
+# A guest is a user whose userType is Guest (Microsoft's definition, the one the
+# Zero Trust check reads) or whose UPN carries #EXT#; a privileged role is one in
+# the tool's own lists or one Microsoft marks isPrivileged (beta role
+# definitions, read by the roles collector as IsPrivileged / PrivilegedRoleIds).
+# Permanent AND eligible assignments count: an eligible guest can activate.
+# Satisfied needs every input that could hide a guest: both assignment reads,
+# Microsoft's privileged flags, resolved role names, and a userType on every
+# user principal. A results file from before userType or the flags were read is
+# not assessed, never a pass.
 function Test-TPControlAADNoGuestInPrivRoles {
     [CmdletBinding()] param()
     $cid = 'AAD-11.2'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
     $roles = Get-TPRawData -Key 'AAD-DirectoryRoles'
     if (-not $roles -or -not $roles.Success) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Directory role data not collected'; return
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Directory role data not collected'; return
     }
     $privRoleNames = @(
         'Global Administrator','Privileged Role Administrator','Security Administrator',
@@ -1790,41 +1900,64 @@ function Test-TPControlAADNoGuestInPrivRoles {
         'Application Administrator','Cloud Application Administrator','Conditional Access Administrator',
         'Intune Administrator','User Administrator','Authentication Policy Administrator'
     )
-    # Collector stores RoleDefinitionName (not RoleName) and no UserType — guests
-    # are identifiable by the #EXT# marker in PrincipalUPN. Reading the old
-    # RoleName/UserType keys made $guestPriv always empty -> a guest holding
-    # Global Administrator was silently reported Satisfied (Critical false-negative).
-    # Permanent AND eligible: a guest ELIGIBLE for Global Administrator can
-    # activate it at will, and this list ignored eligibility entirely. The
-    # collector's IsPriv flag also counts (Privileged Authentication
-    # Administrator was missing from the local list).
-    $pool = @(@($roles.Data['RoleAssignments']) + @(Get-TPNestedProperty -Object $roles -Path 'Data.AllPrivilegedAssignments' -Default @()))
-    $seen = [System.Collections.Generic.HashSet[string]]::new()
-    $guestPriv = @($pool | Where-Object {
-        ($_.RoleDefinitionName -in $privRoleNames -or (Get-TPObjectField -Item $_ -Key 'IsPriv' -Default $false) -eq $true) -and $_.PrincipalUPN -like '*#EXT#*' -and
-        $seen.Add("$(Get-TPObjectField -Item $_ -Key 'PrincipalId' -Default (Get-TPObjectField -Item $_ -Key 'PrincipalUPN' -Default ''))|$(Get-TPObjectField -Item $_ -Key 'RoleDefinitionId' -Default (Get-TPObjectField -Item $_ -Key 'RoleDefinitionName' -Default ''))")
-    })
     if (@($roles.Data['RoleAssignments']).Count -eq 0 -and -not (Test-TPRoleSectionCollected -Roles $roles -Section 'RoleAssignments')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
             -Detail 'Role assignment enumeration did not complete (see Exceptions) — guest privileged access could not be assessed.'
         return
     }
     # The collector's roleDefinitions sub-query is independent of the
-    # assignments read above and has no SectionStatus of its own — a failed
-    # lookup degrades every RoleDefinitionName to the raw role-template GUID,
-    # so the name match above matches nothing and a guest Global Administrator
-    # reads as "no guest accounts hold privileged roles" (Satisfied). Detect
-    # that degradation directly rather than trust an empty $guestPriv.
+    # assignments read; a failed lookup degrades every RoleDefinitionName to the
+    # raw role-template GUID, so the name match finds nothing.
     if (-not (Test-TPRoleNamesResolved -Assignments $roles.Data['RoleAssignments'])) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
             -Detail 'Role definition names did not resolve (role-template lookup failed), so guest privileged-role membership could not be reliably identified by role name. Not assessed.'
         return
     }
-    if ($guestPriv.Count -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'No guest accounts hold highly privileged directory roles.'
-    } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($guestPriv.Count) guest account(s) hold privileged roles: $($guestPriv.PrincipalDisplayName -join ', '). Guest accounts are outside your identity governance — compromised guest accounts escalate to tenant admin." -CurrentValue "Guest admins: $($guestPriv.Count)" -RequiredValue 'Zero guest accounts in privileged roles' -Remediation $ctrl.Remediation
+    $flagsRead = [string](Get-TPNestedProperty -Object $roles -Path 'Data.SectionStatus.PrivilegedRoleFlags' -Default '') -eq 'Collected'
+    $msPriv = @{}
+    foreach ($rid in @(Get-TPNestedProperty -Object $roles -Path 'Data.PrivilegedRoleIds' -Default @() | Where-Object { $_ })) { $msPriv[[string]$rid] = $true }
+    $eligStatus = [string](Get-TPNestedProperty -Object $roles -Path 'Data.SectionStatus.RoleEligibilitySchedules' -Default '')
+    $eligRead = $eligStatus -eq 'Collected'
+    $pool = @(@(Get-TPNestedProperty -Object $roles -Path 'Data.RoleAssignments' -Default @()) +
+              @(Get-TPNestedProperty -Object $roles -Path 'Data.RoleEligibilitySchedules' -Default @()) +
+              @(Get-TPNestedProperty -Object $roles -Path 'Data.AllPrivilegedAssignments' -Default @())) | Where-Object { $null -ne $_ }
+    $isPrivRole = { param($a)
+        ([string](Get-TPObjectField -Item $a -Key 'RoleDefinitionName' -Default '')) -in $privRoleNames -or
+        (Get-TPObjectField -Item $a -Key 'IsPriv' -Default $false) -eq $true -or
+        $msPriv.ContainsKey([string](Get-TPObjectField -Item $a -Key 'RoleDefinitionId' -Default '')) }
+    $isUser = { param($a) [string](Get-TPObjectField -Item $a -Key 'PrincipalType' -Default '') -match 'user$' }
+    $seen = [System.Collections.Generic.HashSet[string]]::new()
+    $guestPriv = [System.Collections.Generic.List[object]]::new()
+    $typeUnknown = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($a in $pool) {
+        if (-not (& $isPrivRole $a)) { continue }
+        $upn  = [string](Get-TPObjectField -Item $a -Key 'PrincipalUPN' -Default '')
+        $type = [string](Get-TPObjectField -Item $a -Key 'PrincipalUserType' -Default '')
+        $guest = ($type -eq 'Guest') -or ($upn -like '*#EXT#*')
+        if (-not $guest) {
+            if ((& $isUser $a) -and -not $type) { $null = $typeUnknown.Add($(if ($upn) { $upn } else { [string](Get-TPObjectField -Item $a -Key 'PrincipalId' -Default '') })) }
+            continue
+        }
+        $key = "$(Get-TPObjectField -Item $a -Key 'PrincipalId' -Default $upn)|$(Get-TPObjectField -Item $a -Key 'RoleDefinitionId' -Default (Get-TPObjectField -Item $a -Key 'RoleDefinitionName' -Default ''))"
+        if ($seen.Add($key)) { $guestPriv.Add($a) }
     }
+    if ($guestPriv.Count -gt 0) {
+        $named = @($guestPriv | ForEach-Object {
+            $how = if ([string](Get-TPObjectField -Item $_ -Key 'Source' -Default '') -eq 'eligible' -or (Get-TPObjectField -Item $_ -Key 'MemberType' -Default $null)) { 'eligible' } else { 'assigned' }
+            "$([string](Get-TPObjectField -Item $_ -Key 'PrincipalDisplayName' -Default '?')) ($([string](Get-TPObjectField -Item $_ -Key 'RoleDefinitionName' -Default '?')), $how)" } | Sort-Object -Unique)
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($guestPriv.Count) guest role assignment(s) to privileged roles: $($named -join ', '). Guest accounts are outside your identity governance — compromised guest accounts escalate to tenant admin." -CurrentValue "Guest admins: $($guestPriv.Count)" -RequiredValue 'Zero guest accounts in privileged roles, assigned or eligible' -Remediation $ctrl.Remediation
+        return
+    }
+    $missing = @()
+    if (-not $eligRead) { $missing += "PIM eligible assignments were not read (status: $(if ($eligStatus) { $eligStatus } else { 'not recorded' })), so a guest eligible for a privileged role would not be seen" }
+    if (-not $flagsRead) { $missing += "Microsoft's privileged-role flags (isPrivileged) were not read, so only the tool's fixed role list was checked and a guest in another privileged role would not be seen" }
+    if ($typeUnknown.Count -gt 0) { $missing += "the user type of $($typeUnknown.Count) privileged role holder(s) was not recorded, so a guest without #EXT# in the UPN would not be seen ($((@($typeUnknown) | Select-Object -First 5) -join ', '))" }
+    if ($missing.Count -gt 0) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "No guest was found in a privileged role, but $($missing -join '; '). Not assessed."
+        return
+    }
+    Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "No guest account (user type Guest, or #EXT# in the UPN) holds or is eligible for a privileged directory role ($($msPriv.Count) role(s) Microsoft marks privileged, plus the tool's own list). Role-assignable groups are not expanded."
 }
 
 # ── AAD-11.3 Risky Service Principals and Applications Reviewed ───────────────
@@ -1885,12 +2018,35 @@ function Test-TPControlAADTokenProtection {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'TokenProtection was not collected (the beta Conditional Access read did not complete); not assessed.'
         return
     }
-    Add-TPCAPolicyTierFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $ca.Data['Policies'] `
-        -Match { (Get-TPNestedProperty -Object $_ -Path 'SessionControls.SecureSignInSession' -Default $null) -eq $true } `
-        -What 'Token protection (binding)' `
-        -EnabledDetail 'token protection binds session tokens to the originating device, so a stolen token cannot be replayed from attacker infrastructure.' `
-        -MissingDetail 'no token protection (binding) Conditional Access policy. AiTM phishing steals session tokens and replays them from attacker infrastructure; token binding ties tokens to the originating device.' `
-        -RequiredValue 'Enabled CA policy requiring token protection'
+    # A token-protection policy counts only when it reaches what Microsoft's
+    # deployment guide and Zero Trust check name: the Windows platform (listed,
+    # or 'all' without Windows excluded), some users (not None), and All
+    # resources or both Office 365 Exchange Online and Office 365 SharePoint
+    # Online (neither excluded). Microsoft scopes this policy to those apps by
+    # design, so it is not judged on all-application coverage. One scoped to an
+    # unrelated app, or without Windows, used to pass.
+    $exo = '00000002-0000-0ff1-ce00-000000000000'; $spo = '00000003-0000-0ff1-ce00-000000000000'
+    $tpShort = { param($p)
+        $why = @()
+        $inc = @(Get-TPNestedProperty -Object $p -Path 'Conditions.Platforms' -Default @() | Where-Object { $_ } | ForEach-Object { ([string]$_).ToLowerInvariant() })
+        $exc = @(Get-TPNestedProperty -Object $p -Path 'Conditions.ExcludePlatforms' -Default @() | Where-Object { $_ } | ForEach-Object { ([string]$_).ToLowerInvariant() })
+        if (-not (($inc -contains 'windows' -or $inc -contains 'all') -and $exc -notcontains 'windows')) { $why += 'does not include the Windows platform' }
+        $u = @(@(Get-TPNestedProperty -Object $p -Path 'Conditions.Users.IncludeUsers' -Default @()) + @(Get-TPNestedProperty -Object $p -Path 'Conditions.Users.IncludeGroups' -Default @()) + @(Get-TPNestedProperty -Object $p -Path 'Conditions.Users.IncludeRoles' -Default @()) | Where-Object { $_ -and $_ -ne 'None' })
+        if ($u.Count -eq 0) { $why += 'includes no users' }
+        $apps = @(Get-TPNestedProperty -Object $p -Path 'Conditions.Applications.Include' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
+        $appX = @(Get-TPNestedProperty -Object $p -Path 'Conditions.Applications.Exclude' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
+        if (-not ($apps -contains 'All' -or ($apps -contains $exo -and $apps -contains $spo)) -or $appX -contains $exo -or $appX -contains $spo) { $why += 'does not target both Office 365 Exchange Online and Office 365 SharePoint Online (or All resources)' }
+        $why }
+    $tpPolicies = @(@($ca.Data['Policies']) | Where-Object { $null -ne $_ -and (Get-TPNestedProperty -Object $_ -Path 'SessionControls.SecureSignInSession' -Default $null) -eq $true })
+    $narrow = @($tpPolicies | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'State' -Default '') -in @('enabled','enabledForReportingButNotEnforced') -and @(& $tpShort $_).Count -gt 0 } |
+        ForEach-Object { "'$([string](Get-TPObjectField -Item $_ -Key 'DisplayName' -Default '?'))' requires token protection but $((& $tpShort $_) -join ' and ')" })
+    $narrowNote = if ($narrow.Count) { " Not counted: $($narrow -join '; ')." } else { '' }
+    Add-TPCAPolicyTierFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $tpPolicies `
+        -Match { @(& $tpShort $_).Count -eq 0 } `
+        -What 'Token protection (binding) for Exchange Online and SharePoint Online on Windows' `
+        -EnabledDetail "token protection binds session tokens to the originating device for Office 365 Exchange Online and SharePoint Online on Windows, so a stolen token cannot be replayed from attacker infrastructure.$narrowNote" `
+        -MissingDetail "no enabled token protection (binding) Conditional Access policy covers Office 365 Exchange Online and SharePoint Online on Windows. AiTM phishing steals session tokens and replays them from attacker infrastructure; token binding ties tokens to the originating device.$narrowNote" `
+        -RequiredValue 'Enabled CA policy requiring token protection for users, on Windows, for Exchange Online and SharePoint Online (or All resources)'
 }
 
 # ── AAD-11.5 Continuous Access Evaluation Enabled ────────────────────────────
@@ -1973,17 +2129,65 @@ function Test-TPControlAADPrivilegedWorkstation {
     if (-not $ca -or -not $ca.Success) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    # PAW is indicated by configuration, not name: a policy called "...PAW
-    # accounts excluded" passed. Admin-role policies that filter devices, or
-    # that REQUIRE a compliant / hybrid-joined device (Microsoft's template).
-    Add-TPCAPolicyTierFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $ca.Data['Policies'] `
-        -Match { @(Get-TPNestedProperty -Object $_ -Path 'Conditions.Users.IncludeRoles' -Default @()).Count -gt 0 -and
-                 ([string](Get-TPNestedProperty -Object $_ -Path 'Conditions.Devices.FilterRule' -Default '') -or
-                  (Test-TPCAGrantRequires -Policy $_ -Any @('compliantDevice','domainJoinedDevice'))) } `
-        -What 'A device-scoped policy for privileged roles' `
-        -EnabledDetail 'privileged role access is restricted to specific managed devices by a device-scoped CA policy.' `
-        -MissingDetail 'no device-scoped Conditional Access policy for privileged role access. Admins can authenticate from any device; a privileged access workstation or compliant-device requirement for admin roles reduces attack surface.' `
-        -RequiredValue 'Enabled CA policy restricting privileged roles to managed devices'
+    # Microsoft's privileged access workstation check needs BOTH halves: an
+    # enabled policy for a privileged role that requires a compliant device, and
+    # an enabled policy for a privileged role that blocks every device outside a
+    # device filter (filter mode exclude, grant block), which is what keeps
+    # administrators on the designated workstations. Either alone, a hybrid-join
+    # requirement, a filter of any other mode, or a policy for a role that is not
+    # privileged used to pass. Privileged = a role this tenant's catalog marks
+    # (the tool's list, IsPriv, or Microsoft's isPrivileged flag). Each half is
+    # judged on the policy's other scope with Get-TPCANarrowing (role scope, and
+    # for the block half its device filter, are expected); a narrower policy is
+    # named, not counted, and a report-only one is a shortfall naming it.
+    $roleRaw = Get-TPRawData -Key 'AAD-DirectoryRoles'
+    $privIds = @{}
+    if ($roleRaw -and (Get-TPObjectField -Item $roleRaw -Key 'Success' -Default $false) -eq $true) {
+        foreach ($d in @(Get-TPNestedProperty -Object $roleRaw -Path 'Data.RoleDefinitions' -Default @())) {
+            if ((Get-TPObjectField -Item $d -Key 'IsPriv' -Default $false) -eq $true -or (Get-TPObjectField -Item $d -Key 'IsPrivileged' -Default $false) -eq $true) {
+                $privIds[[string](Get-TPObjectField -Item $d -Key 'Id' -Default '')] = $true
+            }
+        }
+        foreach ($rid in @(Get-TPNestedProperty -Object $roleRaw -Path 'Data.PrivilegedRoleIds' -Default @() | Where-Object { $_ })) { $privIds[[string]$rid] = $true }
+    }
+    $pols = @(@($ca.Data['Policies']) | Where-Object { $null -ne $_ })
+    $nameOf = { param($p) [string](Get-TPObjectField -Item $p -Key 'DisplayName' -Default '?') }
+    $stateOf = { param($p) [string](Get-TPObjectField -Item $p -Key 'State' -Default '') }
+    $rolesOf = { param($p) @(Get-TPNestedProperty -Object $p -Path 'Conditions.Users.IncludeRoles' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ }) }
+    $roleScoped = @($pols | Where-Object { @(& $rolesOf $_).Count -gt 0 })
+    $privScoped = @($roleScoped | Where-Object { @(& $rolesOf $_ | Where-Object { $privIds.ContainsKey($_) }).Count -gt 0 })
+    $usersIgnore = 'applies to only some users, groups or roles'
+    $judge = { param([object[]] $Candidates, [string[]] $Ignore, [string[]] $Clients)
+        $ok = @(); $narrow = @(); $staged = @()
+        foreach ($p in $Candidates) {
+            $nar = @(Get-TPCANarrowing -Policy $p -RequiredClientAppTypes $Clients -Ignore $Ignore)
+            if ($nar.Count) { if ((& $stateOf $p) -in @('enabled','enabledForReportingButNotEnforced')) { $narrow += "'$(& $nameOf $p)' $($nar -join '; ')" }; continue }
+            if ((& $stateOf $p) -eq 'enabled') { $ok += (& $nameOf $p) } elseif ((& $stateOf $p) -eq 'enabledForReportingButNotEnforced') { $staged += (& $nameOf $p) }
+        }
+        [pscustomobject]@{ Ok = $ok; Narrow = $narrow; Staged = $staged } }
+    $compliant = & $judge @($privScoped | Where-Object { Test-TPCAGrantRequires -Policy $_ -Any @('compliantDevice') }) @($usersIgnore) (Get-TPCAInteractiveClientAppTypes)
+    $pawBlock  = & $judge @($privScoped | Where-Object {
+            [string](Get-TPNestedProperty -Object $_ -Path 'Conditions.Devices.FilterMode' -Default '') -eq 'exclude' -and
+            [string](Get-TPNestedProperty -Object $_ -Path 'Conditions.Devices.FilterRule' -Default '') -and
+            @(Get-TPNestedProperty -Object $_ -Path 'GrantControls.BuiltInControls' -Default @()) -contains 'block' }) @($usersIgnore, 'limited by a device filter') @()
+    $v = @(); $sf = @(); $ne = @()
+    foreach ($half in @(
+            @{ R = $compliant; Ok = 'A privileged role must use a compliant device'; Miss = 'no enabled Conditional Access policy for a privileged role requires a compliant device' },
+            @{ R = $pawBlock;  Ok = 'Privileged roles are blocked outside the designated devices (device filter, exclude mode, block)'; Miss = 'no enabled Conditional Access policy for a privileged role blocks every device outside a device filter (filter mode exclude, grant block), so administrators are not kept on designated workstations' })) {
+        $r = $half.R
+        if (@($r.Ok).Count) { $v += "$($half.Ok): $(@($r.Ok) -join ', ')." }
+        else {
+            $m = $half.Miss
+            if (@($r.Staged).Count) { $m += "; report-only, which enforces nothing: $(@($r.Staged) -join ', ')" }
+            if (@($r.Narrow).Count) { $m += "; narrower and not counted: $(@($r.Narrow) -join '; ')" }
+            if ($privIds.Count -eq 0) { $ne += "whether a privileged role is targeted: the tenant's role catalog was not read." } else { $sf += "$m." }
+        }
+    }
+    $other = @($roleScoped | Where-Object { $_ -notin $privScoped -and (& $stateOf $_) -eq 'enabled' -and ([string](Get-TPNestedProperty -Object $_ -Path 'Conditions.Devices.FilterRule' -Default '') -or (Test-TPCAGrantRequires -Policy $_ -Any @('compliantDevice','domainJoinedDevice'))) } | ForEach-Object { & $nameOf $_ })
+    if ($other.Count -and $privIds.Count) { if ($sf.Count) { $sf += "Not counted (no privileged role included): $($other -join ', ')." } else { $v += "Not counted (no privileged role included): $($other -join ', ')." } }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $v -Shortfalls $sf -NotEstablished $ne `
+        -CurrentValue "Compliant-device policy: $(if (@($compliant.Ok).Count) { @($compliant.Ok) -join ', ' } else { 'none' }); PAW device-filter block: $(if (@($pawBlock.Ok).Count) { @($pawBlock.Ok) -join ', ' } else { 'none' })" `
+        -RequiredValue 'Enabled CA policy for privileged roles requiring a compliant device, and an enabled CA policy for privileged roles blocking devices outside a device filter (exclude mode)'
 }
 
 # ── AAD-11.8 Terms of Use for External Access ─────────────────────────────────
@@ -2026,11 +2230,29 @@ function Test-TPControlAADWorkloadIdentityCA {
     if (-not $ca -or -not $ca.Success) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'CA data not collected'; return
     }
-    Add-TPCAPolicyTierFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $ca.Data['Policies'] `
-        -Match { (Get-TPNestedProperty -Object $_ -Path 'Conditions.ClientApplications.IncludeServicePrincipals') -or
-                 (Get-TPNestedProperty -Object $_ -Path 'Conditions.ClientApplications.IncludeAllServicePrincipals') } `
-        -What 'A workload identity policy' `
-        -EnabledDetail 'Conditional Access applies to workload identities (service principals), so application access is subject to CA controls.' `
-        -MissingDetail 'no Conditional Access policy applies to workload identities. Service principals and managed identities are not subject to any conditional access controls.' `
-        -RequiredValue 'Enabled CA policy scoped to workload identities'
+    # A workload identity policy earns the control only when it responds to
+    # service principal RISK (Microsoft's recommendation: a risk-based
+    # Conditional Access policy for workload identities), i.e. includes service
+    # principals, selects at least one service principal risk level and blocks.
+    # A location-only workload policy is named, not counted. A results file from
+    # before ServicePrincipalRiskLevels was collected is not assessed.
+    $isSp = { param($p) @(Get-TPNestedProperty -Object $p -Path 'Conditions.ClientApplications.IncludeServicePrincipals' -Default @() | Where-Object { $_ }).Count -gt 0 }
+    $spPols = @(@($ca.Data['Policies']) | Where-Object { $null -ne $_ -and (& $isSp $_) })
+    $unread = @($spPols | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'State' -Default '') -in @('enabled','enabledForReportingButNotEnforced') -and -not (Test-TPFieldPresent -Item (Get-TPObjectField -Item $_ -Key 'Conditions' -Default $null) -Key 'ServicePrincipalRiskLevels') })
+    $qualifies = { param($p) @(Get-TPNestedProperty -Object $p -Path 'Conditions.ServicePrincipalRiskLevels' -Default @() | Where-Object { $_ -and $_ -ne 'none' }).Count -gt 0 -and
+                             @(Get-TPNestedProperty -Object $p -Path 'GrantControls.BuiltInControls' -Default @()) -contains 'block' }
+    $nameOf = { param($p) [string](Get-TPObjectField -Item $p -Key 'DisplayName' -Default '?') }
+    if ($unread.Count -gt 0 -and @($spPols | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'State' -Default '') -eq 'enabled' -and (& $qualifies $_) }).Count -eq 0) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Workload identity Conditional Access policies were found ($(@($unread | ForEach-Object { & $nameOf $_ }) -join ', ')), but their service principal risk condition was not recorded (a results file from before it was collected), so whether any responds to workload identity risk is not known. Not assessed."
+        return
+    }
+    $other = @($spPols | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'State' -Default '') -in @('enabled','enabledForReportingButNotEnforced') -and -not (& $qualifies $_) } | ForEach-Object { & $nameOf $_ })
+    $otherNote = if ($other.Count) { " Not counted (applies to workload identities without blocking on service principal risk): $($other -join ', ')." } else { '' }
+    Add-TPCAPolicyTierFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $spPols `
+        -Match { & $qualifies $_ } `
+        -What 'A risk-based workload identity policy' `
+        -EnabledDetail "Conditional Access blocks service principals at the selected workload identity risk levels.$otherNote" `
+        -MissingDetail "no Conditional Access policy blocks workload identities (service principals) on service principal risk.$otherNote" `
+        -RequiredValue 'Enabled CA policy including service principals, with service principal risk levels selected, that blocks access'
 }

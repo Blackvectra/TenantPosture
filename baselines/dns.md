@@ -118,13 +118,13 @@ Start with p=none and rua= reporting. Advance to p=quarantine then p=reject as a
 **License required:** Included (M365 Business Standard+)
 
 **Description:**
-MTA-STS DNS record and HTTPS policy file published with mode: enforce.
+MTA-STS DNS record and HTTPS policy file published with mode: enforce, with mx: patterns covering every MX host of the domain.
 
 **Business risk:**
 Without MTA-STS, SMTP connections can be TLS-downgraded by on-path attackers, exposing email in transit.
 
 **Remediation:**
-Publish _mta-sts TXT record and host policy file at https://mta-sts.domain.com/.well-known/mta-sts.txt with mode: enforce.
+Publish _mta-sts TXT record and host policy file at https://mta-sts.domain.com/.well-known/mta-sts.txt with mode: enforce and an mx: line matching every MX host of the domain.
 
 **Framework mappings:**
 
@@ -207,7 +207,7 @@ Enable DNSSEC at your registrar. GoDaddy: Domains > DNS > DNSSEC > Enable. Free 
 **License required:** Included (M365 Business Standard+)
 
 **Description:**
-DKIM signing keys are rotated on a documented cadence (target: <= 365 days) for each sending domain.
+DKIM signing keys are rotated on a documented cadence (target: <= 365 days) for each sending domain, and are at least 2048 bits.
 
 **Business risk:**
 Long-lived DKIM keys broaden the impact of a key-compromise event and weaken DMARC reliance on DKIM signatures. Microsoft does not auto-rotate customer-managed DKIM keys, so many tenants run keys older than two years.

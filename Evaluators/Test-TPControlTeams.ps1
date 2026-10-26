@@ -235,22 +235,35 @@ function Test-TPControlTeamsRecordingRetention {
             -Detail 'Purview retention policies were not collected, so whether a retention policy covers the OneDrive and SharePoint locations holding meeting recordings was not assessed.'
         return
     }
-    $enabled = @(@(Get-TPObjectField -Item $pvw.Data -Key 'RetentionPolicies' -Default @()) | Where-Object { (Get-TPObjectField -Item $_ -Key 'Enabled' -Default $false) -eq $true })
-    $wl = { param($p) @(Get-TPObjectField -Item $p -Key 'Workloads' -Default @() | ForEach-Object { [string]$_ }) }
-    $od = @($enabled | Where-Object { @(& $wl $_) -match 'OneDrive' })
-    $sp = @($enabled | Where-Object { @(& $wl $_) -contains 'SharePoint' })
-    if ($od.Count -gt 0 -and $sp.Count -gt 0) {
+    # Judged from the enabled policies' locations, never Workload, which Microsoft documents as
+    # listing every workload whatever the policy applies to (Get-TPRetentionCoverage, PVW-2.5).
+    $cov = Get-TPRetentionCoverage -Policies @(Get-TPObjectField -Item $pvw.Data -Key 'RetentionPolicies' -Default @())
+    $req = 'Enabled retention policies covering OneDrive and SharePoint'
+    $off = if (@($cov.DisabledNames).Count -gt 0) { " Turned off, not counted: $(@($cov.DisabledNames) -join ', ')." } else { '' }
+    if ($cov.PolicyCount -gt 0 -and -not $cov.LocationsRead) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category 'Teams' -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Retention policy locations were not read with -DistributionDetail (an older results file or module), and Workload lists every workload whatever a policy covers, so whether OneDrive and SharePoint are covered was not assessed.'
+        return
+    }
+    $od = @($cov.Covered['OneDriveForBusiness']).Count -gt 0
+    $sp = @($cov.Covered['SharePoint']).Count -gt 0
+    if ($od -and $sp) {
         Add-TPFinding -ControlId $cid -State 'Satisfied' -Category 'Teams' -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail 'Enabled retention policies cover both OneDrive (meeting recordings) and SharePoint (channel meeting recordings).'
-    } elseif ($od.Count -gt 0 -or $sp.Count -gt 0) {
-        $missing = if ($od.Count -eq 0) { 'OneDrive, where meeting recordings are saved' } else { 'SharePoint, where channel meeting recordings are saved' }
+            -Detail "Enabled retention policies cover both OneDrive (meeting recordings; $(@($cov.Covered['OneDriveForBusiness']) -join ', ')) and SharePoint (channel meeting recordings; $(@($cov.Covered['SharePoint']) -join ', '))."
+        return
+    }
+    $missing = @(if (-not $od) { 'OneDrive, where meeting recordings are saved' }; if (-not $sp) { 'SharePoint, where channel meeting recordings are saved' })
+    if (@($cov.Adaptive).Count -gt 0) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category 'Teams' -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "No static location covers $($missing -join ' or '), but enabled adaptive-scope policies ($(@($cov.Adaptive) -join ', ')) may; adaptive scope membership is not read, so this was not assessed.$off"
+    } elseif ($od -or $sp) {
         Add-TPFinding -ControlId $cid -State 'Partial' -Category 'Teams' -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
-            -Detail "An enabled retention policy covers one of the recording locations but not $missing." `
-            -RequiredValue 'Enabled retention policies covering OneDrive and SharePoint' -Remediation $ctrl.Remediation
+            -Detail "An enabled retention policy covers one of the recording locations but not $($missing -join ' or ').$off" `
+            -RequiredValue $req -Remediation $ctrl.Remediation
     } else {
         Add-TPFinding -ControlId $cid -State 'Gap' -Category 'Teams' -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail 'No enabled retention policy covers OneDrive or SharePoint, so meeting recordings can be deleted by their owner with nothing retained.' `
-            -RequiredValue 'Enabled retention policies covering OneDrive and SharePoint' -Remediation $ctrl.Remediation
+            -Detail "No enabled retention policy covers OneDrive or SharePoint, so meeting recordings can be deleted by their owner with nothing retained.$off" `
+            -RequiredValue $req -Remediation $ctrl.Remediation
     }
 }
 

@@ -294,17 +294,40 @@ function Test-TPControlPurviewRetention {
     if (-not (Test-TPSectionCollected $pvw 'RetentionPolicies')) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Retention policies were not collected; not assessed.'; return
     }
-    $retPolicies = @($pvw.Data['RetentionPolicies'] ?? @())
-    $coveredWorkloads = @($retPolicies | ForEach-Object { $_.Workloads ?? @() } | Select-Object -Unique)
-    $requiredWorkloads = @('Exchange','SharePoint','OneDriveForBusiness','Teams')
-    $missing = @($requiredWorkloads | Where-Object { $_ -notin $coveredWorkloads })
-    if ($missing.Count -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Retention policies cover all key workloads: $($requiredWorkloads -join ', ')"
-    } elseif ($retPolicies.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit -Detail "Retention policies exist but are missing coverage for: $($missing -join ', ')" -CurrentValue "Missing: $($missing -join ', ')" -RequiredValue 'Exchange, SharePoint, OneDrive, Teams all covered'
-    } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No retention policies configured. Data cannot be preserved for legal or regulatory requirements.' -Remediation $ctrl.Remediation
+    # Judge the LOCATIONS of ENABLED policies. Microsoft documents that Workload "shows all
+    # workloads ... It doesn't show the actual workload on which the policy is applied", so a
+    # Workload read passed every tenant with any retention policy, disabled ones included.
+    $retPolicies = @(@(Get-TPObjectField -Item $pvw.Data -Key 'RetentionPolicies' -Default @()) | Where-Object { $null -ne $_ })
+    $required = [ordered]@{ Exchange = 'Exchange mailboxes'; SharePoint = 'SharePoint sites'; OneDriveForBusiness = 'OneDrive accounts'; Teams = 'Teams channel messages or chats' }
+    $reqText = 'An enabled retention policy covering each of Exchange mailboxes, SharePoint sites, OneDrive accounts and Teams (channel messages or chats)'
+    if ($retPolicies.Count -eq 0) {
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No retention policies configured. Data cannot be preserved for legal or regulatory requirements.' -RequiredValue $reqText -Remediation $ctrl.Remediation
+        return
     }
+    $cov = Get-TPRetentionCoverage -Policies $retPolicies
+    if (-not $cov.LocationsRead) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Retention policy locations were not read with -DistributionDetail (a results file from before the location read, or a module without the switch). Microsoft documents that the Workload property lists every workload whatever the policy covers, so which workloads $($retPolicies.Count) retention policy(ies) cover was not assessed."
+        return
+    }
+    $verified = @(); $short = @(); $notEst = @()
+    foreach ($w in $required.Keys) {
+        $names = @($cov.Covered[$w])
+        if ($names.Count -gt 0) { $verified += "$($required[$w]): covered by $(@($names | Select-Object -First 3) -join ', ')$(if ($names.Count -gt 3) { " and $($names.Count - 3) more" })." }
+        elseif ($cov.Adaptive.Count -gt 0) { $notEst += "$($required[$w]): no static location in an enabled policy; adaptive-scope policies ($($cov.Adaptive -join ', ')) are not resolved to workloads." }
+        else { $short += "$($required[$w]): no enabled retention policy includes this location." }
+    }
+    if ($cov.EnabledUnknown -gt 0 -and $short.Count -gt 0) {
+        # A policy whose Enabled flag was not returned might be the one that covers the location.
+        $notEst += $short | ForEach-Object { "$_ ($($cov.EnabledUnknown) policy(ies) did not return Enabled.)" }
+        $short = @()
+    }
+    if ($cov.DisabledNames.Count -gt 0 -and $short.Count -gt 0) {
+        $short += "Disabled policies retain nothing and were not counted: $(@($cov.DisabledNames | Select-Object -First 5) -join ', ')."
+    }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $notEst `
+        -CurrentValue "$($cov.EnabledCount) enabled of $($cov.PolicyCount) retention policy(ies); covered: $(@($required.Keys | Where-Object { @($cov.Covered[$_]).Count -gt 0 }) -join ', ')" `
+        -RequiredValue $reqText
 }
 
 # ── PVW-2.6 Auto-Labeling Policy Active ──────────────────────────────────────
@@ -323,17 +346,29 @@ function Test-TPControlPurviewAutoLabel {
         return
     }
     # Mode: Enable (labels content) / TestWith[out]Notifications (simulation:
-    # labels nothing) / Disable. Enabled -> Satisfied; simulation only ->
-    # Partial, like a report-only CA policy; nothing -> Gap.
-    $autoLabels = @($pvw.Data['AutoLabelPolicies'] ?? @())
-    $active     = @($autoLabels | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'Mode' -Default '') -eq 'Enable' })
-    $simulating = @($autoLabels | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'Mode' -Default '') -like 'Test*' })
+    # labels nothing) / Disable. Enabled is a separate switch
+    # (Set-AutoSensitivityLabelPolicy -Enabled), so a policy enforces only with
+    # Mode Enable AND Enabled True. Enforcing -> Satisfied; simulation only ->
+    # Partial, like a report-only CA policy; nothing -> Gap. Enabled not returned
+    # (a results file from before it was read) -> not assessed, never a pass.
+    $autoLabels = @(@(Get-TPObjectField -Item $pvw.Data -Key 'AutoLabelPolicies' -Default @()) | Where-Object { $null -ne $_ })
+    $modeOf = { param($p) [string](Get-TPObjectField -Item $p -Key 'Mode' -Default '') }
+    $enOf   = { param($p) Get-TPObjectField -Item $p -Key 'Enabled' -Default $null }
+    $nameOf = { param($p) [string](Get-TPObjectField -Item $p -Key 'Name' -Default '') }
+    $active     = @($autoLabels | Where-Object { (& $modeOf $_) -eq 'Enable' -and (& $enOf $_) -eq $true })
+    $simulating = @($autoLabels | Where-Object { (& $modeOf $_) -like 'Test*' -and (& $enOf $_) -eq $true })
+    $turnedOff  = @($autoLabels | Where-Object { (& $enOf $_) -eq $false } | ForEach-Object { & $nameOf $_ })
+    $unread     = @($autoLabels | Where-Object { $null -eq (& $enOf $_) -and (& $modeOf $_) -ne 'Disable' } | ForEach-Object { & $nameOf $_ })
+    $offNote = if ($turnedOff.Count -gt 0) { " Turned off (Enabled False, label nothing whatever their Mode): $(@($turnedOff | Select-Object -First 5) -join ', ')." } else { '' }
+    $req = 'At least one auto-labeling policy with Enabled True and Mode Enable'
     if ($active.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($active.Count) auto-labeling policy(ies) enforcing. Sensitive content labeled without user action."
+        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -CurrentValue "Enforcing: $(@($active | ForEach-Object { & $nameOf $_ } | Select-Object -First 5) -join ', ')" -RequiredValue $req -Detail "$($active.Count) auto-labeling policy(ies) turned on and enforcing (Enabled True, Mode Enable). Sensitive content labeled without user action."
+    } elseif ($unread.Count -gt 0) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -RequiredValue $req -Detail "The Enabled flag of $($unread.Count) auto-labeling policy(ies) was not returned ($(@($unread | Select-Object -First 5) -join ', ')), so whether any policy is turned on was not assessed (a results file from before the flag was read).$offNote"
     } elseif ($simulating.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "$($simulating.Count) auto-labeling policy(ies) in simulation mode only — nothing is labeled until the policy is turned on." -Remediation $ctrl.Remediation
+        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -RequiredValue $req -Detail "$($simulating.Count) auto-labeling policy(ies) in simulation mode only - nothing is labeled until the policy is turned on.$offNote" -Remediation $ctrl.Remediation
     } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No auto-labeling policy is turned on. Sensitive data classification depends entirely on user action.' -Remediation $ctrl.Remediation
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -RequiredValue $req -Detail "No auto-labeling policy is turned on and enforcing. Sensitive data classification depends entirely on user action.$offNote" -Remediation $ctrl.Remediation
     }
 }
 

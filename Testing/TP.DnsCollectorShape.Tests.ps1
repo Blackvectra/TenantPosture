@@ -254,6 +254,45 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
             @(Fetched).Count           | Should -Be 0
             (Verdict 'Test-TPControlDNSMTASTS' 'DNS-1.4').State | Should -Be 'NotApplicable'
         }
+        It 'DNS-1.4 enforce mode is Satisfied only when the policy''s mx: patterns cover every MX host (NIST SP 800-177r1 5-3)' {
+            $t = $script:StsTxt.Clone(); $t['mta-sts.shape.test|A'] = & $A @('185.199.108.153')
+            $t['shape.test|MX'] = & $A @('10 mail.shape.test.')
+            $null = Collect $t
+            $f = Verdict 'Test-TPControlDNSMTASTS' 'DNS-1.4'
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'Every MX host \(mail\.shape\.test\) matches the policy''s mx: patterns \(mail\.shape\.test\)'
+            $t['shape.test|MX'] = & $A @('10 mail.shape.test.', '20 backup.other.test.')
+            $null = Collect $t
+            $f = Verdict 'Test-TPControlDNSMTASTS' 'DNS-1.4'
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match '^Verified: shape\.test MTA-STS is in enforce mode\. Shortfall: MX host\(s\) backup\.other\.test match none'
+            @($f.AffectedObjects)[0].MxHost | Should -Be 'backup.other.test'
+        }
+        It 'DNS-1.4: an MX lookup that did not complete leaves the coverage not assessed, never a pass' {
+            $t = $script:StsTxt.Clone(); $t['mta-sts.shape.test|A'] = & $A @('185.199.108.153')
+            $t['shape.test|MX'] = @{ Outcome = 'LookupFailed'; Records = @() }
+            $null = Collect $t
+            $f = Verdict 'Test-TPControlDNSMTASTS' 'DNS-1.4'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'Not assessed: whether the policy covers every MX host, because the MX lookup did not complete'
+            @($f.FrameworkIds).Count | Should -BeGreaterThan 0
+        }
+        It 'DNS-1.4: a replayed enforce result without the policy text is not assessed' {
+            Clear-TPState
+            Set-TPRawData -Key 'DNS-EmailRecords' -Data ([pscustomobject]@{ Success = $true; Data = [pscustomobject]@{ DomainCount = 1
+                Domains = @{ 'old.test' = [pscustomobject]@{ MTASTS = [pscustomobject]@{ DNSRecord = 'v=STSv1; id=1'; Mode = 'enforce' }; MX = @([pscustomobject]@{ Preference = 10; Exchange = 'mx.old.test' }) } } } })
+            (Verdict 'Test-TPControlDNSMTASTS' 'DNS-1.4').State | Should -Be 'NotApplicable'
+        }
+        It 'DNS-1.4: an mx: wildcard matches exactly one leftmost label (RFC 8461 section 4.1)' {
+            & $script:Mod {
+                Test-TPMtaStsMxPattern -Pattern '*.mail.protection.outlook.com' -HostName 'contoso-com.mail.protection.outlook.com.' | Should -BeTrue
+                Test-TPMtaStsMxPattern -Pattern '*.example.com' -HostName 'example.com'        | Should -BeFalse
+                Test-TPMtaStsMxPattern -Pattern '*.example.com' -HostName 'a.b.example.com'    | Should -BeFalse
+                Test-TPMtaStsMxPattern -Pattern 'MX1.Example.com' -HostName 'mx1.example.COM.' | Should -BeTrue
+                Test-TPMtaStsMxPattern -Pattern 'mx*.example.com' -HostName 'mx1.example.com'  | Should -BeFalse
+                Test-TPMtaStsMxPattern -Pattern 'mx1.example.com' -HostName 'xmx1.example.com' | Should -BeFalse
+            }
+        }
         It 'an answer whose rows are not addresses is a lookup that did not complete, never a missing host' {
             $t = $script:StsTxt.Clone(); $t['mta-sts.shape.test|A'] = & $A @('not-an-address')
             $d = Collect $t

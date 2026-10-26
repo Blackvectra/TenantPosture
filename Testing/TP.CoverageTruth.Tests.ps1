@@ -184,7 +184,7 @@ Describe 'Coverage is judged on who is protected, not on which policies exist' {
             $script:Rule = { param($Name, $Doms = @('contoso.example'), $ExGroups = @(), $SentToMemberOf = @()) @{ Name = $Name; State = 'Enabled'; RecipientDomainIs = $Doms; SentTo = @(); SentToMemberOf = $SentToMemberOf
                 ExceptIfSentTo = @(); ExceptIfSentToMemberOf = $ExGroups; ExceptIfRecipientDomainIs = @(); HasExceptions = ($ExGroups.Count -gt 0) } }
             $script:SetPreset = { param($Std, $Strict) Clear-TPState
-                Set-TPRawData -Key 'Defender-Policies' -Data (Bag @{ PresetRules = @{ Available = $true; EOP = @($Std, $Strict); ATP = @() } })
+                Set-TPRawData -Key 'Defender-Policies' -Data (Bag @{ PresetRules = @{ Available = $true; EOP = @($Std, $Strict); ATP = @($Std, $Strict); ATPRead = $true } })
                 Set-TPRawData -Key 'EXO-MailboxConfig' -Data (Bag @{ AcceptedDomains = @(@{ DomainName = 'contoso.example' }); SectionStatus = @{ AcceptedDomains = 'Collected' } }) }
             $script:V21 = { V 'Test-TPControlDefenderPresetPolicies' 'DEF-2.1' }
         }

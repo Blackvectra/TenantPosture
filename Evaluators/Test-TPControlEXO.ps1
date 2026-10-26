@@ -778,6 +778,12 @@ function Test-TPControlEXOSharedMailbox {
     $risky     = @($inv.Data['SharedMailboxSignIn'] ?? @())
     $confirmed = @($risky | Where-Object { $_.Source -eq 'AAD-Users' })
     $probable  = @($risky | Where-Object { $_.Source -ne 'AAD-Users' })
+    # Mailboxes whose sign-in state was not read from Entra. Absent from results written before
+    # the collector recorded it, and then which mailboxes were confirmed cannot be told.
+    # Presence is read from the key itself: Get-TPObjectField returns an empty list as $null,
+    # and an empty list here is the passing answer.
+    $unconfirmedKnown = if ($inv.Data -is [System.Collections.IDictionary]) { $inv.Data.Contains('SharedMailboxUnconfirmed') } else { $null -ne $inv.Data.PSObject.Properties['SharedMailboxUnconfirmed'] }
+    $unconfirmed = @(@(Get-TPObjectField -Item $inv.Data -Key 'SharedMailboxUnconfirmed' -Default @()) | Where-Object { $null -ne $_ })
 
     $affected = @($risky | ForEach-Object {
         [ordered]@{
@@ -790,28 +796,37 @@ function Test-TPControlEXOSharedMailbox {
     })
 
     if ($confirmed.Count -gt 0) {
+        $unreadNote = if ($unconfirmed.Count -gt 0) { " A further $($unconfirmed.Count) shared mailbox(es) could not be checked against Entra." } else { '' }
         Add-TPFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
             -Title $control.Title -Severity $control.Severity -FrameworkIds $citations `
-            -Detail "$($confirmed.Count) of $($allShared.Count) shared mailbox(es) have direct sign-in enabled. A shared mailbox is accessed by delegation, so an enabled sign-in is an account with a password that no one owns, no one monitors, and that is typically excluded from MFA — a standing foothold for password spray." `
+            -Detail "$($confirmed.Count) of $($allShared.Count) shared mailbox(es) have direct sign-in enabled. A shared mailbox is accessed by delegation, so an enabled sign-in is an account with a password that no one owns, no one monitors, and that is typically excluded from MFA — a standing foothold for password spray.$unreadNote" `
             -CurrentValue "$($confirmed.Count) shared mailbox(es) with sign-in enabled" `
             -RequiredValue 'All shared mailbox accounts disabled (BlockCredential) — access via delegation only' `
             -Remediation $control.Remediation -AffectedObjects $affected
+        return
     }
-    elseif ($probable.Count -gt 0) {
-        # Only the weaker license-based signal fired. Report it, but do not
-        # dress a heuristic up as a confirmed finding.
-        Add-TPFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
-            -Title $control.Title -Severity 'Medium' -FrameworkIds $citations `
-            -Detail "$($probable.Count) of $($allShared.Count) shared mailbox(es) carry a license or reconciliation flag suggesting an active account, but Entra user data was unavailable so sign-in state could not be confirmed. Verify these directly before treating them as clean." `
-            -CurrentValue "$($probable.Count) shared mailbox(es) flagged by license heuristic (unconfirmed)" `
-            -RequiredValue 'All shared mailbox accounts confirmed disabled (BlockCredential)' `
-            -Remediation $control.Remediation -AffectedObjects $affected
+    # The license heuristic is not a reading of the sign-in state: a flagged mailbox may be
+    # blocked and an unflagged one may be enabled. Without Entra's accountEnabled for every
+    # shared mailbox the control is not assessed, never a verdict.
+    if (-not $unconfirmedKnown -or $unconfirmed.Count -gt 0) {
+        $why = if (-not $unconfirmedKnown) {
+            'this result does not record which shared mailboxes were checked against Entra (accountEnabled in AAD-Users), so whether each one is blocked is not established'
+        } else {
+            "$($unconfirmed.Count) of $($allShared.Count) shared mailbox(es) could not be checked against Entra accountEnabled (AAD-Users data unavailable or the account not found there): $(@($unconfirmed | Select-Object -First 5 | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'UPN' -Default '?') }) -join ', ')$(if ($unconfirmed.Count -gt 5) { " and $($unconfirmed.Count - 5) more" })"
+        }
+        $heur = if ($probable.Count -gt 0) { " A license or reconciliation flag suggests an active account on $($probable.Count) of them; verify those first." } else { '' }
+        $ao = @($affected) + @($unconfirmed | ForEach-Object {
+            [ordered]@{ DisplayName = [string](Get-TPObjectField -Item $_ -Key 'DisplayName' -Default ''); UPN = [string](Get-TPObjectField -Item $_ -Key 'UPN' -Default ''); SignInState = 'NotRead'; Evidence = [string](Get-TPObjectField -Item $_ -Key 'Reason' -Default '') }
+        })
+        $p = @{ ControlId = $controlId; State = 'NotApplicable'; Category = $control.Category; Title = $control.Title; FrameworkIds = $citations
+            Detail = "Shared mailbox sign-in state was not established: $why. No shared mailbox was confirmed with sign-in enabled.$heur Not assessed." }
+        if ($ao.Count) { $p.AffectedObjects = @($ao) }
+        Add-TPFinding @p
+        return
     }
-    else {
-        Add-TPFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-            -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
-            -Detail "$($allShared.Count) shared mailbox(es) found — none have direct sign-in enabled. Access is by delegation only, as intended."
-    }
+    Add-TPFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+        -Title $control.Title -Severity 'Informational' -FrameworkIds $citations `
+        -Detail "$($allShared.Count) shared mailbox(es) found — Entra accountEnabled was read for every one and none have direct sign-in enabled. Access is by delegation only, as intended."
 }
 
 function Test-TPControlEXOConnectionFilter {
@@ -852,44 +867,83 @@ function Test-TPControlEXOOutboundLimits {
         -RulePolicyKey 'HostedOutboundSpamFilterPolicy' -PresetKind 'EOP')
     if ($inForce.Count -eq 0) { Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'No outbound spam policy found'; return }
 
-    # What matters is that an administrator hears when a user is restricted
-    # for sending spam — a strong compromise signal. Microsoft now delivers
-    # that through the default alert policy "User restricted from sending
-    # email" (on by default); the policy-level NotifyOutboundSpam is the older
-    # route. Either one satisfies. NotifyOutboundSpam = $false alone is the
-    # documented default and says nothing when the alert policy is on.
+    # The verdict is the sending limits Microsoft recommends for every outbound spam policy
+    # (Recommended settings for EOP and Microsoft Defender for Office 365, Outbound spam policy
+    # settings, Standard column; the Strict values are lower and pass): external recipients
+    # 500 per hour, internal 1000 per hour, 1000 per day, and ActionWhenThresholdReached
+    # BlockUser. 0 is Exchange's "use the service default" (the shipped value), so it is not a
+    # configured limit. Outbound spam policies are not part of the preset security policies, so
+    # each policy in force is judged. A value not returned is not assessed, never a pass.
+    $limits = @(
+        @{ Key = 'RecipientLimitExternalPerHour'; Max = 500;  Label = 'external recipients per hour' }
+        @{ Key = 'RecipientLimitInternalPerHour'; Max = 1000; Label = 'internal recipients per hour' }
+        @{ Key = 'RecipientLimitPerDay';          Max = 1000; Label = 'recipients per day' }
+    )
+    $verified = @(); $short = @(); $unknown = @(); $affected = @()
+    foreach ($pol in $inForce) {
+        $pn = [string](Get-TPObjectField -Item $pol -Key 'Name' -Default '?')
+        $polShort = @()
+        foreach ($l in $limits) {
+            $raw = Get-TPObjectField -Item $pol -Key $l.Key -Default $null; $n = 0
+            if ($null -eq $raw -or -not [int]::TryParse([string]$raw, [System.Globalization.NumberStyles]::Integer, [cultureinfo]::InvariantCulture, [ref]$n)) {
+                $unknown += "$pn`: $($l.Key) was not returned."
+            } elseif ($n -le 0) {
+                $polShort += "$($l.Key) = $n (the service default, no limit of this policy's own; $($l.Max) or lower recommended)"
+            } elseif ($n -gt $l.Max) {
+                $polShort += "$($l.Key) = $n (above the recommended $($l.Max) $($l.Label))"
+            } else {
+                $verified += "$pn`: $($l.Key) = $n."
+            }
+        }
+        $act = [string](Get-TPObjectField -Item $pol -Key 'ActionWhenThresholdReached' -Default '')
+        if (-not $act) { $unknown += "$pn`: ActionWhenThresholdReached was not returned." }
+        elseif ($act -eq 'BlockUser') { $verified += "$pn`: ActionWhenThresholdReached = BlockUser." }
+        else { $polShort += "ActionWhenThresholdReached = $act (BlockUser recommended: a user who reaches a limit stays restricted until an administrator reviews the account)" }
+        if ($polShort.Count) {
+            $short += "$pn`: $($polShort -join '; ')."
+            $affected += [ordered]@{ DisplayName = $pn; Shortfall = ($polShort -join '; ') }
+        }
+    }
+
+    # Context, not part of the verdict: whether an administrator hears when a user is restricted.
+    # Microsoft recommends the default alert policy "User restricted from sending email" for that
+    # and recommends NotifyOutboundSpam not selected (Standard and Strict).
     $notifying = @($inForce | Where-Object {
         (Get-TPObjectField -Item $_ -Key 'NotifyOutboundSpam' -Default $false) -eq $true -and
-        @(Get-TPObjectField -Item $_ -Key 'NotifyOutboundSpamRecipients' -Default @('(not recorded)')).Count -gt 0 })
-    $alertKnown = $false; $alertOn = @()
+        @(Get-TPObjectField -Item $_ -Key 'NotifyOutboundSpamRecipients' -Default @() | Where-Object { $_ }).Count -gt 0 })
+    $ctx = 'whether alert policies notify an administrator of a restricted user was not read (Get-ProtectionAlert, Security & Compliance session)'
     $pvw = Get-TPRawData -Key 'Purview'
     if ($pvw -and $pvw.Success -and (Get-TPNestedProperty -Object $pvw -Path 'Data.SectionStatus.ProtectionAlerts' -Default $null) -eq 'Collected') {
-        $alertKnown = $true
         $alertOn = @(@(Get-TPObjectField -Item $pvw.Data -Key 'ProtectionAlerts' -Default @()) | Where-Object {
             ([string](Get-TPObjectField -Item $_ -Key 'Name' -Default '')) -match 'restricted from sending' -and
             -not [bool](Get-TPObjectField -Item $_ -Key 'Disabled' -Default $false) })
+        $ctx = if ($alertOn.Count) { "alert policy '$([string](Get-TPObjectField -Item $alertOn[0] -Key 'Name' -Default ''))' is enabled" } else { 'no enabled "User restricted from sending email" alert policy was found' }
     }
-    if ($alertOn.Count -gt 0 -or ($notifying.Count -eq $inForce.Count)) {
-        $how = @()
-        if ($alertOn.Count) { $how += "alert policy '$([string](Get-TPObjectField -Item $alertOn[0] -Key 'Name' -Default ''))' is enabled" }
-        if ($notifying.Count) { $how += "outbound spam notification is set on $(@($notifying | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '') }) -join ', ')" }
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail "An administrator is told when a user is restricted for sending spam: $($how -join '; ')." `
-            -CurrentValue ($how -join '; ')
-        return
-    }
-    if (-not $alertKnown) {
+    if ($notifying.Count) { $ctx += "; NotifyOutboundSpam is set on $(@($notifying | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '') }) -join ', ')" }
+
+    $parts = @()
+    if ($verified.Count) { $parts += "Verified: $($verified -join ' ')" }
+    if ($short.Count)    { $parts += "Shortfall: $($short -join ' ')" }
+    if ($unknown.Count)  { $parts += "Not assessed: $($unknown -join ' ')" }
+    $parts += "Context (not part of this verdict): $ctx."
+    $detail = $parts -join ' '
+    $req = 'Every outbound spam policy in force: RecipientLimitExternalPerHour 1-500, RecipientLimitInternalPerHour 1-1000, RecipientLimitPerDay 1-1000, ActionWhenThresholdReached BlockUser (Microsoft Standard; Strict is lower)'
+    $cur = "$($inForce.Count) outbound spam policy(ies) in force; $($short.Count) short of the recommended limits"
+    if ($short.Count) {
+        if ($verified.Count) {
+            Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
+                -Detail $detail -CurrentValue $cur -RequiredValue $req -Remediation $ctrl.Remediation -AffectedObjects $affected
+        } else {
+            Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+                -Detail $detail -CurrentValue $cur -RequiredValue $req -Remediation $ctrl.Remediation -AffectedObjects $affected
+        }
+    } elseif ($unknown.Count) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
-            -Detail 'The outbound spam policies in force do not notify an administrator, but alert policies (Get-ProtectionAlert, Security & Compliance session) were not read, and the default alert policy "User restricted from sending email" delivers that notification on its own. Not assessed.'
-        return
+            -Detail $detail -RequiredValue $req
+    } else {
+        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail $detail -CurrentValue "Recommended sending limits and BlockUser on all $($inForce.Count) outbound spam policy(ies) in force"
     }
-    Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
-        -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-        -Detail 'No administrator is told when a user is restricted for sending spam: the "User restricted from sending email" alert policy is disabled or missing, and no outbound spam policy in force notifies anyone. A compromised mailbox blasting spam goes unseen until a downstream block or client complaint.' `
-        -CurrentValue 'No enabled restricted-sender alert; NotifyOutboundSpam off' `
-        -RequiredValue 'Alert policy "User restricted from sending email" enabled, or NotifyOutboundSpam with recipients on every outbound policy in force' `
-        -Remediation $ctrl.Remediation
 }
 
 # ── EXO-3.3 Alert Policy — Forwarding Rules ──────────────────────────────────
@@ -1100,15 +1154,23 @@ function Test-TPControlEXOAuditAgeLimit {
     }
     # A custom audit retention policy (Audit Premium) takes precedence over
     # the defaults and can SHORTEN Exchange record retention below 180 days.
-    $short = @(); $policiesRead = $false
+    # Not read means not assessed: an unread custom policy could be the one that shortens it.
     $pvw = Get-TPRawData -Key 'Purview'
-    if ($pvw -and $pvw.Success -and (Get-TPNestedProperty -Object $pvw -Path 'Data.SectionStatus.AuditRetentionPolicies' -Default $null) -eq 'Collected') {
-        $policiesRead = $true
-        $short = @(@(Get-TPObjectField -Item $pvw.Data -Key 'AuditRetentionPolicies' -Default @()) | Where-Object {
-            $d = Get-TPObjectField -Item $_ -Key 'RetentionDays' -Default $null
-            $types = @(Get-TPObjectField -Item $_ -Key 'RecordTypes' -Default @() | ForEach-Object { [string]$_ })
-            $null -ne $d -and [int]$d -lt 180 -and ($types.Count -eq 0 -or @($types | Where-Object { $_ -match '^Exchange' }).Count -gt 0) })
+    $retStatus = if ($pvw -and $pvw.Success) { Get-TPNestedProperty -Object $pvw -Path 'Data.SectionStatus.AuditRetentionPolicies' -Default $null } else { $null }
+    if ($retStatus -ne 'Collected') {
+        $why = if (-not $pvw -or -not $pvw.Success) { 'Purview data was not collected' }
+               elseif ($retStatus -eq 'Failed') { 'the Get-UnifiedAuditLogRetentionPolicy read failed (see Exceptions)' }
+               else { 'Get-UnifiedAuditLogRetentionPolicy was not run; it needs a Security & Compliance session' }
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Verified: mailbox auditing and Unified Audit Log ingestion are on. Not assessed: custom audit retention policies were not read ($why), and one takes precedence over the 180-day default and can shorten how long Exchange audit records are kept, so retention was not assessed."
+        return
     }
+    $exchangePolicies = @(@(Get-TPObjectField -Item $pvw.Data -Key 'AuditRetentionPolicies' -Default @()) | Where-Object {
+        $types = @(Get-TPObjectField -Item $_ -Key 'RecordTypes' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
+        $types.Count -eq 0 -or @($types | Where-Object { $_ -match '^Exchange' }).Count -gt 0 })
+    $short = @($exchangePolicies | Where-Object { $d = Get-TPObjectField -Item $_ -Key 'RetentionDays' -Default $null; $null -ne $d -and [int]$d -lt 180 })
+    # A duration the collector could not map to days is not a pass either.
+    $unreadDuration = @($exchangePolicies | Where-Object { $null -eq (Get-TPObjectField -Item $_ -Key 'RetentionDays' -Default $null) })
     if ($short.Count -gt 0) {
         $names = @($short | ForEach-Object { "$([string](Get-TPObjectField -Item $_ -Key 'Name' -Default '?')) ($([string](Get-TPObjectField -Item $_ -Key 'RetentionDuration' -Default '')))" })
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
@@ -1116,7 +1178,13 @@ function Test-TPControlEXOAuditAgeLimit {
             -CurrentValue ($names -join '; ') -RequiredValue 'Exchange audit records retained at least 180 days' -Remediation $ctrl.Remediation
         return
     }
-    $policyNote = if ($policiesRead) { ' No custom audit retention policy shortens it.' } else { ' Custom audit retention policies (Audit Premium, Security & Compliance session) were not read; one could shorten retention for the users it covers.' }
+    if ($unreadDuration.Count -gt 0) {
+        $names = @($unreadDuration | ForEach-Object { "$([string](Get-TPObjectField -Item $_ -Key 'Name' -Default '?')) ('$([string](Get-TPObjectField -Item $_ -Key 'RetentionDuration' -Default ''))')" })
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "Verified: mailbox auditing and Unified Audit Log ingestion are on. Not assessed: the retention duration of custom audit retention policies covering Exchange records was not recognized: $($names -join '; ')."
+        return
+    }
+    $policyNote = ' No custom audit retention policy shortens it.'
     Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
         -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
         -Detail "Mailbox auditing and Unified Audit Log ingestion are on, so mailbox audit records are retained for 180 days (Audit Standard) or one year for users with E5 / Audit (Premium). The per-mailbox AuditLogAgeLimit no longer governs this.$policyNote" `
@@ -1197,31 +1265,44 @@ function Test-TPControlEXOAntiSpamInbound {
             -Title $ctrl.Title -FrameworkIds $cit `
             -Detail 'EXO data not collected'; return
     }
-    $policies = @($exo.Data['AntiSpamPolicies'] ?? @())
-    $default  = $policies | Where-Object { $_.IsDefault } | Select-Object -First 1
+    if (-not (Test-TPSectionCollected $exo 'AntiSpamPolicies')) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'AntiSpamPolicies was not collected; not assessed.'; return
+    }
+    $f = { param($p, $k) Get-TPObjectField -Item $p -Key $k -Default $null }
+    $policies = @(Get-TPObjectField -Item $exo.Data -Key 'AntiSpamPolicies' -Default @())
+    $default  = $policies | Where-Object { (& $f $_ 'IsDefault') -eq $true } | Select-Object -First 1
     if (-not $default) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
             -Title $ctrl.Title -FrameworkIds $cit `
             -Detail 'No default anti-spam policy found'; return
     }
-    $gaps = @()
-    if ($default.SpamAction     -ne 'MoveToJmf' -and $default.SpamAction -ne 'Quarantine') { $gaps += "SpamAction=$($default.SpamAction)" }
-    # BulkThreshold 6, not Microsoft's default of 7: the control's own
-    # Remediation instructs -BulkThreshold 6, and an evaluator that passes 7
-    # while the remediation says 6 contradicts itself in the client's report.
-    if ($default.BulkThreshold  -gt 6)  { $gaps += "BulkThreshold=$($default.BulkThreshold)" }
-    if ($default.ZapEnabled -ne $true)  { $gaps += 'ZapEnabled=False' }
-    if ($gaps.Count -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail 'Default inbound anti-spam policy is properly configured.'
-    } else {
-        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
-            -Detail "Anti-spam policy has sub-optimal settings: $($gaps -join ', ')" `
-            -CurrentValue ($gaps -join ', ') -RequiredValue 'SpamAction=MoveToJmf/Quarantine, BulkThreshold≤6, ZapEnabled=True' `
-            -Remediation $ctrl.Remediation
+    # Each setting judged only from a value Exchange returned: an absent or blank value is
+    # not assessed, never a pass (a null BulkThreshold used to pass the "-gt 6" test).
+    $verified = @(); $short = @(); $unknown = @()
+    $spamAction = [string](& $f $default 'SpamAction')
+    if (-not $spamAction) { $unknown += 'SpamAction was not returned.' }
+    elseif ($spamAction -in @('MoveToJmf', 'Quarantine')) { $verified += "SpamAction = $spamAction." }
+    else { $short += "SpamAction = $spamAction (MoveToJmf or Quarantine required)." }
+    # BulkThreshold 6, not Microsoft's default of 7: Microsoft's Standard value is 6 (Strict 5),
+    # and the control's own Remediation instructs -BulkThreshold 6.
+    $bulkRaw = & $f $default 'BulkThreshold'; $bulk = 0
+    if ($null -eq $bulkRaw -or -not [int]::TryParse([string]$bulkRaw, [System.Globalization.NumberStyles]::Integer, [cultureinfo]::InvariantCulture, [ref]$bulk)) { $unknown += 'BulkThreshold was not returned.' }
+    elseif ($bulk -le 6) { $verified += "BulkThreshold = $bulk." }
+    else { $short += "BulkThreshold = $bulk (6 or lower required)." }
+    # Zero-hour auto purge: Microsoft's recommended-settings table lists SpamZapEnabled and
+    # PhishZapEnabled (Get-HostedContentFilterPolicy); ZapEnabled is the deprecated umbrella and
+    # is no longer read here (DEF-2.2 judges ZAP across every policy in force).
+    foreach ($zk in @('SpamZapEnabled', 'PhishZapEnabled')) {
+        $zv = & $f $default $zk
+        if ($null -eq $zv) { $unknown += "$zk was not returned." }
+        elseif ($zv -eq $true) { $verified += "$zk = True." }
+        else { $short += "$zk = False." }
     }
+    $cur = @("SpamAction=$(if ($spamAction) { $spamAction } else { '(not returned)' })", "BulkThreshold=$(if ($null -ne $bulkRaw) { $bulkRaw } else { '(not returned)' })",
+        "SpamZapEnabled=$(& $f $default 'SpamZapEnabled')", "PhishZapEnabled=$(& $f $default 'PhishZapEnabled')") -join ', '
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
+        -CurrentValue "Default anti-spam policy: $cur" -RequiredValue 'Default anti-spam policy: SpamAction MoveToJmf or Quarantine, BulkThreshold 6 or lower, SpamZapEnabled True, PhishZapEnabled True'
 }
 
 # ── EXO-5.1 Per-User Mailbox Audit Logging Enabled ────────────────────────────

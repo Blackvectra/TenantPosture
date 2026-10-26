@@ -246,7 +246,7 @@ function Invoke-TPCollectDefender {
         # (EOP = anti-spam/anti-phish/anti-malware, ATP = Safe Links /
         # Safe Attachments). A preset POLICY object stays after the preset is
         # turned off, so its presence says nothing; the rule State does.
-        $result.Data['PresetRules'] = @{ Available = $false; EOP = @(); ATP = @() }
+        $result.Data['PresetRules'] = @{ Available = $false; EOP = @(); ATP = @(); ATPRead = $false }
         try {
             $mkPr = { param($r) @{
                 Name = [string](Get-TPObjectField -Item $r -Key 'Name' -Default '')
@@ -262,10 +262,13 @@ function Invoke-TPCollectDefender {
                 HasExceptions = [bool]@(@(Get-TPObjectField -Item $r -Key 'ExceptIfSentTo' -Default @()) + @(Get-TPObjectField -Item $r -Key 'ExceptIfSentToMemberOf' -Default @()) + @(Get-TPObjectField -Item $r -Key 'ExceptIfRecipientDomainIs' -Default @()) | Where-Object { $_ }).Count } }
             $eop = @(Get-EOPProtectionPolicyRule -ErrorAction Stop)
             $atp = @()
-            if (Get-Command Get-ATPProtectionPolicyRule -ErrorAction SilentlyContinue) { $atp = @(Get-ATPProtectionPolicyRule -ErrorAction Stop) }
-            $result.Data['PresetRules'] = @{ Available = $true; EOP = @($eop | ForEach-Object { & $mkPr $_ }); ATP = @($atp | ForEach-Object { & $mkPr $_ }) }
+            # ATPRead says whether the Defender for Office 365 rules were asked for at all: an
+            # empty ATP list from a session without the cmdlet is "not read", never "no rule".
+            $atpRead = $false
+            if (Get-Command Get-ATPProtectionPolicyRule -ErrorAction SilentlyContinue) { $atp = @(Get-ATPProtectionPolicyRule -ErrorAction Stop); $atpRead = $true }
+            $result.Data['PresetRules'] = @{ Available = $true; EOP = @($eop | ForEach-Object { & $mkPr $_ }); ATP = @($atp | ForEach-Object { & $mkPr $_ }); ATPRead = $atpRead }
         } catch {
-            $result.Data['PresetRules'] = @{ Available = $false; EOP = @(); ATP = @(); Error = $_.Exception.Message }
+            $result.Data['PresetRules'] = @{ Available = $false; EOP = @(); ATP = @(); ATPRead = $false; Error = $_.Exception.Message }
             if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                 Register-TPException -Source 'Defender-PresetRules' -Message $_.Exception.Message
             }

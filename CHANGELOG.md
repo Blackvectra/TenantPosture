@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[Evaluators] Twenty-three controls now judge what their benchmark item audits.** INT-1.3, INT-2.3 and INT-4.1 read the
+  BitLocker, firewall-profile and LAPS backup settings instead of a policy merely existing; DNS-1.4 checks the MTA-STS
+  `mx:` patterns cover every MX host and DNS-2.1 requires a 2048-bit DKIM key. PVW-2.5 and TMS-1.5 judge retention by the
+  policies' locations (Microsoft documents `Workload` as listing every workload), PVW-2.6 and PPL-3.1 need an auto-labeling
+  policy both enabled and enforcing, and PPL-3.2 credits only an enforcing Copilot DLP policy with an enabled rule.
+  EXO-3.2 judges Microsoft's outbound sending limits and BlockUser, EXO-2.6 passes only when every shared mailbox's
+  sign-in state was read, EXO-4.1 no longer passes with custom audit retention unread, EXO-4.4 reads the current ZAP
+  settings, and DEF-2.1 needs both preset rules on. AAD-3.3, AAD-7.1, AAD-11.2, AAD-11.4, AAD-11.7, AAD-11.9, AAD-12.2
+  and AAD-14.1 check the scope or value their benchmark item requires. Values not read, including older results files,
+  are not assessed. New citations: CIS 2.1.15 (EXO-3.2), ScubaGear MS.SECURITYSUITE.5.2v1 (EXO-4.1) and MS.AAD.5.6v1
+  (AAD-14.1), Microsoft's Windows security baseline, Zero Trust checks and EOP/MDO recommended settings; 148 of 204
+  controls are now mapped to a benchmark. No Graph scope added.
 - **[Benchmarks] Every control is mapped to a configuration benchmark or says why not.** 133 of 204 controls cite at least
   one: CIS Microsoft 365 v7.0.0 and CISA ScubaGear 2.0.0 as before, plus (new, `Config/benchmark-mappings.json`) the CIS
   Intune for Defender Antivirus benchmark, Microsoft's recommended EOP and Defender for Office 365 settings, Microsoft

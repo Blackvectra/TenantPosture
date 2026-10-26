@@ -10,7 +10,8 @@
 # are not populated by any code path. They are reserved for a future collector
 # and must not be read as evidence of anything.
 #
-# Requires: AuditLog.Read.All, User.Read.All, Application.Read.All
+# Requires: AuditLog.Read.All, User.Read.All, Application.Read.All,
+#           Policy.Read.All (defaultAppManagementPolicy)
 #
 
 function Invoke-TPCollectAADInventory {
@@ -29,11 +30,13 @@ function Invoke-TPCollectAADInventory {
                 StaleMembers     = 'NotRun'
                 OAuthGrantedApps = 'NotRun'
                 AppCredentials   = 'NotRun'
+                AppManagementPolicy = 'NotRun'
             }
             GuestUsers          = @()
             StaleMembers        = @()
             OAuthGrantedApps    = @()
             AppCredentials      = @()
+            AppManagementPolicy = $null
             LegacyAuthOnlyUsers = @()
             RecentRiskEvents    = @()
             SecureScore         = $null
@@ -125,22 +128,32 @@ function Invoke-TPCollectAADInventory {
                 # and stale-account controls reported NotApplicable on any tenant
                 # with a single never-signed-in guest, which is nearly all of them.
                 $lastSign  = [string](Get-TPNestedProperty -Object $_ -Path 'signInActivity.lastSignInDateTime' -Default '')
-                $daysSince = 9999
-                if ($lastSign) {
-                    $parsed = [datetime]::MinValue
-                    if ([datetime]::TryParse($lastSign, [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsed)) {
-                        $daysSince = [int]([datetime]::UtcNow - $parsed.ToUniversalTime()).TotalDays
-                    }
-                }
+                # Staleness is judged on the last SUCCESSFUL sign-in (interactive
+                # or not), as Microsoft's inactive-guest check does:
+                # lastSignInDateTime is the last interactive ATTEMPT, so a guest
+                # with a failed attempt last week and no success for a year read
+                # as active. A guest with no recorded success is judged from the
+                # day the account was created; neither date readable is not
+                # known (never stale, never fresh).
+                $okAt      = ConvertTo-TPUtcDateTime (Get-TPNestedProperty -Object $_ -Path 'signInActivity.lastSuccessfulSignInDateTime' -Default $null)
+                $createdAt = ConvertTo-TPUtcDateTime (Get-TPObjectField -Item $_ -Key 'createdDateTime' -Default $null)
+                $lastOk    = if ($okAt) { $okAt.ToString('o') } else { '' }
+                $created   = if ($createdAt) { $createdAt.ToString('o') } else { [string](Get-TPObjectField -Item $_ -Key 'createdDateTime' -Default '') }
+                $basisAt = $okAt; $basis = 'last successful sign-in'
+                if (-not $basisAt) { $basisAt = $createdAt; $basis = 'account creation (no successful sign-in recorded)' }
+                if (-not $basisAt) { $basis = 'Unknown' }
+                $daysSince = if ($basisAt) { [int]([datetime]::UtcNow - $basisAt).TotalDays } else { 9999 }
                 @{
-                    DisplayName       = [string]$_.displayName
-                    UPN               = [string]$_.userPrincipalName
-                    AccountEnabled    = [bool]($_.accountEnabled ?? $false)
-                    CreatedDateTime   = [string]($_.createdDateTime ?? '')
+                    DisplayName       = [string](Get-TPObjectField -Item $_ -Key 'displayName' -Default '')
+                    UPN               = [string](Get-TPObjectField -Item $_ -Key 'userPrincipalName' -Default '')
+                    AccountEnabled    = (Get-TPObjectField -Item $_ -Key 'accountEnabled' -Default $null)
+                    CreatedDateTime   = $created
                     LastSignIn        = $lastSign
+                    LastSuccessfulSignIn = $lastOk
+                    LastSignInBasis   = $basis
                     DaysSinceSignIn   = $daysSince
-                    # Not known without the license: never stale, never fresh.
-                    IsStale           = $(if ($result.Data.SignInActivityLicensed -eq $false) { $null } else { $daysSince -gt 90 })
+                    # Not known without the license, or with neither date: never stale, never fresh.
+                    IsStale           = $(if ($result.Data.SignInActivityLicensed -eq $false -or -not $basisAt) { $null } else { $daysSince -gt 90 })
                 }
             })
             $result.Data.SectionStatus.GuestUsers = 'Collected'
@@ -358,6 +371,39 @@ function Invoke-TPCollectAADInventory {
             $result.Data.SectionStatus.AppCredentials = 'Failed'
             if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                 Register-TPException -Source 'AAD-AppCredentials' -Message $_.Exception.Message
+            }
+        }
+
+        # Tenant application management policy (AAD-14.1): the tenant-wide
+        # default that restricts how long a new secret or certificate may be
+        # issued for. /policies/defaultAppManagementPolicy is a singleton read
+        # with Policy.Read.All (already granted). Each restriction is kept as
+        # read; the evaluator judges type, state, maxLifetime and the
+        # created-after date. Its own section: a failure leaves it unread.
+        try {
+            $amp = Invoke-TPGraphRequest -Method GET -Uri 'https://graph.microsoft.com/v1.0/policies/defaultAppManagementPolicy' -ErrorAction Stop
+            $mkRestriction = { param($r)
+                $after = Get-TPObjectField -Item $r -Key 'restrictForAppsCreatedAfterDateTime' -Default $null
+                $afterUtc = ConvertTo-TPUtcDateTime $after
+                $ex = Get-TPObjectField -Item $r -Key 'excludeActors' -Default $null
+                @{
+                    RestrictionType = [string](Get-TPObjectField -Item $r -Key 'restrictionType' -Default '')
+                    State           = [string](Get-TPObjectField -Item $r -Key 'state' -Default '')
+                    MaxLifetime     = [string](Get-TPObjectField -Item $r -Key 'maxLifetime' -Default '')
+                    RestrictForAppsCreatedAfterDateTime = $(if ($afterUtc) { $afterUtc.ToString('o') } else { [string]$after })
+                    ExcludedActorAttributes = @(Get-TPNestedProperty -Object $ex -Path 'customSecurityAttributes' -Default @() | Where-Object { $null -ne $_ }).Count
+                }
+            }
+            $result.Data.AppManagementPolicy = @{
+                IsEnabled            = (Get-TPObjectField -Item $amp -Key 'isEnabled' -Default $null)
+                PasswordRestrictions = @(Get-TPNestedProperty -Object $amp -Path 'applicationRestrictions.passwordCredentials' -Default @() | Where-Object { $null -ne $_ } | ForEach-Object { & $mkRestriction $_ })
+                KeyRestrictions      = @(Get-TPNestedProperty -Object $amp -Path 'applicationRestrictions.keyCredentials' -Default @() | Where-Object { $null -ne $_ } | ForEach-Object { & $mkRestriction $_ })
+            }
+            $result.Data.SectionStatus.AppManagementPolicy = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.AppManagementPolicy = 'Failed'
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'AAD-AppManagementPolicy' -Message $_.Exception.Message
             }
         }
 

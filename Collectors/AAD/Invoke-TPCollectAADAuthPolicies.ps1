@@ -200,11 +200,22 @@ function Invoke-TPCollectAADAuthPolicies {
                 # non-empty string is $true, so a cast read "False" as enabled.
                 # Anything but a literal True/False is $null (not read).
                 $settingBool = { param($s) switch ([string]$s) { 'True' { $true } 'False' { $false } default { $null } } }
+                # Numeric values are strings too ("10", "60"). An absent value
+                # is the template default (Microsoft: lockout threshold 10,
+                # lockout duration 60 seconds); a value that is not a whole
+                # number of ASCII digits is $null (not read), never a cast
+                # that throws away the whole Password Rule Settings block.
+                $settingInt = { param($v, [int] $Default)
+                    if ($null -eq $v) { return $Default }
+                    $t = ([string]$v).Trim()
+                    $n = 0
+                    if ($t -cmatch '\A[0-9]{1,9}\z' -and [int]::TryParse($t, [System.Globalization.NumberStyles]::None, [cultureinfo]::InvariantCulture, [ref]$n)) { return $n }
+                    return $null }
                 $result.Data.PasswordProtection = @{
                     Instantiated             = $true
                     TemplateId               = $PWD_RULE_TEMPLATE_ID
-                    LockoutThreshold         = [int]($values['LockoutThreshold'] ?? 10)
-                    LockoutDurationSeconds   = [int]($values['LockoutDurationInSeconds'] ?? 60)
+                    LockoutThreshold         = (& $settingInt $values['LockoutThreshold'] 10)
+                    LockoutDurationSeconds   = (& $settingInt $values['LockoutDurationInSeconds'] 60)
                     EnableBannedPasswordCheckOnPremises = (& $settingBool $values['EnableBannedPasswordCheckOnPremises'])
                     BannedPasswordCheckOnPremisesMode   = [string]($values['BannedPasswordCheckOnPremisesMode'] ?? 'Audit')
                     EnableBannedPasswordCheck = (& $settingBool $values['EnableBannedPasswordCheck'])

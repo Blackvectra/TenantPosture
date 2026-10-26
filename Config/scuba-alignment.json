@@ -589,12 +589,12 @@
       "Control": "EXO-4.1",
       "Title": "Mailbox Audit Log Age Limit Sufficient",
       "CitedBefore": "MS.DEFENDER.6.3v1",
-      "CitedIdStatus": "migrated",
+      "CitedIdStatus": "current",
       "MigrationNewId": "MS.SECURITYSUITE.5.2v1",
-      "Current": null,
-      "Relation": "Unsupported",
-      "RequirementStrength": "",
-      "Note": "The mailbox audit log age limit no longer governs retention (Purview does). Obsolete reference removed; the NRG control stays."
+      "Current": "MS.SECURITYSUITE.5.2v1",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Re-cited 2026-10-26 after the evaluator stopped passing when custom audit retention policies were not read: Satisfied requires Exchange audit records to stay searchable for at least 90 days, with every Exchange-scoped custom audit retention policy read; covers the 'searchable for 3 months' half of 5.2 for Exchange record types only. The 12-month retrievability half and other record types are not checked here (PVW-4.2 checks one-year retention). The 2026-09-30 review had removed the old MS.DEFENDER.6.3v1 reference because the evaluator then read AuditLogAgeLimit."
     },
     {
       "Control": "EXO-4.2",
@@ -1002,6 +1002,17 @@
       "Relation": "Partial",
       "RequirementStrength": "SHOULD",
       "Note": "Added 2026-10-26: the same judgment as AAD-2.3 (Get-TPCADeviceComplianceCoverage). ScubaGear's automated check passes only a grant of exactly compliantDevice OR domainJoinedDevice; a compliant-only policy passes here and fails that check."
+    },
+    {
+      "Control": "AAD-14.1",
+      "Title": "Application Credentials Current and Short-Lived",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.AAD.5.6v1",
+      "Relation": "Equivalent",
+      "RequirementStrength": "SHOULD",
+      "Note": "Added 2026-10-26: Satisfied requires the enabled default application management policy to restrict passwordLifetime to 180 days or less with no exempted actors or created-after date, which is 5.6. It also restricts asymmetricKeyLifetime to 180 days, stricter than MS.AAD.5.7v1's 365, which is met but not cited (one ScubaGear rule per control)."
     }
   ]
 }

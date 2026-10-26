@@ -444,25 +444,25 @@
       "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 2.1.14 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
-      "ControlId": "CIS-2.1.15",
-      "Title": "Ensure outbound anti-spam message limits are in place",
+      "ControlId": "EXO-3.2",
+      "Title": "Outbound Spam Sending Limits Configured",
       "Tier": "Minimum",
       "Cis": "2.1.15",
       "CisProfile": "E3 Level 1 / E5 Level 1",
-      "CisRelation": "Manual",
+      "CisRelation": "Equivalent",
       "Owner": "Email",
-      "RawDataKeys": [],
-      "EvidenceSource": "Manual: CIS Microsoft 365 Foundations v7.0.0 2.1.15 audit procedure.",
-      "ExpectedState": "CIS 2.1.15: Ensure outbound anti-spam message limits are in place, verified by hand against the CIS audit procedure.",
-      "SlaClass": "High",
+      "RawDataKeys": [
+        "EXO-MailboxConfig"
+      ],
+      "EvidenceSource": "Assessment control EXO-3.2 (EXO-MailboxConfig)",
+      "ExpectedState": "CIS 2.1.15: Ensure outbound anti-spam message limits are in place. Checked as: every outbound spam policy in force sets RecipientLimitExternalPerHour 1-500, RecipientLimitInternalPerHour 1-1000, RecipientLimitPerDay 1-1000 and ActionWhenThresholdReached BlockUser (Microsoft's Standard values; lower values also pass).",
+      "SlaClass": "Standard",
       "DependsOn": [],
-      "FreshnessClass": "Monthly",
+      "FreshnessClass": "Weekly",
       "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
       "EffectivenessCapability": "NotCollected",
-      "Reason": "Part of the CIS E3 Level 1 / E5 Level 1 profile this tier adopts.",
-      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 2.1.15 (E3 Level 1 / E5 Level 1), the profile this tier adopts.",
-      "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
-      "Automated": false
+      "Reason": "A compromised account with no sending limit can send mass phishing before anyone notices; a limit with BlockUser stops it at the threshold.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 2.1.15 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
       "ControlId": "EXO-3.5",

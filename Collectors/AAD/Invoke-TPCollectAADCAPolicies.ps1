@@ -98,6 +98,10 @@ function Invoke-TPCollectAADCAPolicies {
                             Include = @(& $g 'conditions.applications.includeApplications')
                             Exclude = @(& $g 'conditions.applications.excludeApplications')
                             UserActions = @(& $g 'conditions.applications.includeUserActions')
+                            # Authentication context claim values (c1..c99) the
+                            # policy targets; AAD-3.3 reads which policy backs a
+                            # PIM activation context.
+                            AuthenticationContext = @(& $g 'conditions.applications.includeAuthenticationContextClassReferences')
                         }
                         # Read by AAD-11.7 (device filter for admins) and
                         # AAD-11.9 (workload identities); never projected before,
@@ -110,6 +114,10 @@ function Invoke-TPCollectAADCAPolicies {
                             IncludeServicePrincipals = @(& $g 'conditions.clientApplications.includeServicePrincipals')
                             ExcludeServicePrincipals = @(& $g 'conditions.clientApplications.excludeServicePrincipals')
                         }
+                        # Service principal risk levels (workload identity risk
+                        # policies, AAD-11.9). Empty when the policy sets none; a
+                        # results file from before this read has no key at all.
+                        ServicePrincipalRiskLevels = @(& $g 'conditions.servicePrincipalRiskLevels')
                     }
                     GrantControls    = @{
                         Operator             = [string](& $g 'grantControls.operator' '')

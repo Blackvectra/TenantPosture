@@ -337,6 +337,73 @@ function Test-TPControlDNSDMARC {
     }
 }
 
+# ── MTA-STS mx: coverage ─────────────────────────────────────────────────────
+# RFC 8461 section 3.2: the policy's "mx" fields are patterns of the MX hosts
+# senders may deliver to; section 4.1: a pattern is a host name or a wildcard
+# whose leftmost label is "*", matching exactly one label ("*.example.com"
+# matches "mx1.example.com", not "example.com" and not "a.b.example.com").
+# Comparison is case-insensitive and ignores a trailing dot.
+function Test-TPMtaStsMxPattern {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)] [string] $Pattern, [Parameter(Mandatory)] [string] $HostName)
+    $p = $Pattern.Trim().TrimEnd('.').ToLowerInvariant()
+    $h = $HostName.Trim().TrimEnd('.').ToLowerInvariant()
+    if (-not $p -or -not $h) { return $false }
+    if ($p.StartsWith('*.')) {
+        $suffix = $p.Substring(1)
+        if ($suffix.Length -lt 2 -or $suffix.Contains('*')) { return $false }
+        if (-not $h.EndsWith($suffix, [System.StringComparison]::Ordinal)) { return $false }
+        $label = $h.Substring(0, $h.Length - $suffix.Length)
+        return ($label.Length -gt 0 -and -not $label.Contains('.'))
+    }
+    if ($p.Contains('*')) { return $false }
+    return [string]::Equals($p, $h, [System.StringComparison]::Ordinal)
+}
+
+# Whether the fetched MTA-STS policy covers every MX host of the domain.
+# State: Covered / Uncovered / NotAssessed, with the sentence the finding uses.
+function Get-TPMtaStsMxCoverage {
+    [CmdletBinding()]
+    param([AllowNull()] $DomainEntry)
+    $out = [ordered]@{ State = 'NotAssessed'; Sentence = ''; Patterns = @(); Uncovered = @(); MxHosts = @() }
+    $sts = Get-TPObjectField -Item $DomainEntry -Key 'MTASTS' -Default $null
+    $policy = [string](Get-TPObjectField -Item $sts -Key 'Policy' -Default '')
+    if (-not $policy) {
+        $out.Sentence = 'whether the policy covers every MX host, because the policy text is not in this results file.'
+        return $out
+    }
+    if (-not (Test-TPDnsLookupSucceeded -Domain $DomainEntry -Record 'MX')) {
+        $out.Sentence = 'whether the policy covers every MX host, because the MX lookup did not complete.'
+        return $out
+    }
+    # Line by line with horizontal whitespace only, as the collector reads the mode.
+    $out.Patterns = @($policy -split '\r?\n' | ForEach-Object { if ($_ -match '^[ \t]*mx:[ \t]*(\S+)[ \t]*$') { $Matches[1] } } | Where-Object { $_ } | Select-Object -Unique)
+    $out.MxHosts = @(@(Get-TPObjectField -Item $DomainEntry -Key 'MX' -Default @()) | Where-Object { $null -ne $_ } |
+        ForEach-Object { ([string](Get-TPObjectField -Item $_ -Key 'Exchange' -Default '')).Trim().TrimEnd('.') } | Where-Object { $_ } | Select-Object -Unique)
+    if ($out.MxHosts.Count -eq 0) {
+        $out.State = 'Covered'
+        $out.Sentence = 'The domain publishes no MX record, so there is no MX host for the policy to leave uncovered.'
+        return $out
+    }
+    foreach ($mx in $out.MxHosts) {
+        $hit = $false
+        foreach ($pat in $out.Patterns) { if (Test-TPMtaStsMxPattern -Pattern $pat -HostName $mx) { $hit = $true; break } }
+        if (-not $hit) { $out.Uncovered += $mx }
+    }
+    if ($out.Uncovered.Count -eq 0) {
+        $out.State = 'Covered'
+        $out.Sentence = "Every MX host ($($out.MxHosts -join ', ')) matches the policy's mx: patterns ($($out.Patterns -join ', '))."
+    } elseif ($out.Patterns.Count -eq 0) {
+        $out.State = 'Uncovered'
+        $out.Sentence = "The policy lists no mx: pattern, so no MX host ($($out.MxHosts -join ', ')) is covered and a sender honoring the policy cannot validate any of them."
+    } else {
+        $out.State = 'Uncovered'
+        $out.Sentence = "MX host(s) $($out.Uncovered -join ', ') match none of the policy's mx: patterns ($($out.Patterns -join ', ')), so a sender honoring the policy refuses to deliver to them."
+    }
+    return $out
+}
+
 # ── DNS-1.4 MTA-STS in Enforce Mode ─────────────────────────────────────────
 function Test-TPControlDNSMTASTS {
     [CmdletBinding()] param()
@@ -380,11 +447,36 @@ function Test-TPControlDNSMTASTS {
                 $resolverNote = " The policy host mta-sts.$domain was resolved through public DNS because the workstation running the assessment could not resolve it ($wsWhy); public resolvers answer for it, so sending servers can fetch the policy, and only the assessor's network could not."
                 $currentValue = 'mode: enforce; policy host resolved through public DNS, not by the workstation'
             }
-            Add-TPFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
-                -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
-                -FrameworkIds $citations `
-                -Detail "$domain MTA-STS in enforce mode — TLS required for all inbound SMTP.$resolverNote" `
-                -CurrentValue $currentValue
+            # Enforce mode protects only the MX hosts the policy's mx: patterns cover
+            # (RFC 8461 section 4.1), and NIST SP 800-177r1 recommendation 5-3 asks for
+            # MTA-STS "for all mail servers listed in the domain's MX Resource Record
+            # set". An MX host no pattern matches is one a policy-honoring sender
+            # refuses to deliver to. The MX set and the policy text are both already
+            # collected; a failed MX lookup or a policy body not in the results file
+            # leaves the coverage not assessed.
+            $cov = Get-TPMtaStsMxCoverage -DomainEntry $d
+            $enforced = "$domain MTA-STS is in enforce mode."
+            if ($cov.State -eq 'Covered') {
+                Add-TPFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
+                    -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
+                    -FrameworkIds $citations `
+                    -Detail "$enforced $($cov.Sentence)$resolverNote" `
+                    -CurrentValue $currentValue
+            } elseif ($cov.State -eq 'Uncovered') {
+                Add-TPFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+                    -Title "$($control.Title): $domain" -Severity 'Medium' -Instance $domain `
+                    -FrameworkIds $citations `
+                    -Detail "Verified: $enforced Shortfall: $($cov.Sentence)$resolverNote" `
+                    -CurrentValue "mode: enforce; MX not covered by the policy: $($cov.Uncovered -join ', ')" `
+                    -RequiredValue 'mode: enforce, with mx: patterns covering every MX host of the domain' -Remediation $control.Remediation `
+                    -AffectedObjects @($cov.Uncovered | ForEach-Object { [ordered]@{ MxHost = $_; PolicyMx = ($cov.Patterns -join ', ') } })
+            } else {
+                Add-TPFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
+                    -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
+                    -FrameworkIds $citations `
+                    -Detail "Verified: $enforced Not assessed: $($cov.Sentence)$resolverNote" `
+                    -CurrentValue "$currentValue; MX coverage not assessed"
+            }
         } elseif (-not $d.MTASTS.Mode -and (Get-TPObjectField -Item $d.MTASTS -Key 'PolicyHostMissing' -Default $false) -eq $true) {
             # The TXT record is published but mta-sts.<domain> does not exist
             # (authoritative no A / AAAA record), so no sender can fetch the
@@ -508,13 +600,19 @@ function Test-TPControlDNSDNSSEC {
 # states the date the key was last rotated, so the report answers "when was
 # DKIM last rotated" per domain. The 365-day interval is this assessment's
 # rotation cadence; NIST SP 800-57 Part 1 gives private signature keys a
-# cryptoperiod of one to three years. Key size is EXO-1.4's verdict and is
-# shown here as context only. Microsoft rotates DKIM only when asked.
+# cryptoperiod of one to three years. The key must also be 2048-bit, the
+# length NIST SP 800-177r1 Table 4-3 recommends for RSA/SHA-256 (and the size
+# Rotate-DkimSigningConfig -KeySize 2048 sets). The size judged is the largest
+# selector key Exchange reports (Selector1KeySize / Selector2KeySize / KeySize,
+# as EXO-1.4 reads it: a 1024-bit selector beside a 2048-bit one is a rotation
+# in progress), else the largest published key read from DNS. A size that was
+# not read is never a pass on size: the rotation verdict stands and the Detail
+# says the size was not judged. Microsoft rotates DKIM only when asked.
 function Get-TPDkimRotationFacts {
     [CmdletBinding()]
     param([AllowNull()] $Dkim)
 
-    $f = [ordered]@{ AgeDays = $null; LastRotated = ''; Source = ''; Context = @() }
+    $f = [ordered]@{ AgeDays = $null; LastRotated = ''; Source = ''; Context = @(); KeyBits = $null; KeyBitsSource = '' }
     if ($null -eq $Dkim) { return $f }
     $age = Get-TPObjectField -Item $Dkim -Key 'KeyAgeDays' -Default $null
     $last = [string](Get-TPObjectField -Item $Dkim -Key 'LastRotated' -Default '')
@@ -530,6 +628,9 @@ function Get-TPDkimRotationFacts {
         if ($null -ne $bits -and "$bits") { $sizes += "selector$n $bits-bit" }
     }
     if ($sizes.Count) { $f.Context += "Key sizes: $($sizes -join ', ')." }
+    $exoBits = @(@('Selector1KeySize', 'Selector2KeySize', 'KeySize') | ForEach-Object { Get-TPObjectField -Item $Dkim -Key $_ -Default $null } |
+        Where-Object { $null -ne $_ -and "$_" -match '^[0-9]{1,6}$' } | ForEach-Object { [int]"$_" })
+    if ($exoBits.Count) { $f.KeyBits = ($exoBits | Measure-Object -Maximum).Maximum; $f.KeyBitsSource = 'Exchange' }
     $active = [string](Get-TPObjectField -Item $Dkim -Key 'ActiveSelector' -Default '')
     if ($active) { $f.Context += "Signing selector: $active." }
 
@@ -546,6 +647,11 @@ function Get-TPDkimRotationFacts {
         } elseif ($lookup -eq 'NoRecord') {
             $f.Context += "Published $sel key: no record at the CNAME target (normal for the inactive selector after a rotation)."
         }
+    }
+    if ($null -eq $f.KeyBits) {
+        $pubBits = @($published | ForEach-Object { Get-TPObjectField -Item $_ -Key 'KeyBits' -Default $null } |
+            Where-Object { $null -ne $_ -and "$_" -match '^[0-9]{1,6}$' } | ForEach-Object { [int]"$_" })
+        if ($pubBits.Count) { $f.KeyBits = ($pubBits | Measure-Object -Maximum).Maximum; $f.KeyBitsSource = 'DNS' }
     }
     $newest = @($dated | Sort-Object -Descending | Select-Object -First 1)
     if ($null -eq $f.AgeDays -and $newest.Count) {
@@ -583,7 +689,22 @@ function Test-TPControlDNSDkimRotation {
         $facts = Get-TPDkimRotationFacts -Dkim (Get-TPObjectField -Item $d -Key 'DKIM' -Default $null)
         $context = if ($facts.Context.Count) { ' ' + ($facts.Context -join ' ') } else { '' }
 
+        $bits = $facts.KeyBits
+        $weak = $null -ne $bits -and $bits -lt 2048
+        $sizeFrom = if ($facts.KeyBitsSource -eq 'DNS') { ' (from the published key)' } else { '' }
+        $weakSentence = "The DKIM key is $bits-bit$sizeFrom, below the 2048 bits NIST SP 800-177r1 recommends for RSA DKIM keys; rotate with -KeySize 2048."
+        $sizeNote = if ($null -eq $bits) { ' Key size not read, so it is not judged here.' } elseif (-not $weak) { " Key size: $bits-bit$sizeFrom, at least 2048 bits." } else { '' }
+        $req = 'Rotated within the last 365 days, with a 2048-bit key'
+
         if ($null -eq $facts.AgeDays) {
+            if ($weak) {
+                Add-TPFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
+                    -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
+                    -FrameworkIds $citations `
+                    -Detail "Shortfall: $weakSentence Not assessed: $domain DKIM last rotation date, because Exchange returned no key creation time for this domain and no published key carried a timestamp.$context" `
+                    -CurrentValue "Last rotated: unknown; key $bits-bit" -RequiredValue $req -Remediation $control.Remediation
+                continue
+            }
             Add-TPFinding -ControlId $controlId -State 'NotApplicable' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
@@ -601,25 +722,33 @@ function Test-TPControlDNSDkimRotation {
             $when = "$domain DKIM key is $ageInt days old (the rotation date is not in this results file)"
             $current = "Key age $ageInt days"
         }
-        if ($ageInt -le 365) {
+        if ($null -ne $bits) { $current += "; key $bits-bit" }
+        if ($ageInt -le 365 -and -not $weak) {
             Add-TPFinding -ControlId $controlId -State 'Satisfied' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity 'Informational' -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$when, within the 365-day rotation interval this assessment uses.$context" `
+                -Detail "$when, within the 365-day rotation interval this assessment uses.$sizeNote$context" `
                 -CurrentValue $current
+        } elseif ($ageInt -le 365) {
+            Add-TPFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
+                -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
+                -FrameworkIds $citations `
+                -Detail "Verified: $when, within the 365-day rotation interval this assessment uses. Shortfall: $weakSentence$context" `
+                -CurrentValue $current -RequiredValue $req `
+                -Remediation $control.Remediation
         } elseif ($ageInt -le 730) {
             Add-TPFinding -ControlId $controlId -State 'Partial' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$when, past the 365-day rotation interval this assessment uses.$context" `
-                -CurrentValue $current -RequiredValue 'Rotated within the last 365 days' `
+                -Detail "$when, past the 365-day rotation interval this assessment uses.$(if ($weak) { " $weakSentence" } else { $sizeNote })$context" `
+                -CurrentValue $current -RequiredValue $req `
                 -Remediation $control.Remediation
         } else {
             Add-TPFinding -ControlId $controlId -State 'Gap' -Category $control.Category `
                 -Title "$($control.Title): $domain" -Severity $control.Severity -Instance $domain `
                 -FrameworkIds $citations `
-                -Detail "$when, more than two years ago. A signing key in use that long has had that long to be exposed, and a compromised key lets anyone sign mail as the domain until it is rotated.$context" `
-                -CurrentValue $current -RequiredValue 'Rotated within the last 365 days' `
+                -Detail "$when, more than two years ago. A signing key in use that long has had that long to be exposed, and a compromised key lets anyone sign mail as the domain until it is rotated.$(if ($weak) { " $weakSentence" } else { $sizeNote })$context" `
+                -CurrentValue $current -RequiredValue $req `
                 -Remediation $control.Remediation
         }
     }

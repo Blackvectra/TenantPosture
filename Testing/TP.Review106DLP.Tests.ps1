@@ -87,7 +87,7 @@ Describe 'Review 106: DLP and preset scope verdicts' {
         BeforeAll {
             $script:Preset = { param([hashtable] $Rule)
                 Clear-TPState
-                Set-TPRawData -Key 'Defender-Policies' -Data (Bag @{ PresetRules = @{ Available = $true; ATP = @(); EOP = @($Rule) } })
+                Set-TPRawData -Key 'Defender-Policies' -Data (Bag @{ PresetRules = @{ Available = $true; ATPRead = $true; ATP = @($Rule); EOP = @($Rule) } })
             }
             $script:DomRule = @{ Name = 'Standard Preset Security Policy'; State = 'Enabled'; RecipientDomainIs = @('contoso.com'); SentTo = @(); SentToMemberOf = @()
                                  ExceptIfSentTo = @(); ExceptIfSentToMemberOf = @(); ExceptIfRecipientDomainIs = @(); HasExceptions = $false }

@@ -56,30 +56,17 @@ Describe 'EXO protocol + outbound-spam controls discriminate' {
         State 'EXO-2.4' | Should -Be 'NotApplicable'
     }
 
-    It 'EXO-3.2 outbound spam: Satisfied when NotifyOutboundSpam on, Gap when off' {
-        Set-EXO -CasPlans @() -OutboundPolicies @(@{ Name='Default'; IsDefault=$true; NotifyOutboundSpam=$true; ActionWhenThresholdReached='BlockUser' })
+    It 'EXO-3.2 outbound spam: Satisfied on Microsoft''s Standard sending limits, Gap on the shipped defaults' {
+        Set-EXO -CasPlans @() -OutboundPolicies @(@{ Name='Default'; IsDefault=$true; NotifyOutboundSpam=$false; ActionWhenThresholdReached='BlockUser'
+            RecipientLimitExternalPerHour=500; RecipientLimitInternalPerHour=1000; RecipientLimitPerDay=1000 })
         Test-TPControlEXOOutboundLimits
         State 'EXO-3.2' | Should -Be 'Satisfied'
 
-        # NotifyOutboundSpam off is Microsoft's default: the notification now
-        # comes from the "User restricted from sending email" alert policy.
-        # Off, with the alert policy disabled, is the Gap.
-        Set-EXO -CasPlans @() -OutboundPolicies @(@{ Name='Default'; IsDefault=$true; NotifyOutboundSpam=$false; ActionWhenThresholdReached='BlockUser' })
-        Set-TPRawData -Key 'Purview' -Data @{ Success = $true; Data = @{ SectionStatus = @{ ProtectionAlerts = 'Collected' }
-            ProtectionAlerts = @(@{ Name = 'User restricted from sending email'; Disabled = $true; NotifyUser = @('TenantAdmins') }) } }
+        # 0 is "use the service default" and BlockUserForToday the default action: not configured.
+        # NotifyOutboundSpam on does not change that; it is context, not the verdict.
+        Set-EXO -CasPlans @() -OutboundPolicies @(@{ Name='Default'; IsDefault=$true; NotifyOutboundSpam=$true; NotifyOutboundSpamRecipients=@('admin@contoso.com')
+            ActionWhenThresholdReached='BlockUserForToday'; RecipientLimitExternalPerHour=0; RecipientLimitInternalPerHour=0; RecipientLimitPerDay=0 })
         Test-TPControlEXOOutboundLimits
         State 'EXO-3.2' | Should -Be 'Gap'
-    }
-
-    It 'EXO-3.2: the enabled restricted-sender alert policy satisfies it; alerts unread is not assessed' {
-        Set-EXO -CasPlans @() -OutboundPolicies @(@{ Name='Default'; IsDefault=$true; NotifyOutboundSpam=$false })
-        Set-TPRawData -Key 'Purview' -Data @{ Success = $true; Data = @{ SectionStatus = @{ ProtectionAlerts = 'Collected' }
-            ProtectionAlerts = @(@{ Name = 'User restricted from sending email'; Disabled = $false; NotifyUser = @('TenantAdmins') }) } }
-        Test-TPControlEXOOutboundLimits
-        State 'EXO-3.2' | Should -Be 'Satisfied'
-
-        Set-EXO -CasPlans @() -OutboundPolicies @(@{ Name='Default'; IsDefault=$true; NotifyOutboundSpam=$false })
-        Test-TPControlEXOOutboundLimits
-        State 'EXO-3.2' | Should -Be 'NotApplicable'
     }
 }

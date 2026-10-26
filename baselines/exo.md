@@ -410,6 +410,7 @@ Set-HostedOutboundSpamFilterPolicy: configure RecipientLimitInternalPerHour, Rec
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8, AU-12 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.15 |
 | CIS Controls v8.1 | 9.7 |
 | CMMC 2.0 | SI.L2-3.14.7 |
 | ISO/IEC 27001:2022 | A.8.7, A.8.16 |
