@@ -116,6 +116,11 @@ function Invoke-TPCollectPurview {
                             Workloads  = @(if ($_.Workload) { @(([string]$_.Workload) -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) })
                             # Who each workload is scoped to (All, or named mailboxes/sites/teams) and what is excluded.
                             Locations  = (Get-TPDlpLocationScope -Policy $_)
+                            # EnforcementPlanes names where the policy is enforced; Microsoft's Copilot
+                            # policy carries CopilotExperiences (New-DlpCompliancePolicy, example 4).
+                            # PlanesRead says whether the property was returned at all.
+                            PlanesRead        = ($null -ne $_.PSObject.Properties['EnforcementPlanes'])
+                            EnforcementPlanes = @(@(Get-TPObjectField -Item $_ -Key 'EnforcementPlanes' -Default @()) | Where-Object { $null -ne $_ -and "$_" -ne '' } | ForEach-Object { [string]$_ })
                         }
                     })
                 }
@@ -162,13 +167,27 @@ function Invoke-TPCollectPurview {
         # Retention policies
         if (Get-Command Get-RetentionCompliancePolicy -ErrorAction SilentlyContinue) {
             try {
-                $ret = Get-RetentionCompliancePolicy -ErrorAction Stop
+                # Microsoft: Workload "shows all workloads ... It doesn't show the actual workload on
+                # which the policy is applied", and -DistributionDetail returns "accurate values for
+                # the DistributionStatus and *Location properties". PVW-2.5 judges the locations, so
+                # they are kept only when read with -DistributionDetail (LocationsRead).
+                $retCmd = Get-Command Get-RetentionCompliancePolicy -ErrorAction Stop
+                $retArgs = @{ ErrorAction = 'Stop' }
+                $retParams = $retCmd.Parameters
+                $withDetail = [bool]($retParams -and $retParams.ContainsKey('DistributionDetail'))
+                if ($withDetail) { $retArgs['DistributionDetail'] = $true }
+                $ret = & $retCmd @retArgs
                 if ($ret) {
-                    $result.Data.RetentionPolicies = @($ret | ForEach-Object {
+                    $result.Data.RetentionPolicies = @($ret | Where-Object { $_ } | ForEach-Object {
+                        $rp = $_
+                        $en = Get-TPObjectField -Item $rp -Key 'Enabled' -Default $null
+                        $wl = [string](Get-TPObjectField -Item $rp -Key 'Workload' -Default '')
                         @{
-                            Name      = $_.Name
-                            Enabled   = [bool]$_.Enabled
-                            Workloads = @(if ($_.Workload) { @(([string]$_.Workload) -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) })
+                            Name          = [string](Get-TPObjectField -Item $rp -Key 'Name' -Default '')
+                            Enabled       = $(if ($null -eq $en) { $null } else { [bool]$en })
+                            Workloads     = @(if ($wl) { @($wl -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) })
+                            LocationsRead = $withDetail
+                            Locations     = (Get-TPRetentionPolicyLocations -Policy $rp)
                         }
                     })
                 }
@@ -300,12 +319,16 @@ function Invoke-TPCollectPurview {
 
         # Auto-labeling policies (PVW-2.6). Mode: Enable / TestWithNotifications
         # / TestWithoutNotifications / Disable / PendingDeletion.
+        # Enabled is a separate switch (Set-AutoSensitivityLabelPolicy -Enabled), so a policy in
+        # Mode Enable can still be turned off; $null when the property is not returned.
         & $scc 'AutoLabelPolicies' 'Get-AutoSensitivityLabelPolicy' {
             param($rows)
             $result.Data.AutoLabelPolicies = @($rows | Where-Object { $_ } | ForEach-Object {
+                $en = Get-TPObjectField -Item $_ -Key 'Enabled' -Default $null
                 @{
-                    Name = [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '')
-                    Mode = [string](Get-TPObjectField -Item $_ -Key 'Mode' -Default '')
+                    Name    = [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '')
+                    Mode    = [string](Get-TPObjectField -Item $_ -Key 'Mode' -Default '')
+                    Enabled = $(if ($null -eq $en) { $null } else { [bool]$en })
                 }
             })
         }

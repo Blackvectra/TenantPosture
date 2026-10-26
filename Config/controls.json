@@ -3183,7 +3183,7 @@
     {
       "ControlId": "PVW-2.5",
       "Title": "Retention Policy Covers Key Workloads",
-      "Description": "Retention policies are configured for Exchange, SharePoint, OneDrive, and Teams.",
+      "Description": "Enabled retention policies include the Exchange mailbox, SharePoint site, OneDrive account and Teams (channel message or chat) locations, judged from each policy's location properties read with -DistributionDetail, never from its Workload property.",
       "BusinessRisk": "Without retention policies, data subject to legal hold cannot be preserved. Data may be deleted before regulatory retention requirements are met.",
       "Severity": "High",
       "Workload": "PVW",
@@ -3213,7 +3213,7 @@
     {
       "ControlId": "PVW-2.6",
       "Title": "Auto-Labeling Policy Active",
-      "Description": "At least one auto-labeling policy automatically applies sensitivity labels to content without user action.",
+      "Description": "At least one auto-labeling policy is turned on (Enabled True) and enforcing (Mode Enable), so sensitivity labels are applied to content without user action.",
       "BusinessRisk": "Manual labeling is inconsistent. Sensitive data without labels is not protected by policies that depend on classification.",
       "Severity": "Medium",
       "Workload": "PVW",
@@ -5369,7 +5369,7 @@
     {
       "ControlId": "PPL-3.1",
       "Title": "M365 Copilot Sensitivity Label Enforcement",
-      "Description": "Sensitivity labels are published with Files & emails scope and an auto-labeling policy is active, enabling Microsoft 365 Copilot to respect data classification boundaries when grounding on tenant content.",
+      "Description": "Sensitivity labels are configured and an auto-labeling policy is turned on (Enabled True) and enforcing (Mode Enable), enabling Microsoft 365 Copilot to respect data classification boundaries when grounding on tenant content. The labels' Files & emails scope is not checked.",
       "BusinessRisk": "Without sensitivity labels, Copilot can access and surface any data the user can reach — including HR files, financial records, and confidential strategies — with no awareness of sensitivity. Copilot dramatically amplifies over-sharing risk.",
       "Severity": "High",
       "Workload": "PPL",
@@ -5399,7 +5399,7 @@
     {
       "ControlId": "PPL-3.2",
       "Title": "DLP Policy Active for Copilot Interactions",
-      "Description": "At least one enabled Data Loss Prevention policy includes the Microsoft 365 Copilot location, blocking sensitive-information types in Copilot prompts and responses.",
+      "Description": "At least one enforcing Data Loss Prevention policy (Mode Enable) is scoped to the Microsoft 365 Copilot and Copilot Chat location (EnforcementPlanes CopilotExperiences) and has an enabled rule, restricting sensitive content in Copilot prompts and responses.",
       "BusinessRisk": "Without DLP covering Copilot, users can extract sensitive data by prompting Copilot to summarize, translate, or reformat confidential content — bypassing all other data controls.",
       "Severity": "High",
       "Workload": "PPL",

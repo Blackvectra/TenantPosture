@@ -91,21 +91,33 @@ function Test-TPControlAICopilotSensitivityLabels {
     $labelsEnabled  = [bool]($d.SensitivityLabelsEnabled ?? $false)
     $labelCount     = [int]($d.SensitivityLabelCount ?? 0)
     $autoLabel      = [bool]($d.AutoLabelPoliciesEnabled ?? $false)
+    # $true: the auto-labeling read happened and judged Enabled beside Mode. $false: it did not
+    # happen or failed. $null: a results file from before the flag, whose AutoLabelPoliciesEnabled
+    # judged Mode only, so a policy turned off could have counted.
+    $autoRead       = Get-TPObjectField -Item $d -Key 'AutoLabelPoliciesRead' -Default $null
+
+    if ($labelsEnabled -and $labelCount -gt 0 -and ($autoRead -eq $false -or ($autoLabel -and $autoRead -ne $true))) {
+        $why = if ($autoRead -eq $false) { 'auto-labeling policies were not read (Get-AutoSensitivityLabelPolicy was unavailable or failed)' } else { 'this results file predates the read of each auto-labeling policy''s Enabled flag, so a policy in Mode Enable that is turned off could have counted' }
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -RequiredValue 'Sensitivity labels published with an auto-labeling policy turned on (Enabled True) in Mode Enable' `
+            -Detail "Sensitivity labels are configured ($labelCount label(s)), but $why; auto-labeling not assessed."
+        return
+    }
 
     if ($labelsEnabled -and $labelCount -gt 0 -and $autoLabel) {
         Add-TPFinding -ControlId $cid -State 'Satisfied' `
             -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' `
             -FrameworkIds $cit `
             -CurrentValue "Labels: $labelCount; Auto-label policies: enabled" `
-            -RequiredValue 'Sensitivity labels published with auto-labeling for sensitive data' `
-            -Detail "Sensitivity labels are configured ($labelCount label(s)) and auto-labeling policies are enabled — Microsoft 365 Copilot will respect these classification boundaries when accessing and summarizing content."
+            -RequiredValue 'Sensitivity labels published with an auto-labeling policy turned on (Enabled True) in Mode Enable' `
+            -Detail "Sensitivity labels are configured ($labelCount label(s)) and an auto-labeling policy is turned on and enforcing (Enabled True, Mode Enable) — Microsoft 365 Copilot will respect these classification boundaries when accessing and summarizing content."
     } elseif ($labelsEnabled -and $labelCount -gt 0) {
         Add-TPFinding -ControlId $cid -State 'Partial' `
             -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' `
             -FrameworkIds $cit `
             -CurrentValue "Labels: $labelCount; Auto-label policies: disabled" `
             -RequiredValue 'Auto-labeling policies active so unlabeled-but-sensitive content is still suppressed' `
-            -Detail "Sensitivity labels exist ($labelCount) but no auto-labeling policy is active. Users must manually classify content; Copilot can surface sensitive files that were never labeled." `
+            -Detail "Sensitivity labels exist ($labelCount) but no auto-labeling policy is turned on and enforcing (Enabled True, Mode Enable). Users must manually classify content; Copilot can surface sensitive files that were never labeled." `
             -Remediation $ctrl.Remediation
     } else {
         Add-TPFinding -ControlId $cid -State 'Gap' `
@@ -144,41 +156,79 @@ function Test-TPControlAICopilotDLP {
         return
     }
 
-    $dlp = @($d.CopilotDLPPolicies ?? @())
-    $locs = @($d.CopilotDLPLocations ?? @())
-    # The Microsoft 365 Copilot DLP location reports as Workload 'Applications'.
-    $copilotInLocs = ($locs -contains 'Copilot') -or
-                     ($locs -contains 'M365Copilot') -or
-                     ($locs -contains 'CopilotExperiences') -or
-                     ($locs -contains 'Applications')
-
-    if ($dlp.Count -gt 0 -and $copilotInLocs) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' `
-            -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' `
-            -FrameworkIds $cit `
-            -CurrentValue "$($dlp.Count) DLP policy(ies) cover Copilot workload" `
-            -RequiredValue 'At least one enabled DLP policy with Copilot location included' `
-            -Detail "DLP coverage detected for Microsoft 365 Copilot interactions ($($dlp.Count) policy/policies). Sensitive-information types in prompts and responses are subject to policy controls."
-    } elseif ($dlp.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Partial' `
-            -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' `
-            -FrameworkIds $cit `
-            -CurrentValue "$($dlp.Count) DLP policy(ies) reference Copilot but Copilot location not confirmed" `
-            -RequiredValue 'DLP policy with Locations explicitly including Microsoft 365 Copilot' `
-            -Detail "DLP policies referencing Copilot were found ($($dlp.Count)) but the Copilot location is not in the confirmed workload set. Verify in Purview > DLP > Policy > Locations that Microsoft 365 Copilot is included." `
-            -Remediation $ctrl.Remediation
-    } elseif (-not (Test-TPCopilotPurviewSection 'DLPPolicies')) {
+    # Judged from the Purview DLP policies and rules directly. A policy is scoped to Microsoft 365
+    # Copilot only when its EnforcementPlanes name CopilotExperiences (the plane Microsoft's Copilot
+    # policy carries: New-DlpCompliancePolicy, example 4); a policy NAME proves nothing, and the
+    # 'Applications' workload is the location type, not the Copilot location itself. Only an
+    # enforcing policy (Mode Enable) with an enabled rule counts (Get-TPDlpRuleStates), as DEF-4.5.
+    if (-not (Test-TPCopilotPurviewSection 'DLPPolicies')) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' `
             -Category $ctrl.Category -Title $ctrl.Title `
             -FrameworkIds $cit `
             -Detail "Copilot is licensed to $licensed user(s) but DLP coverage could not be evaluated — the Purview/IPPS session did not collect data (there is no Graph fallback for Copilot DLP policies). Run the assessment with Purview included to verify DLP coverage for Copilot interactions."
-    } else {
+        return
+    }
+    $pvd = (Get-TPRawData -Key 'Purview').Data
+    $policies = @(@(Get-TPObjectField -Item $pvd -Key 'DLPPolicies' -Default @()) | Where-Object { $null -ne $_ })
+    $nameOf = { param($p) [string](Get-TPObjectField -Item $p -Key 'Name' -Default '') }
+    $copilot = @(); $unconfirmed = @()
+    foreach ($p in $policies) {
+        $planesRead = (Get-TPObjectField -Item $p -Key 'PlanesRead' -Default $false) -eq $true
+        $planes = @(@(Get-TPObjectField -Item $p -Key 'EnforcementPlanes' -Default @()) | Where-Object { $_ } | ForEach-Object { [string]$_ })
+        $wl = @(@(Get-TPObjectField -Item $p -Key 'Workloads' -Default @()) | Where-Object { $_ } | ForEach-Object { [string]$_ })
+        if ($planes -contains 'CopilotExperiences') { $copilot += $p }
+        elseif (-not $planesRead -and ((@($wl | Where-Object { $_ -in @('Applications', 'Copilot', 'M365Copilot', 'CopilotExperiences') }).Count -gt 0) -or (& $nameOf $p) -match '\bCopilot\b')) { $unconfirmed += $p }
+    }
+    $req = 'An enforcing DLP policy (Mode Enable) scoped to the Microsoft 365 Copilot and Copilot Chat location, with at least one enabled rule'
+    if ($copilot.Count -eq 0 -and $unconfirmed.Count -eq 0) {
         Add-TPFinding -ControlId $cid -State 'Gap' `
             -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity `
             -FrameworkIds $cit `
             -CurrentValue 'No DLP policies cover Copilot' `
-            -RequiredValue 'DLP policy with Copilot location enabled' `
-            -Detail "Copilot is licensed to $licensed user(s) but no DLP policy covers Copilot interactions. Users can prompt Copilot to summarize, translate, or reformat sensitive data — bypassing every other data control." `
+            -RequiredValue $req `
+            -Detail "Copilot is licensed to $licensed user(s) but no DLP policy is scoped to the Microsoft 365 Copilot location. Users can prompt Copilot to summarize, translate, or reformat sensitive data — bypassing every other data control." `
+            -Remediation $ctrl.Remediation
+        return
+    }
+    if (-not (Test-TPCopilotPurviewSection 'DLPRules')) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -RequiredValue $req `
+            -Detail "DLP rules were not collected, so whether the Copilot DLP policy(ies) ($(@(($copilot + $unconfirmed) | ForEach-Object { & $nameOf $_ } | Select-Object -First 5) -join ', ')) have an enabled rule was not assessed."
+        return
+    }
+    $rules = @(Get-TPDlpRuleStates -Policies $policies -Rules @(@(Get-TPObjectField -Item $pvd -Key 'DLPRules' -Default @()) | Where-Object { $null -ne $_ }))
+    $stateOf = { param($p, $st) @($rules | Where-Object { $_.Policy -eq (& $nameOf $p) -and $_.State -eq $st }) }
+    $enforcing = @($copilot | Where-Object { @(& $stateOf $_ 'Enforcing').Count -gt 0 })
+    # Simulation (TestWith*) is part-way, as the not-configured rule allows; Disable and
+    # PendingDeletion are turned off and fall to the Gap below.
+    $testMode  = @($copilot | Where-Object { @(& $stateOf $_ 'TestMode' | Where-Object { [string]$_.PolicyMode -like 'Test*' }).Count -gt 0 })
+    $unknown   = @($copilot | Where-Object { @(& $stateOf $_ 'Unknown').Count -gt 0 })
+    $names = { param($l) (@($l | ForEach-Object { & $nameOf $_ } | Select-Object -First 5) -join ', ') }
+    if ($enforcing.Count -gt 0) {
+        Add-TPFinding -ControlId $cid -State 'Satisfied' `
+            -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' `
+            -FrameworkIds $cit `
+            -CurrentValue "Enforcing Copilot DLP policy(ies): $(& $names $enforcing)" `
+            -RequiredValue $req `
+            -Detail "An enforcing DLP policy scoped to Microsoft 365 Copilot (EnforcementPlanes CopilotExperiences, Mode Enable) has an enabled rule: $(& $names $enforcing). What each rule restricts (sensitive information types in prompts, labeled content) is not judged here."
+    } elseif ($unknown.Count -gt 0 -or ($copilot.Count -eq 0 -and $unconfirmed.Count -gt 0)) {
+        $why = if ($unknown.Count -gt 0) { "the Mode of Copilot DLP policy(ies) $(& $names $unknown) was not read or not recognized" } else { "the policies' EnforcementPlanes were not returned, so whether $(& $names $unconfirmed) is scoped to the Microsoft 365 Copilot location (and not another Applications location) could not be confirmed; a policy name or the Applications workload alone is not the Copilot location" }
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -RequiredValue $req `
+            -Detail "Copilot DLP coverage not assessed: $why."
+    } elseif ($testMode.Count -gt 0) {
+        Add-TPFinding -ControlId $cid -State 'Partial' `
+            -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' `
+            -FrameworkIds $cit `
+            -CurrentValue "Copilot DLP policy(ies) in test mode: $(& $names $testMode)" `
+            -RequiredValue $req `
+            -Detail "DLP policy(ies) scoped to Microsoft 365 Copilot exist but none enforces: $(& $names $testMode) is in test mode (simulation), so Copilot prompts and responses are monitored, not restricted." `
+            -Remediation $ctrl.Remediation
+    } else {
+        Add-TPFinding -ControlId $cid -State 'Gap' `
+            -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity `
+            -FrameworkIds $cit `
+            -CurrentValue "Copilot DLP policy(ies) turned off or with no enabled rule: $(& $names $copilot)" `
+            -RequiredValue $req `
+            -Detail "DLP policy(ies) scoped to Microsoft 365 Copilot exist ($(& $names $copilot)) but none is enforcing with an enabled rule (turned off, pending deletion, or every rule disabled), so nothing is restricted." `
             -Remediation $ctrl.Remediation
     }
 }
