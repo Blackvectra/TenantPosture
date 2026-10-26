@@ -73,12 +73,12 @@ plus a `BaselineCompliance` summary (counts by observed state, constraint and di
 
 | Tier | Rows | Checked by the tool | Manual (CIS-<number>) |
 |---|---|---|---|
-| Minimum | 114 | 50 | 64 |
+| Minimum | 115 | 51 | 64 |
 | Standard | 16 | 3 | 13 |
 | Hardened | 59 | 21 | 38 |
-| Assessment-only controls | 133 | | |
+| Assessment-only controls | 132 | | |
 
-All 160 v7.0.0 recommendations are represented; 74 rows are tool-checked controls and 115 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
+All 160 v7.0.0 recommendations are represented; 75 rows are tool-checked controls and 115 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
 
 ## Every assessment control
 
@@ -140,7 +140,7 @@ One row per control in `controls.json`; the tier column is what the test compare
 | EXO-2.3 | POP3 Access Disabled | Medium | Included (M365 Business Standard+) | — | **Assessment-only** |
 | EXO-2.4 | IMAP Access Disabled | Medium | Included (M365 Business Standard+) | — | **Assessment-only** |
 | EXO-2.5 | Customer Lockbox Enabled | Medium | M365 E5 or E5 Compliance add-on | 1.3.6 | **Hardened** |
-| EXO-2.6 | Shared Mailboxes Block Direct Sign-In | High | Included (M365 Business Standard+) | — | **Assessment-only** |
+| EXO-2.6 | Shared Mailboxes Block Direct Sign-In | High | Included (M365 Business Standard+) | 1.2.2 | **Minimum** |
 | AAD-1.4 | Sign-in Risk CA Policy | High | Entra ID P2 | — | **Assessment-only** |
 | AAD-1.5 | User Risk CA Policy | High | Entra ID P2 | — | **Assessment-only** |
 | AAD-2.2 | Named Locations Defined | Low | M365 Business Premium or Entra ID P1 | 5.2.2.14 | **Hardened** |

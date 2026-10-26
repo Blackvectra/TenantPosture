@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **[Benchmarks] 154 of 207 controls are now mapped.** The CIS Microsoft Intune for Windows 11 Benchmark v5.0.0 (Level 1)
+  is cited by INT-1.3 (106.1.1 BitLocker required), INT-2.3 (37.1, 37.8, 37.15 firewall profiles on) and INT-4.1 (107.1
+  LAPS backup to Entra ID); SPO-1.5 cites Microsoft's Zero Trust SharePoint unmanaged-device step and SPO-3.3 Microsoft's
+  version-history guidance (both earned by the PR #198 evaluator changes); EXO-2.6 cites CIS 1.2.2 beside EXO-6.2.
 - **[Controls] Three CIS Microsoft 365 password recommendations are now checked (207 controls).** AAD-7.3 judges the
   smart lockout duration (60 seconds or more, CIS 5.2.3.9), AAD-7.4 the custom banned password list (enforced and
   holding entries, 5.2.3.2) and AAD-7.5 password expiration (every verified domain set to never expire, 1.3.1). Each

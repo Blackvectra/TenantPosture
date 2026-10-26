@@ -12,11 +12,11 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 
 | Relation | Meaning | Controls |
 |---|---|---|
-| Equivalent | The evaluator checks what R audits, and every pass meets R. | 55 |
+| Equivalent | The evaluator checks what R audits, and every pass meets R. | 56 |
 | Subset | The evaluator checks some of the settings R lists, and every pass meets R for those settings. R can still fail on a setting the tool does not read. | 19 |
-| Not cited | No v7.0.0 recommendation describes the check, or the evaluator passes something R fails. | 133 |
+| Not cited | No v7.0.0 recommendation describes the check, or the evaluator passes something R fails. | 132 |
 
-74 controls cite 56 of the 160 recommendations. The CIS card in the report scores only those controls, so it is a narrower number than before, and an honest one: it covers what the tool verified against this benchmark.
+75 controls cite 56 of the 160 recommendations. The CIS card in the report scores only those controls, so it is a narrower number than before, and an honest one: it covers what the tool verified against this benchmark.
 
 **Scope differences kept as citations.** EXO-1.3, EXO-5.3, EXO-8.2 and DEF-2.3 judge the policies and rules in force (`Get-TPInForcePolicies`; enabled transport rules), while the CIS audit reads every policy, or only the Default malware policy. A disabled rule or a policy no recipient falls under changes nothing about what happens to mail, so the judgment is the same requirement; it is recorded here because a CIS audit run by hand can disagree with the tool on such a tenant.
 
@@ -70,6 +70,7 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 | EXO-4.3 Safe Attachments for SharePoint OneDrive Teams Enabled | 2.1.5 | Ensure Safe Attachments for SharePoint, OneDrive, and Microsoft Teams is Enabled (Automated) | Subset | Satisfied requires Get-AtpPolicyForO365 EnableATPForSPOTeamsODB = True, one of 2.1.5's three settings; EnableSafeDocs True and AllowSafeDocsOpen False are not judged. |
 | EXO-5.1 Per-User Mailbox Audit Logging Enabled for All Mailboxes | 6.1.1 | Ensure 'AuditDisabled' organizationally is set to 'False' (Automated) | Equivalent | Satisfied requires OrganizationConfig.AuditDisabled = False, exactly 6.1.1; it does not read per-mailbox audit actions or AuditEnabled, so 6.1.2 (the draft's id) is not met. |
 | EXO-5.3 No Allowed Sender Domains Bypassing Anti-Spam Filtering | 2.1.14 | Ensure inbound anti-spam policies do not contain allowed domains (Automated) | Equivalent | Satisfied requires AllowedSenderDomains (and AllowedSenders) empty in every inbound anti-spam policy in force, which meets 2.1.14's AllowedSenderDomains undefined. Scope caveat: only policies in force are judged, while 2.1.14 says each inbound policy must pass (a custom policy with a disabled rule, or the Default when a custom policy covers every accepted domain, is not read). |
+| EXO-2.6 Shared Mailboxes Block Direct Sign-In | 1.2.2 | Ensure sign-in to shared mailboxes is blocked (Automated) | Equivalent | Satisfied only when accountEnabled was read as false for every shared mailbox's Entra account (a mailbox whose state was not read leaves it not assessed), which is 1.2.2's audit; EXO-6.2 judges the same setting and names each mailbox. |
 | EXO-6.2 Shared Mailboxes with Sign-In Enabled — Named List | 1.2.2 | Ensure sign-in to shared mailboxes is blocked (Automated) | Equivalent | Satisfied requires every shared mailbox (Get-Mailbox SharedMailbox) to match an Entra member account with accountEnabled not True (unmatched mailboxes make it not assessed), which meets 1.2.2 (AccountEnabled False for all shared mailboxes). |
 | EXO-6.3 Mailboxes with Audit Logging Disabled — Named List | 6.1.3 | Ensure 'AuditBypassEnabled' is not enabled on mailboxes (Automated) | Equivalent | Satisfied (Get-TPMailboxAuditBypassState Clean) requires Get-MailboxAuditBypassAssociation to return no AuditBypassEnabled account and org auditing on, which meets 6.1.3. |
 | EXO-7.3 No Mailboxes with Per-User Audit Explicitly Disabled | 6.1.3 | Ensure 'AuditBypassEnabled' is not enabled on mailboxes (Automated) | Equivalent | Same helper as EXO-6.3: Satisfied requires no Get-MailboxAuditBypassAssociation entry with AuditBypassEnabled True and org auditing on, which meets 6.1.3. |

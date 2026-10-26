@@ -543,7 +543,7 @@
     "AAD-7.5": {
       "Summary": "Passwords stop expiring; users are no longer forced to change them on a schedule.",
       "Users": "No more expiry prompts. Nothing else changes.",
-      "Watchouts": "Do it together with MFA for every user: never-expire is safe only when a stolen password alone cannot sign in. PCI DSS 8.3.9 expects a 90-day change where a password is the only factor.",
+      "Watchouts": "Do it together with MFA for every user: never-expire is safe only when a stolen password alone cannot sign in.",
       "Reversible": "Yes."
     }
   }

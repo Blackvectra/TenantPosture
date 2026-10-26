@@ -798,7 +798,7 @@ Entra ID > Protection > Authentication methods > Password protection > Enforce c
 **License required:** Included (all plans)
 
 **Description:**
-Every verified domain's password validity period is set to never expire (passwordValidityPeriodInDays 2147483647), as CIS and NIST SP 800-63B recommend; an unset value is Microsoft's 90-day default. PCI DSS 8.3.9 still expects a 90-day change where a password is the only factor, so a cardholder-data environment answers that requirement with MFA.
+Every verified domain's password validity period is set to never expire (passwordValidityPeriodInDays 2147483647), as CIS and NIST SP 800-63B recommend; an unset value is Microsoft's 90-day default.
 
 **Business risk:**
 Forced periodic password changes push users to predictable patterns (Season2026!, then Season2027!) that attackers guess, and add help-desk resets without stopping a stolen password from being used.

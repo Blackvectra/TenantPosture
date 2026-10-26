@@ -170,6 +170,27 @@
       "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 1.2.2 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
+      "ControlId": "EXO-2.6",
+      "Title": "Shared Mailboxes Block Direct Sign-In",
+      "Tier": "Minimum",
+      "Cis": "1.2.2",
+      "CisProfile": "E3 Level 1 / E5 Level 1",
+      "CisRelation": "Equivalent",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "EXO-Inventory"
+      ],
+      "EvidenceSource": "Assessment control EXO-2.6 (EXO-Inventory)",
+      "ExpectedState": "CIS 1.2.2: Ensure sign-in to shared mailboxes is blocked. Checked as: accountEnabled was read as false for every shared mailbox's Entra account (a mailbox whose account state was not read leaves the control not assessed).",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Shared mailboxes with active accounts can be signed into directly with a password, bypassing MFA. Attackers target shared mailboxes for persistence.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 1.2.2 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
+    },
+    {
       "ControlId": "AAD-7.5",
       "Title": "Passwords Set to Never Expire",
       "Tier": "Minimum",

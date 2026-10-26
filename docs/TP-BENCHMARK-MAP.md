@@ -2,7 +2,7 @@
 
 Generated from `Config/controls.json` (CIS Microsoft 365 and ScubaGear citations), `Config/scuba-alignment.json` and `Config/benchmark-mappings.json` on 2026-10-26; `Get-TPBenchmarkMapping` returns the same view and `Testing/TP.BenchmarkMapping.Tests.ps1` fails when a control is in neither list.
 
-**151 of 207 controls are mapped to at least one configuration benchmark; 56 are not, each with the reason.** A control cites a benchmark item only when its evaluator judges the setting the item audits and every state it scores Satisfied passes that audit: a similar topic is not enough, so a control with no such item is listed below rather than given a near-miss. Relations: Equivalent (same setting and threshold), Subset (part of what the item requires; the rest is named in the mapping file), Stricter (passes only when the item passes, can fail where it passes); ScubaGear relations are the ones recorded in `Config/scuba-alignment.json`.
+**154 of 207 controls are mapped to at least one configuration benchmark; 53 are not, each with the reason.** A control cites a benchmark item only when its evaluator judges the setting the item audits and every state it scores Satisfied passes that audit: a similar topic is not enough, so a control with no such item is listed below rather than given a near-miss. Relations: Equivalent (same setting and threshold), Subset (part of what the item requires; the rest is named in the mapping file), Stricter (passes only when the item passes, can fail where it passes); ScubaGear relations are the ones recorded in `Config/scuba-alignment.json`.
 
 Control frameworks (NIST SP 800-53, CIS Controls v8.1, CMMC, ISO 27001, SOC 2, HIPAA, PCI DSS, MITRE ATT&CK) are mapped separately in `References` and are not configuration benchmarks.
 
@@ -18,6 +18,8 @@ Control frameworks (NIST SP 800-53, CIS Controls v8.1, CMMC, ISO 27001, SOC 2, H
 | MS-ZERO-TRUST | Microsoft Zero Trust deployment guidance and Zero Trust Assessment checks | Learn pages and microsoft/zerotrustassessment tests read 2026-10-26 | Microsoft |
 | DISA-ENTRA-ID-STIG-V1R1 | DISA Microsoft Entra ID Security Technical Implementation Guide | Version 1 Release 1, 2025-02-28 (also published by CIS as the CIS Microsoft Entra ID STIG Benchmark v1.0.0) | DISA |
 | MS-WINDOWS-SECURITY-BASELINE | Microsoft Security Baseline for Windows (Intune MDM security baseline) | Security Baseline for Windows, version 24H2 (same values in 25H2) | Microsoft |
+| CIS-INTUNE-WINDOWS11-5.0.0 | CIS Microsoft Intune for Windows 11 Benchmark | 5.0.0, Level 1 | Center for Internet Security |
+| MS-LEARN-RECOMMENDED | Microsoft Learn: values Microsoft states as recommended or not recommended in product documentation | Learn pages read 2026-10-26 | Microsoft |
 
 CIS benchmark text is licensed and is not reproduced; only recommendation numbers are cited. Three other CIS and DISA documents were read for this review and inform it without being cited here: the CIS Microsoft Edge Benchmark v5.0.0 (device-side, planned as endpoint checks), the CIS Password Policy Guide v21.12 (guidance; its values differ from CIS Microsoft 365 and the STIG and are listed below), and the CIS Controls v8.1 mappings to NIST SP 800-53 Rev. 5 and HIPAA (used to review the framework citations).
 
@@ -122,6 +124,7 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | EXO-1.6 | Modern Authentication Enabled | CIS M365 v7.0.0 6.5.1 |
 | EXO-1.7 | Honor DMARC Policy Enabled | CIS M365 v7.0.0 2.1.7 |
 | EXO-2.5 | Customer Lockbox Enabled | CIS M365 v7.0.0 1.3.6 |
+| EXO-2.6 | Shared Mailboxes Block Direct Sign-In | CIS M365 v7.0.0 1.2.2 |
 | EXO-3.1 | Connection Filter Safe List Bypass Disabled | CIS M365 v7.0.0 2.1.13 |
 | EXO-3.2 | Outbound Spam Sending Limits Configured | CIS M365 v7.0.0 2.1.15; Microsoft EOP/MDO recommended settings: Outbound spam policy settings > RecipientLimitExternalPerHour, RecipientLimitInternalPerHour, RecipientLimitPerDay, ActionWhenThresholdReached (Equivalent) |
 | EXO-3.3 | Alert Policy — Email Forwarding Rules | ScubaGear 2.0.0 MS.SECURITYSUITE.4.1v1 (Partial) |
@@ -150,12 +153,12 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 |---|---|---|
 | INT-1.1 | Device Compliance Policies Configured | Microsoft Zero Trust: Deployment > Enterprise > Define device compliance policies (Subset) |
 | INT-1.2 | Non-Compliant Device Access Blocked via CA | ScubaGear 2.0.0 MS.AAD.3.7v1 (Partial) |
-| INT-1.3 | BitLocker Encryption Required on Windows | Microsoft Zero Trust: Recommended compliance settings for Windows 10 and later > Device health > Require BitLocker (Equivalent) |
+| INT-1.3 | BitLocker Encryption Required on Windows | Microsoft Zero Trust: Recommended compliance settings for Windows 10 and later > Device health > Require BitLocker (Equivalent); CIS Intune Windows 11 5.0.0: 106.1.1 (Equivalent) |
 | INT-1.4 | Mobile Application Management Configured | Microsoft Zero Trust: Deployment > Starting point > Apply Application Protection Policies (APP) for data protection (Subset) |
 | INT-1.5 | Antivirus Policy Deployed via Intune | CIS Intune Defender AV 1.0.0: 30 recommendations (2.1–2.50) (Stricter) |
 | INT-2.2 | Attack Surface Reduction Rules Enabled | CIS Intune Defender AV 1.0.0: 17 recommendations (2.10–2.26) (Stricter) |
-| INT-2.3 | Windows Firewall Policy Deployed via Intune | Microsoft Windows security baseline: Firewall > Enable Domain / Private / Public Network Firewall (Subset) |
-| INT-4.1 | Windows LAPS Deployed via Intune | Microsoft Windows security baseline: LAPS > Backup Directory (Subset) |
+| INT-2.3 | Windows Firewall Policy Deployed via Intune | Microsoft Windows security baseline: Firewall > Enable Domain / Private / Public Network Firewall (Subset); CIS Intune Windows 11 5.0.0: 37.1, 37.8, 37.15 (Equivalent) |
+| INT-4.1 | Windows LAPS Deployed via Intune | Microsoft Windows security baseline: LAPS > Backup Directory (Subset); CIS Intune Windows 11 5.0.0: 107.1 (Equivalent) |
 
 ### PPL
 
@@ -196,10 +199,12 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | SPO-1.2 | Default Sharing Link Not Anonymous | ScubaGear 2.0.0 MS.SHAREPOINT.2.1v1 (Partial) |
 | SPO-1.3 | SharePoint Legacy Authentication Blocked | CIS M365 v7.0.0 7.2.1 |
 | SPO-1.4 | Guest Access Expiration Configured | CIS M365 v7.0.0 7.2.9 |
+| SPO-1.5 | Unmanaged Device Access Restricted | Microsoft Zero Trust: Recommended policies for Microsoft 365 workloads > Configure SharePoint access control to limit access by unmanaged devices, step 1 (Subset) |
 | SPO-2.2 | External Sharing Link Expiration Configured | ScubaGear 2.0.0 MS.SHAREPOINT.3.1v1 (Equivalent) |
 | SPO-2.5 | Third-Party Cloud Storage Connectors Disabled | CIS M365 v7.0.0 8.1.1 |
 | SPO-2.6 | Email Attestation Required for Sharing | CIS M365 v7.0.0 7.2.10 |
 | SPO-2.7 | Reauthentication Required for Sharing Links | CIS M365 v7.0.0 7.2.10; ScubaGear 2.0.0 MS.SHAREPOINT.3.3v2 (Partial) |
+| SPO-3.3 | OneDrive Version History Enabled | Microsoft Learn recommended values: Overview of version history limits for document libraries and OneDrive > Types of version limits, note 1 (Equivalent) |
 | SPO-3.4 | SharePoint Guest Access Expiration Required | CIS M365 v7.0.0 7.2.9 |
 
 ### TMS
@@ -243,7 +248,6 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | DNS-2.4 | Certificate Transparency Log Hygiene | NIST SP 800-177 Rev. |  |
 | EXO-2.3 | POP3 Access Disabled | ScubaGear 2.0.0 EXO and SECURITYSUITE baselines have no POP3/IMAP rule (MS.EXO.5.1v1 is SMTP AUTH only). | Yes |
 | EXO-2.4 | IMAP Access Disabled | Same as EXO-2.3: no ScubaGear 2.0.0 rule, no row on the EOP/Defender recommended-settings page. | Yes |
-| EXO-2.6 | Shared Mailboxes Block Direct Sign-In | The evaluator now passes only when accountEnabled was read for every shared mailbox (2026-10-26), which meets Microsoft's 'About shared mailboxes' guidance ('Always block sign-in for the shared mailbox account') and CIS M365 v7.0.0 1.2.2. | Yes |
 | EXO-8.1 | Mail Flow Connectors Reviewed and Hardened | ScubaGear 2.0.0 EXO and SECURITYSUITE baselines have no connector rule (MS.SECURITYSUITE.8.1v1 is the connection-filter IP allow list, a different object). | Yes |
 | EXO-9.1 | Mailboxes Protected by Hold or Retention Policy | No ScubaGear 2.0.0 rule covers mailbox holds or retention policies (MS.SECURITYSUITE.5.2v1 is audit-log retention). | Yes |
 | EXO-9.2 | Deleted Item Retention Window at Maximum | Microsoft Learn ('Change how long permanently deleted items are kept for an Exchange Online mailbox', 'Exchange Online limits', 'Mailbox plans in Exchange Online') documents 14 days as the default and 30 as the maximum, and uses 30 in examples, but never recommends it. | Yes |
@@ -264,14 +268,12 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | PVW-3.2 | eDiscovery Case Management Configured | Manual control with no verdict. |  |
 | PVW-3.3 | Compliance Score Improvement Actions Tracked | Manual control with no verdict, and reviewing Compliance Manager improvement actions is a process, not a configuration value. |  |
 | PVW-4.4 | Records Management Labels Configured for Regulated Data | No allowed benchmark recommends configuring record-declaring retention labels: ScubaGear 2.0.0 has no records-management item, the Zero Trust Assessment Purview tests (35001-35041) have none, and 'Implementing Zero Trust with Microsoft Purview' says only that records management 'supports additional  |  |
-| SPO-1.5 | Unmanaged Device Access Restricted | CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus  | Yes |
 | SPO-2.1 | OneDrive Sync Client Restricted to Managed Devices | CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus  |  |
 | SPO-2.3 | SharePoint Third-Party Apps From Store Restricted | CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus  | Yes |
 | SPO-2.4 | Custom Script Disabled on SharePoint Sites | CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus  | Yes |
 | SPO-2.8 | OneDrive Sync Restricted by Tenant Domain GUID | CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus  |  |
 | SPO-3.1 | Site Collection Admin Access Reviewed | CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus  |  |
 | SPO-3.2 | SharePoint Sharing Notifications Enabled | CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus  |  |
-| SPO-3.3 | OneDrive Version History Enabled | CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus  | Yes |
 | SPO-4.1 | Departed-User OneDrive Retention Configured | CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus  |  |
 | TMS-1.5 | Recording Storage in Organization | CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus  |  |
 | TMS-1.6 | Teams Guest Access Controlled | CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus  | Yes |

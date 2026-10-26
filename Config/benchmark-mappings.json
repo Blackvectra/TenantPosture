@@ -51,6 +51,21 @@
       "Publisher": "Microsoft",
       "Kind": "Vendor security baseline",
       "Url": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-windows-mdm-settings"
+    },
+    "CIS-INTUNE-WINDOWS11-5.0.0": {
+      "Name": "CIS Microsoft Intune for Windows 11 Benchmark",
+      "Version": "5.0.0, Level 1",
+      "Publisher": "Center for Internet Security",
+      "Kind": "Configuration benchmark",
+      "Url": "https://www.cisecurity.org/benchmark/intune",
+      "Note": "Recommendation numbers only; the benchmark text is licensed and is not reproduced. The numbers cited are listed in Config/framework-baselines/cis-intune-windows11-v5.0.0.txt."
+    },
+    "MS-LEARN-RECOMMENDED": {
+      "Name": "Microsoft Learn: values Microsoft states as recommended or not recommended in product documentation",
+      "Version": "Learn pages read 2026-10-26",
+      "Publisher": "Microsoft",
+      "Kind": "Vendor recommended configuration",
+      "Url": "https://learn.microsoft.com/"
     }
   },
   "controls": {
@@ -669,6 +684,14 @@
         "Url": "https://learn.microsoft.com/security/zero-trust/zero-trust-identity-device-access-policies-common#device-compliance-policies",
         "Relation": "Equivalent",
         "Why": "Satisfied requires bitLockerEnabled = true (Require BitLocker) in every assigned Windows compliance policy, the Device health rule the Zero Trust table sets to Require."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-WINDOWS11-5.0.0",
+        "ItemId": "106.1.1",
+        "ItemTitle": "Ensure 'Device Health: BitLocker' is set to 'Require'",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Require BitLocker (bitLockerEnabled) in every assigned Windows compliance policy, the compliance-policy setting 106.1.1 audits."
       }
     ],
     "INT-2.3": [
@@ -680,6 +703,30 @@
         "Relation": "Subset",
         "Why": "Satisfied requires the domain, private and public Enable Firewall settings on in the assigned Firewall policies, the three rows the baseline sets to True.",
         "Unchecked": "Default inbound action (Block), logging, notifications and the other Firewall rows of the baseline."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-WINDOWS11-5.0.0",
+        "ItemId": "37.1",
+        "ItemTitle": "Ensure 'Enable Domain Network Firewall' is set to 'True'",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires the domain profile's Enable Firewall setting True in the assigned Firewall policies (none setting it False), the value 37.1 audits."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-WINDOWS11-5.0.0",
+        "ItemId": "37.8",
+        "ItemTitle": "Ensure 'Enable Private Network Firewall' is set to 'True'",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires the private profile's Enable Firewall setting True in the assigned Firewall policies (none setting it False), the value 37.8 audits."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-WINDOWS11-5.0.0",
+        "ItemId": "37.15",
+        "ItemTitle": "Ensure 'Enable Public Network Firewall' is set to 'True'",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires the public profile's Enable Firewall setting True in the assigned Firewall policies (none setting it False), the value 37.15 audits."
       }
     ],
     "INT-4.1": [
@@ -691,6 +738,14 @@
         "Relation": "Subset",
         "Why": "Satisfied requires every assigned LAPS policy's Backup Directory to be Microsoft Entra ID, the baseline value; Disabled, not set or Active Directory is a shortfall.",
         "Unchecked": "The other LAPS settings the policy can carry (password age, complexity, post-authentication actions), which the baseline leaves at their defaults."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-WINDOWS11-5.0.0",
+        "ItemId": "107.1",
+        "ItemTitle": "Ensure 'Backup Directory' is set to 'Backup the password to Azure AD only'",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires every assigned Windows LAPS policy's Backup Directory to be Microsoft Entra ID, the value 107.1 audits."
       }
     ],
     "PVW-2.5": [
@@ -804,6 +859,27 @@
         "Relation": "Equivalent",
         "Why": "Satisfied requires no enabled guest whose last successful sign-in (or creation date when none) is more than 90 days ago, the condition 21858 checks."
       }
+    ],
+    "SPO-1.5": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Recommended policies for Microsoft 365 workloads > Configure SharePoint access control to limit access by unmanaged devices, step 1",
+        "ItemTitle": "Allow limited, web-only access or Block access for unmanaged devices",
+        "Url": "https://learn.microsoft.com/security/zero-trust/zero-trust-identity-device-access-policies-workloads",
+        "Relation": "Subset",
+        "Why": "Satisfied requires the tenant's unmanaged-device setting to be AllowLimitedAccess or BlockAccess, the two values step 1 names; AuthenticationContext is not assessed because its Conditional Access policy is not read.",
+        "Unchecked": "Step 2 (sites added to access control with Set-SPOSite -ConditionalAccessPolicy) and confirmation that the Conditional Access policy SharePoint creates is turned on."
+      }
+    ],
+    "SPO-3.3": [
+      {
+        "Benchmark": "MS-LEARN-RECOMMENDED",
+        "ItemId": "Overview of version history limits for document libraries and OneDrive > Types of version limits, note 1",
+        "ItemTitle": "Any value less than 100 versions or less than 30 days expiration time limits isn't recommended",
+        "Url": "https://learn.microsoft.com/sharepoint/document-library-version-history-limits",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires automatic version limits, or a manual limit of 100 or more versions with no expiration or an expiration of 30 days or more, so no Satisfied setting is one the note calls not recommended."
+      }
     ]
   },
   "unmapped": {
@@ -867,10 +943,6 @@
     "EXO-2.4": {
       "Reason": "Same as EXO-2.3: no ScubaGear 2.0.0 rule, no row on the EOP/Defender recommended-settings page. Near-miss: 'Best practices for configuring the Built-in security add-on for on-premises mailboxes' (https://learn.microsoft.com/exchange/standalone-eop/best-practices-for-configuring-eop, Other settings, row 'IMAP connectivity to mailbox': Standard Disabled, Strict Disabled). Identical setting and value, but the page is scoped to standalone EOP for on-premises mailboxes, so it is not cited for Exchange Online mailboxes.",
       "EarnBy": "None in the evaluator; the obstacle is the source's scope."
-    },
-    "EXO-2.6": {
-      "Reason": "The evaluator now passes only when accountEnabled was read for every shared mailbox (2026-10-26), which meets Microsoft's 'About shared mailboxes' guidance ('Always block sign-in for the shared mailbox account') and CIS M365 v7.0.0 1.2.2. That guidance is product documentation rather than a configuration benchmark the map uses, and CIS 1.2.2 is cited by EXO-6.2, which judges the same setting per mailbox.",
-      "EarnBy": "Cite CIS 1.2.2 on EXO-2.6 as well as EXO-6.2 if the owner wants both controls on the CIS card."
     },
     "EXO-8.1": {
       "Reason": "ScubaGear 2.0.0 EXO and SECURITYSUITE baselines have no connector rule (MS.SECURITYSUITE.8.1v1 is the connection-filter IP allow list, a different object). The Microsoft recommended-settings page has no connector rows; the Learn connector articles describe configuration options without recommended values. No allowed benchmark states a TLS or scoping requirement for Exchange Online connectors.",
@@ -940,10 +1012,6 @@
     "PVW-4.4": {
       "Reason": "No allowed benchmark recommends configuring record-declaring retention labels: ScubaGear 2.0.0 has no records-management item, the Zero Trust Assessment Purview tests (35001-35041) have none, and 'Implementing Zero Trust with Microsoft Purview' says only that records management 'supports additional restrictions' for high-value content, with no configured value. Not cited."
     },
-    "SPO-1.5": {
-      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. ScubaGear 2.0.0 has no unmanaged-device rule for SharePoint. Near-miss: Microsoft 'Recommended policies for Microsoft 365 workloads' (https://learn.microsoft.com/security/zero-trust/zero-trust-identity-device-access-policies-workloads), section 'Configure SharePoint access control to limit access by unmanaged devices', step 1: configure 'Allow limited, web-only access' or 'Block access' for unmanaged devices. That is the setting SPO-1.5 reads, but the evaluator also scores AuthenticationContext Satisfied, a value the recommendation does not list, so a Satisfied finding can fail it. Not cited.",
-      "EarnBy": "Treat ConditionalAccessPolicy = AuthenticationContext as not assessed (or Gap) instead of Satisfied. Then cite the Zero Trust step as Subset: unchecked would be step 2 (sites included in access control through Set-SPOSite -ConditionalAccessPolicy) and confirmation that the Conditional Access policy SharePoint creates is On."
-    },
     "SPO-2.1": {
       "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. No ScubaGear 2.0.0 rule covers OneDrive sync restriction. Near-miss: Microsoft 'How SharePoint and OneDrive safeguard your data in the cloud' (https://learn.microsoft.com/sharepoint/safeguarding-your-data) lists 'Allow syncing only on computers joined to specific domains' as one way to limit download to untrusted devices. It is an option list, not a recommended configuration value, and the feature page says it applies only to Active Directory domains and points Entra-joined devices to Conditional Access instead. Not a benchmark under the brief's rule."
     },
@@ -963,10 +1031,6 @@
     },
     "SPO-3.2": {
       "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. No ScubaGear 2.0.0 rule covers resharing notifications. Microsoft 'Turn on OneDrive file activity notifications' (https://learn.microsoft.com/sharepoint/turn-on-external-sharing-notifications) describes the setting but states no recommended value. (CIS v7.0.0 is out of scope for this exercise.)"
-    },
-    "SPO-3.3": {
-      "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. Near-misses on Microsoft Learn: 'Plan version storage on document libraries' (https://learn.microsoft.com/sharepoint/plan-version-storage) marks the Automatic setting '(Recommended)', and 'Overview of version history limits for document libraries and OneDrive' (https://learn.microsoft.com/sharepoint/document-library-version-history-limits), 'Types of version limits' note 1: 'any value less than 100 versions or less than 30 days expiration time limits isn't recommended'. SPO-3.3 scores a manual setting with 100+ versions Satisfied without reading the expiration, so 100 versions with a 7-day expiration passes SPO-3.3 and fails the note; and a manual setting fails 'Automatic (Recommended)'. Not cited.",
-      "EarnBy": "In manual mode also require ExpireVersionsAfterDays = 0 (no expiration) or >= 30; the collector already reads ExpireVersionsAfterDays (Invoke-TPCollectSharePoint.ps1). Then the version-history-limits note could be cited as Equivalent (automatic, or >= 100 versions with no or >= 30-day expiration)."
     },
     "SPO-4.1": {
       "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. ScubaGear 2.0.0 has no rule for it. Microsoft 'Set the OneDrive retention for deleted users' (https://learn.microsoft.com/sharepoint/set-retention) and 'OneDrive retention and deletion' give the range (30-3650) and default (30) but no recommended value. The 365-day threshold is NRG's own."

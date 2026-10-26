@@ -1663,7 +1663,7 @@
         "CISControls": [
           "5.3"
         ],
-        "CIS": "",
+        "CIS": "1.2.2",
         "NIST": "AC-2, IA-2",
         "CMMC": "AC.L1-3.1.1",
         "MITRE": [
@@ -2275,7 +2275,7 @@
     {
       "ControlId": "AAD-7.5",
       "Title": "Passwords Set to Never Expire",
-      "Description": "Every verified domain's password validity period is set to never expire (passwordValidityPeriodInDays 2147483647), as CIS and NIST SP 800-63B recommend; an unset value is Microsoft's 90-day default. PCI DSS 8.3.9 still expects a 90-day change where a password is the only factor, so a cardholder-data environment answers that requirement with MFA.",
+      "Description": "Every verified domain's password validity period is set to never expire (passwordValidityPeriodInDays 2147483647), as CIS and NIST SP 800-63B recommend; an unset value is Microsoft's 90-day default.",
       "BusinessRisk": "Forced periodic password changes push users to predictable patterns (Season2026!, then Season2027!) that attackers guess, and add help-desk resets without stopping a stolen password from being used.",
       "Severity": "Low",
       "Workload": "AAD",

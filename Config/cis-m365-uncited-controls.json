@@ -62,7 +62,6 @@
     "EXO-1.5": "Closest 2.1.7: Satisfied accepts any TargetedDomainProtectionAction / MailboxIntelligenceProtectionAction (and, when priority users are approved, TargetedUserProtectionAction) other than NoAction, e.g. MoveToJmf, Redirect, Delete or BccMessage, while 2.1.7 requires Quarantine for all three.",
     "EXO-2.3": "No v7 recommendation covers POP3 (CAS mailbox plan / Get-CASMailbox PopEnabled).",
     "EXO-2.4": "No v7 recommendation covers IMAP4 (CAS mailbox plan / Get-CASMailbox ImapEnabled).",
-    "EXO-2.6": "1.2.2 (AccountEnabled False for every shared mailbox) is cited by EXO-6.2. Since 2026-10-26 EXO-2.6 is Satisfied only when Entra accountEnabled was read as False for every shared mailbox (a mailbox judged only by the license heuristic is not assessed), which meets 1.2.2's audit too; left uncited pending review so one recommendation is not cited twice.",
     "EXO-3.3": "No v7 recommendation covers an alert policy for forwarding/redirect rule creation (6.2.1 audits blocking, not alerting).",
     "EXO-3.4": "No v7 recommendation covers an alert policy for unusual mail volume or user-reported phish.",
     "EXO-4.1": "No v7 recommendation covers audit record retention (Purview audit retention policies of 180+ days); 6.1.2 only notes the 180-day Audit (Standard) retention.",

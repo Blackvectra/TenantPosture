@@ -100,6 +100,14 @@ Describe 'Benchmark mapping' {
             @($script:Rows | Where-Object { $_.Control -eq 'INT-2.2' }).Count | Should -Be $asr.Count
         }
 
+        It 'cites only CIS Intune for Windows 11 recommendations listed in the repo, each Level 1' {
+            $list = @(Get-Content (Join-Path $script:RepoRoot 'Config' 'framework-baselines' 'cis-intune-windows11-v5.0.0.txt') | Where-Object { $_ -and $_ -notmatch '^#' } | ForEach-Object { ($_ -split "`t")[0] })
+            $cited = @($script:Rows | Where-Object { $_.Row.Benchmark -eq 'CIS-INTUNE-WINDOWS11-5.0.0' })
+            $cited.Count | Should -BeGreaterThan 0
+            foreach ($x in $cited) { $list | Should -Contain ([string]$x.Row.ItemId) -Because "$($x.Control) cites $($x.Row.ItemId)" }
+            foreach ($n in $list) { @($cited | Where-Object { [string]$_.Row.ItemId -eq $n }).Count | Should -BeGreaterThan 0 -Because "$n is listed, so a control must cite it" }
+        }
+
         It 'INT-1.5 cites the benchmark only while its approval is in force' {
             @($script:Rows | Where-Object { $_.Control -eq 'INT-1.5' -and -not $_.Row.Condition }).Count | Should -Be 0
             & (Get-Module TenantPosture) { Get-TPIntuneAvBaseline } | Should -Not -BeNullOrEmpty
