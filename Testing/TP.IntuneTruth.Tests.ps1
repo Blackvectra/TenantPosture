@@ -21,10 +21,11 @@ Describe 'Intune controls count what enforces something' {
             $script:SeenUris += @($Uri)
             # A tenant whose Graph refuses the nested expand answers 400; the collector must keep the plain read.
             if ($script:RefuseActions -and $Uri -match 'scheduledActionsForRule') { throw 'Request_BadRequest: the expand is not supported' }
+            if ($script:FailSettings -and $Uri -match '/settings') { throw 'Request_Forbidden' }
             foreach ($k in $script:Graph.Keys) { if ($Uri -match $k) { return @{ value = @($script:Graph[$k]) } } }
             return @{ value = @() }
         } }
-        & $script:Mod { $script:SeenUris = @(); $script:RefuseActions = $false }
+        & $script:Mod { $script:SeenUris = @(); $script:RefuseActions = $false; $script:FailSettings = $false }
         $script:Tid = '00000000-1111-2222-3333-444444444444'
         # The four enrollment configurations every tenant has.
         $script:Defaults = @(
@@ -41,6 +42,10 @@ Describe 'Intune controls count what enforces something' {
         }
         function script:Verdict { param([string] $Fn, [string] $Cid) & $Fn | Out-Null; @(Get-TPFindings | Where-Object { $_.ControlId -eq $Cid })[0] }
         $script:Assigned = @(@{ id = 'a1'; target = @{ '@odata.type' = '#microsoft.graph.allDevicesAssignmentTarget' } })
+        # A Settings Catalog choice setting as Graph returns it from configurationPolicies/{id}/settings.
+        function script:Setting { param([string] $DefinitionId, [string] $Value)
+            @{ id = '0'; settingInstance = @{ '@odata.type' = '#microsoft.graph.deviceManagementConfigurationChoiceSettingInstance'
+                settingDefinitionId = $DefinitionId; choiceSettingValue = @{ value = $Value; children = @() } } } }
     }
     AfterAll { & $script:Mod { Remove-Item -Path 'function:script:Invoke-TPGraphRequest' -ErrorAction SilentlyContinue }; Clear-TPState }
 
@@ -84,16 +89,131 @@ Describe 'Intune controls count what enforces something' {
         }
         (Verdict 'Test-TPControlIntuneWindowsLAPS' 'INT-4.1').State | Should -Be 'Gap'
         (Verdict 'Test-TPControlIntuneASR' 'INT-2.2').State | Should -Be 'Gap'
-        Run @{ 'configurationPolicies' = @(@{ id = 'p3'; name = 'LAPS'; templateReference = @{ templateFamily = 'endpointSecurityAccountProtection'; templateDisplayName = 'Local admin password solution (Windows LAPS)' }; assignments = $script:Assigned }) }
+        Run @{ 'configurationPolicies\?' = @(@{ id = 'p3'; name = 'LAPS'; templateReference = @{ templateFamily = 'endpointSecurityAccountProtection'; templateDisplayName = 'Local admin password solution (Windows LAPS)' }; assignments = $script:Assigned })
+               'configurationPolicies/p3/settings' = @(Setting 'device_vendor_msft_laps_policies_backupdirectory' 'device_vendor_msft_laps_policies_backupdirectory_1') }
         (Verdict 'Test-TPControlIntuneWindowsLAPS' 'INT-4.1').State | Should -Be 'Satisfied'
     }
-    It 'INT-1.3 accepts "Require encryption of data storage"; INT-2.4 does not accept System Integrity Protection' {
+    It 'INT-1.3 requires "Require BitLocker"; "Require encryption of data storage" alone is a Gap; INT-2.4 does not accept System Integrity Protection' {
+        # Microsoft's Zero Trust Windows compliance settings list both rules; the second
+        # alone never asks for BitLocker, and it passed this control.
         Run @{ 'deviceCompliancePolicies' = @(
             @{ '@odata.type' = '#microsoft.graph.windows10CompliancePolicy'; id = 'w'; displayName = 'Win'; storageRequireEncryption = $true; bitLockerEnabled = $false; assignments = $script:Assigned },
             @{ '@odata.type' = '#microsoft.graph.macOSCompliancePolicy'; id = 'm'; displayName = 'Mac'; systemIntegrityProtectionEnabled = $true; storageRequireEncryption = $false; assignments = $script:Assigned })
                'managedDevices' = @(@{ id = 'mac1'; operatingSystem = 'macOS'; complianceState = 'compliant' }) }
-        (Verdict 'Test-TPControlIntune' 'INT-1.3').State | Should -Be 'Satisfied'
+        $f = Verdict 'Test-TPControlIntune' 'INT-1.3'
+        $f.State  | Should -Be 'Gap'
+        $f.Detail | Should -Match 'require encryption of data storage on the device \(Win\), a different rule that is not counted'
         (Verdict 'Test-TPControlIntuneMacEncryption' 'INT-2.4').State | Should -Be 'Gap'
+    }
+    It 'INT-1.3 is Satisfied only when every assigned Windows policy requires BitLocker, Partial when some do' {
+        $pol = { param($id, $bl) @{ '@odata.type' = '#microsoft.graph.windows10CompliancePolicy'; id = $id; displayName = $id; bitLockerEnabled = $bl; storageRequireEncryption = $false; assignments = $script:Assigned } }
+        Run @{ 'deviceCompliancePolicies' = @((& $pol 'A' $true), (& $pol 'B' $true)) }
+        $f = Verdict 'Test-TPControlIntune' 'INT-1.3'
+        $f.State | Should -Be 'Satisfied'
+        $f.Detail | Should -Match 'Every assigned Windows compliance policy \(2: A, B\) requires BitLocker'
+        Run @{ 'deviceCompliancePolicies' = @((& $pol 'A' $true), (& $pol 'B' $false)) }
+        $f = Verdict 'Test-TPControlIntune' 'INT-1.3'
+        $f.State  | Should -Be 'Partial'
+        $f.Detail | Should -Match 'Shortfall: 1 do not \(B\)'
+    }
+    It 'INT-1.3: a Windows policy whose bitLockerEnabled was not returned is not assessed, never credited' {
+        # windows81CompliancePolicy has storageRequireEncryption and no Require BitLocker rule.
+        Run @{ 'deviceCompliancePolicies' = @(
+            @{ '@odata.type' = '#microsoft.graph.windows10CompliancePolicy'; id = 'w'; displayName = 'Win10'; bitLockerEnabled = $true; assignments = $script:Assigned },
+            @{ '@odata.type' = '#microsoft.graph.windows81CompliancePolicy'; id = 'w81'; displayName = 'Win81'; storageRequireEncryption = $true; assignments = $script:Assigned }) }
+        $f = Verdict 'Test-TPControlIntune' 'INT-1.3'
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Match 'Not assessed: whether Win81 require BitLocker'
+        @($f.FrameworkIds).Count | Should -BeGreaterThan 0
+    }
+    Context 'INT-2.3 reads each Windows Firewall network profile from the assigned policy''s settings' {
+        BeforeAll {
+            $script:FwList = @(@{ id = 'fw1'; name = 'Firewall baseline'; templateReference = @{ templateFamily = 'endpointSecurityFirewall'; templateDisplayName = 'Windows Firewall' }; assignments = $script:Assigned })
+            function script:FirewallVerdict { param([string] $Domain, [string] $Private, [string] $Public)
+                $set = @()
+                foreach ($pair in @(@('domain', $Domain), @('private', $Private), @('public', $Public))) {
+                    if ($pair[1]) { $id = "vendor_msft_firewall_mdmstore_$($pair[0])profile_enablefirewall"; $set += Setting $id "${id}_$($pair[1])" }
+                }
+                # A Hyper-V firewall node shares the leaf name and must not count.
+                $hv = 'vendor_msft_firewall_mdmstore_hypervvmsettings_{vmcreatorid}_publicprofile_enablefirewall'
+                $set += Setting $hv "${hv}_true"
+                Run @{ 'configurationPolicies\?' = $script:FwList; 'configurationPolicies/fw1/settings' = $set }
+                Verdict 'Test-TPControlIntuneFirewall' 'INT-2.3'
+            }
+        }
+        It 'all three profiles on is Satisfied, and the settings were read with no new scope' {
+            $f = FirewallVerdict 'true' 'true' 'true'
+            $f.State | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'The Domain profile firewall is turned on \(Firewall baseline\)'
+            @(& $script:Mod { $script:SeenUris } | Where-Object { $_ -match 'configurationPolicies/fw1/settings' }).Count | Should -Be 1
+            @(& $script:Mod { Get-TPGraphScopeList }) | Should -Contain 'DeviceManagementConfiguration.Read.All'
+        }
+        It 'a policy turning a profile off is a shortfall: Partial beside profiles turned on' {
+            $f = FirewallVerdict 'true' 'true' 'false'
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Shortfall: The Public profile firewall is turned off by Firewall baseline'
+            $f.Detail | Should -Not -Match 'Public profile firewall is turned on' -Because 'the Hyper-V node is not the host profile'
+        }
+        It 'a profile no policy sets is a shortfall (Windows default on is not enforcement), and a policy setting nothing is a Gap' {
+            (FirewallVerdict 'true' 'true' '').State | Should -Be 'Partial'
+            $f = FirewallVerdict '' '' ''
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'No assigned policy turns on the Domain profile firewall'
+        }
+        It 'a policy whose settings were not read (legacy intents, an older results file) is not assessed, never Satisfied' {
+            Run @{ 'intents' = @(@{ id = 'i1'; displayName = 'Windows Firewall'; isAssigned = $true }) }
+            $f = Verdict 'Test-TPControlIntuneFirewall' 'INT-2.3'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'Not assessed: .*settings of Windows Firewall were not read'
+            Clear-TPState
+            Set-TPRawData -Key 'Intune-EndpointSecurity' -Data ([pscustomobject]@{ Success = $true; Data = [pscustomobject]@{
+                FirewallPolicies = @([pscustomobject]@{ Id = 'fw1'; DisplayName = 'Old'; IsAssigned = $true; TemplateType = 'Firewall' }) } })
+            (Verdict 'Test-TPControlIntuneFirewall' 'INT-2.3').State | Should -Be 'NotApplicable'
+        }
+        It 'a failed settings read is recorded on the policy and leaves the profiles not assessed' {
+            & $script:Mod { $script:FailSettings = $true }
+            try {
+                Run @{ 'configurationPolicies\?' = $script:FwList }
+                @((Get-TPRawData -Key 'Intune-EndpointSecurity').Data.FirewallPolicies)[0].SettingsStatus | Should -Be 'Failed'
+                (Verdict 'Test-TPControlIntuneFirewall' 'INT-2.3').State | Should -Be 'NotApplicable'
+            } finally { & $script:Mod { $script:FailSettings = $false } }
+        }
+    }
+    Context 'INT-4.1 credits only a LAPS policy that backs the password up to Microsoft Entra ID' {
+        BeforeAll {
+            function script:Laps { param([string[]] $Values)
+                $list = @(); $graph = @{}
+                for ($i = 0; $i -lt $Values.Count; $i++) {
+                    $list += @{ id = "l$i"; name = "LAPS $i"; templateReference = @{ templateFamily = 'endpointSecurityAccountProtection'; templateDisplayName = 'Local admin password solution (Windows LAPS)' }; assignments = $script:Assigned }
+                    $id = 'device_vendor_msft_laps_policies_backupdirectory'
+                    $graph["configurationPolicies/l$i/settings"] = @(if ($Values[$i] -ne 'unset') { Setting $id "${id}_$($Values[$i])" })
+                }
+                $graph['configurationPolicies\?'] = $list
+                Run $graph
+                Verdict 'Test-TPControlIntuneWindowsLAPS' 'INT-4.1'
+            }
+        }
+        It 'Backup Directory = Disabled is a Gap, not a deployed LAPS' {
+            $f = Laps @('0')
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'Backup Directory to Disabled'
+        }
+        It 'Backup Directory not set is a Gap (Windows LAPS treats it as Disabled)' {
+            (Laps @('unset')).State | Should -Be 'Gap'
+        }
+        It 'Active Directory backup is a shortfall; beside an Entra ID policy it is Partial' {
+            (Laps @('2')).State | Should -Be 'Gap'
+            $f = Laps @('1', '2')
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'LAPS 1 backs the password up to Active Directory'
+        }
+        It 'an unrecognized value or an unread policy is not assessed, never Satisfied' {
+            (Laps @('7')).State | Should -Be 'NotApplicable'
+            Run @{ 'intents' = @(@{ id = 'i1'; displayName = 'Windows LAPS'; isAssigned = $true }) }
+            $f = Verdict 'Test-TPControlIntuneWindowsLAPS' 'INT-4.1'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'settings were not read'
+        }
     }
     It 'INT-4.4 reads the iOS passcodeRequired (an iOS-only fleet failed)' {
         Run @{ 'deviceCompliancePolicies' = @(@{ '@odata.type' = '#microsoft.graph.iosCompliancePolicy'; id = 'c1'; displayName = 'iOS'; passcodeRequired = $true; osMinimumVersion = '17.0'; assignments = $script:Assigned })

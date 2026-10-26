@@ -84,7 +84,7 @@ Create CA policy: require compliant device or hybrid join for all cloud apps.
 **License required:** M365 Business Premium or Intune Plan 1
 
 **Description:**
-Windows compliance policy requires BitLocker disk encryption.
+Every assigned Windows compliance policy requires BitLocker (Device Health Attestation: Require BitLocker = Require). Requiring encryption of data storage on the device is a different rule and is not counted.
 
 **Business risk:**
 Unencrypted laptops allow physical theft to result in data breach.
@@ -234,7 +234,7 @@ In Intune, open Endpoint security > Attack surface reduction and create (or edit
 **License required:** M365 Business Premium or Intune Plan 1
 
 **Description:**
-Windows Defender Firewall is managed and enforced via Intune endpoint security policy.
+Windows Defender Firewall is managed and enforced via Intune endpoint security policy: the assigned Windows Firewall policies turn on the domain, private and public network firewall.
 
 **Business risk:**
 Without managed firewall policy, users can disable the firewall or create rules that expose services to lateral movement.
@@ -414,7 +414,7 @@ Intune > Apps > App protection policies > Conditional launch > Add: Jailbroken/r
 **License required:** M365 Business Premium or Intune Plan 1
 
 **Description:**
-Windows Local Administrator Password Solution (LAPS) is deployed via Intune, generating unique randomized local admin passwords escrowed in Entra ID.
+Windows Local Administrator Password Solution (LAPS) is deployed via Intune, generating unique randomized local admin passwords escrowed in Entra ID: every assigned Windows LAPS policy sets Backup Directory to Microsoft Entra ID.
 
 **Business risk:**
 Shared or static local admin passwords enable pass-the-hash lateral movement — one compromised endpoint hands the attacker credentials that work on every other endpoint with the same password.

@@ -164,28 +164,50 @@ function Test-TPControlIntune {
         }
     }
 
-    # INT-1.3 — Windows compliance policy requires encryption: BitLocker via
-    # Device Health Attestation (bitLockerEnabled) or "Encryption of data
-    # storage on device" (storageRequireEncryption).
+    # INT-1.3 — Windows compliance policy requires BitLocker: "Require BitLocker"
+    # (bitLockerEnabled, a Device Health Attestation rule) in every assigned Windows
+    # compliance policy. "Require encryption of data storage on device"
+    # (storageRequireEncryption) is a different rule: Microsoft's Zero Trust
+    # recommended Windows compliance settings list both, and it crediting the
+    # control alone passed a policy that never asks for BitLocker. It is shown as
+    # context only. A policy whose bitLockerEnabled was not returned (a Windows
+    # 8.1 or Phone policy type has no such rule) is not established, never credited.
     $c = Get-TPControlById -ControlId 'INT-1.3'
     if ($c -and -not $collected['CompliancePolicies']) {
         Add-TPFinding -ControlId 'INT-1.3' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.3') -Detail 'CompliancePolicies was not collected; not assessed.'
     } elseif ($c) {
         $winPolicies = @(Select-TPAssignedPolicies @($d.CompliancePolicies | Where-Object { (Get-TPObjectField -Item $_ -Key 'Platform') -match 'windows10|Windows' }))
-        $enc = @($winPolicies | Where-Object { (Get-TPObjectField -Item $_ -Key 'BitLockerEnabled') -eq $true -or (Get-TPObjectField -Item $_ -Key 'StorageRequireEncryption') -eq $true })
+        $polName = { param($p) $n = [string](Get-TPObjectField -Item $p -Key 'DisplayName' -Default ''); if ($n) { $n } else { [string](Get-TPObjectField -Item $p -Key 'Id' -Default 'unnamed policy') } }
+        $bitLocker = @(); $lacking = @(); $unread = @(); $storageOnly = @()
+        foreach ($p in $winPolicies) {
+            $bl = Get-TPObjectField -Item $p -Key 'BitLockerEnabled' -Default $null
+            if ($bl -eq $true) { $bitLocker += (& $polName $p) }
+            elseif ($bl -eq $false) {
+                $lacking += (& $polName $p)
+                if ((Get-TPObjectField -Item $p -Key 'StorageRequireEncryption' -Default $null) -eq $true) { $storageOnly += (& $polName $p) }
+            } else { $unread += (& $polName $p) }
+        }
+        $req = 'Require BitLocker = Require (bitLockerEnabled) in every assigned Windows compliance policy'
+        $storageNote = if ($storageOnly.Count) { " $($storageOnly.Count) of them require encryption of data storage on the device ($($storageOnly -join ', ')), a different rule that is not counted here." } else { '' }
         if ($winPolicies.Count -eq 0) {
             Add-TPFinding -ControlId 'INT-1.3' -State 'Gap' -Category 'Endpoint' -Title $c.Title -Severity $c.Severity -FrameworkIds (& $cit 'INT-1.3') `
-                -Detail 'No assigned Windows compliance policy exists, so no Windows device is required to be encrypted.' -RequiredValue 'Require BitLocker / storage encryption in an assigned Windows compliance policy' -Remediation $c.Remediation
-        } elseif ($enc.Count -eq $winPolicies.Count) {
-            Add-TPFinding -ControlId 'INT-1.3' -State 'Satisfied' -Category 'Endpoint' -Title $c.Title -Severity 'Informational' -FrameworkIds (& $cit 'INT-1.3') `
-                -Detail "Every assigned Windows compliance policy ($($winPolicies.Count)) requires encryption."
-        } elseif ($enc.Count -gt 0) {
+                -Detail 'No assigned Windows compliance policy exists, so no Windows device is required to have BitLocker.' -RequiredValue $req -Remediation $c.Remediation
+        } elseif ($lacking.Count -gt 0 -and $bitLocker.Count -gt 0) {
             Add-TPFinding -ControlId 'INT-1.3' -State 'Partial' -Category 'Endpoint' -Title $c.Title -Severity 'Medium' -FrameworkIds (& $cit 'INT-1.3') `
-                -Detail "$($enc.Count) of $($winPolicies.Count) assigned Windows compliance policies require encryption; devices under the others are not required to be encrypted." -Remediation $c.Remediation
-        } else {
+                -Detail "Verified: $($bitLocker.Count) assigned Windows compliance policy(ies) require BitLocker ($($bitLocker -join ', ')). Shortfall: $($lacking.Count) do not ($($lacking -join ', ')), so devices under them are not required to have BitLocker.$storageNote$(if ($unread.Count) { " Not assessed: whether $($unread -join ', ') require BitLocker (the setting was not returned)." })" `
+                -CurrentValue "Require BitLocker: $($bitLocker.Count) of $($winPolicies.Count) assigned Windows policies" -RequiredValue $req -Remediation $c.Remediation
+        } elseif ($lacking.Count -gt 0) {
             Add-TPFinding -ControlId 'INT-1.3' -State 'Gap' -Category 'Endpoint' -Title $c.Title -Severity $c.Severity -FrameworkIds (& $cit 'INT-1.3') `
-                -Detail 'No assigned Windows compliance policy requires encryption. Unencrypted devices can access corporate data.' `
-                -CurrentValue "Encryption not required in $($winPolicies.Count) Windows policy(ies)" -RequiredValue 'Require BitLocker / storage encryption' -Remediation $c.Remediation
+                -Detail "Shortfall: no assigned Windows compliance policy requires BitLocker ($($lacking.Count) checked: $($lacking -join ', ')). Unencrypted devices can access corporate data.$storageNote$(if ($unread.Count) { " Not assessed: whether $($unread -join ', ') require BitLocker (the setting was not returned)." })" `
+                -CurrentValue "Require BitLocker not set in $($lacking.Count) Windows policy(ies)" -RequiredValue $req -Remediation $c.Remediation
+        } elseif ($unread.Count -gt 0) {
+            Add-TPFinding -ControlId 'INT-1.3' -State 'NotApplicable' -Category 'Endpoint' -Title $c.Title -FrameworkIds (& $cit 'INT-1.3') `
+                -Detail "$(if ($bitLocker.Count) { "Verified: $($bitLocker.Count) assigned Windows compliance policy(ies) require BitLocker ($($bitLocker -join ', ')). " })Not assessed: whether $($unread -join ', ') require BitLocker, because the Require BitLocker setting was not returned for them (a Windows 8.1 or Windows Phone policy type has no such rule)." `
+                -CurrentValue "Require BitLocker not read for $($unread.Count) policy(ies)" -RequiredValue $req
+        } else {
+            Add-TPFinding -ControlId 'INT-1.3' -State 'Satisfied' -Category 'Endpoint' -Title $c.Title -Severity 'Informational' -FrameworkIds (& $cit 'INT-1.3') `
+                -Detail "Every assigned Windows compliance policy ($($winPolicies.Count): $($bitLocker -join ', ')) requires BitLocker (Device Health Attestation). The rule is read from the policy; whether each device reports BitLocker on is not." `
+                -CurrentValue "Require BitLocker in $($winPolicies.Count) of $($winPolicies.Count) assigned Windows policies"
         }
     }
 
@@ -478,27 +500,108 @@ function Test-TPControlIntuneASR {
     }
 }
 
+# The stored Settings Catalog values of one endpoint-security policy (SettingValues,
+# keyed by lower-case setting definition id, from Get-TPAvSettingValues) whose id
+# matches $Pattern, and whether they were read in full. A policy from the legacy
+# intents endpoint, an older results file or a failed read carries no values:
+# Read = $false, never "nothing set".
+function Get-TPIntunePolicySettingMatches {
+    [CmdletBinding()]
+    param([AllowNull()] $Policy, [Parameter(Mandatory)] [string] $Pattern, [string] $Exclude)
+    $status = [string](Get-TPObjectField -Item $Policy -Key 'SettingsStatus' -Default '')
+    $values = Get-TPObjectField -Item $Policy -Key 'SettingValues' -Default $null
+    $out = [ordered]@{ Read = ($status -eq 'Read' -and $null -ne $values); Values = @() }
+    if ($null -eq $values -or $status -notin @('Read', 'Partial')) { return $out }
+    $keys = if ($values -is [System.Collections.IDictionary]) { @($values.Keys) } else { @($values.PSObject.Properties.Name) }
+    foreach ($k in $keys) {
+        $id = ([string]$k).ToLowerInvariant()
+        if ($id -notmatch $Pattern) { continue }
+        if ($Exclude -and $id -match $Exclude) { continue }
+        $out.Values += ([string](Get-TPObjectField -Item $values -Key $k -Default '')).ToLowerInvariant()
+    }
+    return $out
+}
+
+# INT-2.3: each Windows Firewall network profile across the assigned Firewall policies.
+# Firewall CSP MdmStore/<Domain|Private|Public>Profile/EnableFirewall, matched by the
+# CSP node at the end of the setting definition id (Microsoft publishes no Graph sample
+# of the Firewall template's ids; the Hyper-V firewall nodes share the leaf name and are
+# excluded). A choice value ending _true turns the profile on, _false turns it off.
+#   On           some read policy turns it on, none turns it off, every policy read
+#   Off          some policy turns it off (a shortfall whatever else is unread)
+#   NotSet       every policy read and none sets it (the not-configured rule: Windows
+#                turns the firewall on by default, but nothing enforces it)
+#   NotEstablished  a policy's settings were not read, or a value is not one recognized
+function Get-TPFirewallProfileStates {
+    [CmdletBinding()]
+    param([object[]] $Policies)
+    $name = { param($p) $n = [string](Get-TPObjectField -Item $p -Key 'DisplayName' -Default ''); if ($n) { $n } else { [string](Get-TPObjectField -Item $p -Key 'Id' -Default 'unnamed policy') } }
+    $rows = @()
+    foreach ($prof in 'Domain', 'Private', 'Public') {
+        $on = @(); $off = @(); $odd = @(); $unread = @()
+        foreach ($p in @($Policies)) {
+            $m = Get-TPIntunePolicySettingMatches -Policy $p -Pattern "mdmstore_$($prof.ToLowerInvariant())profile_enablefirewall$" -Exclude 'hypervvmsettings'
+            if (-not $m.Read) { $unread += (& $name $p) }
+            foreach ($v in $m.Values) {
+                if ($v -match '_true$') { $on += (& $name $p) }
+                elseif ($v -match '_false$') { $off += (& $name $p) }
+                else { $odd += "$(& $name $p) ($v)" }
+            }
+        }
+        $state = if ($off.Count) { 'Off' } elseif ($odd.Count -or $unread.Count) { 'NotEstablished' } elseif ($on.Count) { 'On' } else { 'NotSet' }
+        $rows += [pscustomobject]@{ Profile = $prof; State = $state; On = @($on | Select-Object -Unique); Off = @($off | Select-Object -Unique); Unrecognized = $odd; Unread = $unread }
+    }
+    return $rows
+}
+
 # ── INT-2.3 Firewall Policy Deployed via Intune ───────────────────────────────
 function Test-TPControlIntuneFirewall {
     [CmdletBinding()] param()
     $cid = 'INT-2.3'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
     $int = Get-TPRawData -Key 'Intune-EndpointSecurity'
-    if (-not $int -or -not $int.Success) { Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune endpoint security data not collected'; return }
+    if (-not $int -or -not $int.Success) { Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Intune endpoint security data not collected'; return }
     # Empty is not clean. The collector reported success, but this section
     # may not have landed — a failed sub-query leaves it absent or empty,
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-TPSectionCollected $int 'FirewallPolicies')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'FirewallPolicies was not collected; not assessed.'
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'FirewallPolicies was not collected; not assessed.'
         return
     }
     $st = Get-TPIntuneBucketState -Raw $int -Section 'FirewallPolicies'
-    if ($st.Assigned.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($st.Assigned.Count) assigned Windows Firewall policy(ies) deployed via Intune.$($st.Note)"
-    } else {
+    if ($st.Assigned.Count -eq 0) {
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "No assigned Windows Firewall policy in Intune (a firewall RULES policy alone does not turn the firewall on).$($st.Note) Endpoint firewall configuration is unmanaged." -Remediation $ctrl.Remediation
+        return
     }
+    # A Firewall policy existing is not the firewall turned on: a policy that sets
+    # Enable <profile> Network Firewall = False was Satisfied. Each of the domain,
+    # private and public profiles is judged from the assigned policies' settings.
+    $rows = @(Get-TPFirewallProfileStates -Policies $st.Assigned)
+    $verified = @(); $short = @(); $notEst = @()
+    foreach ($r in $rows) {
+        switch ($r.State) {
+            'On'     { $verified += "The $($r.Profile) profile firewall is turned on ($($r.On -join ', '))." }
+            'Off'    { $short += "The $($r.Profile) profile firewall is turned off by $($r.Off -join ', ')." }
+            'NotSet' { $short += "No assigned policy turns on the $($r.Profile) profile firewall (Windows turns it on by default, but nothing enforces it, so it can be turned off on the device)." }
+            default  {
+                $why = @()
+                if ($r.Unread.Count) { $why += "the settings of $($r.Unread -join ', ') were not read" }
+                if ($r.Unrecognized.Count) { $why += "a value is not one this assessment recognizes: $($r.Unrecognized -join ', ')" }
+                $notEst += "Whether the $($r.Profile) profile firewall is turned on, because $($why -join '; ')."
+            }
+        }
+    }
+    # The policy count is context, never a verified component on its own: a policy that
+    # turns nothing on must not lift a Gap to Partial.
+    $lead = "$($st.Assigned.Count) assigned Windows Firewall policy(ies).$($st.Note)"
+    if ($verified.Count) { $verified = @($lead) + $verified }
+    elseif ($short.Count) { $short[0] = "$lead $($short[0])" }
+    elseif ($notEst.Count) { $notEst[0] = "$lead $($notEst[0])" }
+    $cur = ($rows | ForEach-Object { "$($_.Profile): $($_.State)" }) -join '; '
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $notEst `
+        -CurrentValue $cur -RequiredValue 'An assigned Windows Firewall policy turning on the domain, private and public network firewall (Enable Network Firewall = True for each)' `
+        -AffectedObjects @($rows | Where-Object { $_.State -ne 'On' } | ForEach-Object { [ordered]@{ Profile = $_.Profile; State = $_.State; TurnedOffBy = ($_.Off -join ', ') } })
 }
 
 # ── INT-2.4 Disk Encryption Compliance for macOS ─────────────────────────────
@@ -661,26 +764,65 @@ function Test-TPControlIntuneConditionalLaunch {
 }
 
 # ── INT-4.1 Windows LAPS Configured ──────────────────────────────────────────
+# Each assigned Windows LAPS policy's BackupDirectory (LAPS CSP Policies/BackupDirectory:
+# 0 Disabled, the default when not set; 1 Microsoft Entra ID only; 2 Active Directory
+# only), matched by the CSP node at the end of the setting definition id and the value
+# id's trailing number (Microsoft publishes no Graph sample of the LAPS template's ids).
+# A policy that backs up nothing was Satisfied because it existed. Only Microsoft Entra
+# ID is credited: this control's expected state is the password escrowed in Entra ID.
 function Test-TPControlIntuneWindowsLAPS {
     [CmdletBinding()] param()
     $cid = 'INT-4.1'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
     $int = Get-TPRawData -Key 'Intune-EndpointSecurity'
-    if (-not $int -or -not $int.Success) { Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Intune data not collected'; return }
+    if (-not $int -or -not $int.Success) { Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Intune data not collected'; return }
     # Empty is not clean. The collector reported success, but this section
     # may not have landed — a failed sub-query leaves it absent or empty,
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-TPSectionCollected $int 'LAPSPolicies')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'LAPSPolicies was not collected; not assessed.'
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'LAPSPolicies was not collected; not assessed.'
         return
     }
     $st = Get-TPIntuneBucketState -Raw $int -Section 'LAPSPolicies'
-    if ($st.Assigned.Count -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "$($st.Assigned.Count) assigned Windows LAPS policy(ies).$($st.Note) (The backup directory and rotation settings inside the policy are not read.)"
-    } else {
+    if ($st.Assigned.Count -eq 0) {
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "No assigned Windows LAPS policy (Account Protection policies such as Credential Guard are not LAPS).$($st.Note) If endpoints share a local admin password, one compromise opens every endpoint." -Remediation $ctrl.Remediation
+        return
     }
+    $entra = @(); $short = @(); $notEst = @(); $rows = @()
+    foreach ($p in $st.Assigned) {
+        $n = [string](Get-TPObjectField -Item $p -Key 'DisplayName' -Default '')
+        if (-not $n) { $n = [string](Get-TPObjectField -Item $p -Key 'Id' -Default 'unnamed policy') }
+        $m = Get-TPIntunePolicySettingMatches -Policy $p -Pattern 'laps_policies_backupdirectory$'
+        $vals = @($m.Values | Select-Object -Unique)
+        $state = if ($vals.Count -gt 1) { 'Unrecognized' }
+                 elseif ($vals.Count -eq 1 -and $vals[0] -match '_1$') { 'EntraID' }
+                 elseif ($vals.Count -eq 1 -and $vals[0] -match '_2$') { 'ActiveDirectory' }
+                 elseif ($vals.Count -eq 1 -and $vals[0] -match '_0$') { 'Disabled' }
+                 elseif ($vals.Count -eq 1) { 'Unrecognized' }
+                 elseif ($m.Read) { 'NotSet' }
+                 else { 'NotRead' }
+        $rows += [ordered]@{ Policy = $n; BackupDirectory = $state }
+        switch ($state) {
+            'EntraID'         { $entra += $n }
+            'ActiveDirectory' { $short += "$n backs the password up to Active Directory, not Microsoft Entra ID." }
+            'Disabled'        { $short += "$n sets Backup Directory to Disabled, so the managed password is not backed up anywhere." }
+            'NotSet'          { $short += "$n does not set Backup Directory, which Windows LAPS treats as Disabled (the password is not backed up)." }
+            'Unrecognized'    { $notEst += "The Backup Directory of $n, because its value ($($vals -join ', ')) is not one this assessment recognizes." }
+            default           { $notEst += "The Backup Directory of $n, because the policy's settings were not read (a legacy endpoint-security policy, a failed read, or a results file from before the settings were read)." }
+        }
+    }
+    # The policy count is context, never a verified component on its own: a policy that
+    # backs nothing up must not lift a Gap to Partial.
+    $lead = "$($st.Assigned.Count) assigned Windows LAPS policy(ies).$($st.Note)"
+    $verified = @()
+    if ($entra.Count) { $verified = @($lead, "Backed up to Microsoft Entra ID: $($entra -join ', ').") }
+    elseif ($short.Count) { $short[0] = "$lead $($short[0])" }
+    elseif ($notEst.Count) { $notEst[0] = "$lead $($notEst[0])" }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $notEst `
+        -CurrentValue (($rows | ForEach-Object { "$($_.Policy): $($_.BackupDirectory)" }) -join '; ') `
+        -RequiredValue 'Every assigned Windows LAPS policy backs the password up to Microsoft Entra ID (Backup Directory = 1)' `
+        -AffectedObjects @($rows | Where-Object { $_.BackupDirectory -ne 'EntraID' })
 }
 
 # ── INT-4.2 Windows Hello for Business Deployed ───────────────────────────────

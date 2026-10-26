@@ -50,13 +50,13 @@ Describe 'DKIM key rotation date (DNS-2.1)' {
         & $script:Inject 'Invoke-WebRequest' 'throw "no network in test"'
 
         function script:Collect {
-            param([string] $KeyCreationTime = '01/22/2016 19:46:42')
+            param([string] $KeyCreationTime = '01/22/2016 19:46:42', $KeySize = 1024)
             Clear-TPState
             Set-TPRawData -Key 'EXO-MailboxConfig' -Data @{
                 CollectorId = 'EXO-MailboxConfig'; Success = $true
                 Data = @{ DkimSigningConfigs = @(@{
                     Domain = 'first.test'; Enabled = $true; Status = 'Valid'
-                    Selector1KeySize = 1024; Selector2KeySize = 1024
+                    Selector1KeySize = $KeySize; Selector2KeySize = $KeySize
                     KeyCreationTime = $KeyCreationTime; RotateOnDate = $KeyCreationTime
                     SelectorAfterRotateOnDate = 'Selector1'
                 }) }
@@ -101,20 +101,67 @@ Describe 'DKIM key rotation date (DNS-2.1)' {
         $f = Verdict
         $f.State        | Should -Be 'Gap'
         $f.Detail       | Should -Match '^first\.test DKIM key last rotated 2016-01-22 \(\d+ days ago\)'
-        $f.CurrentValue | Should -Match '^Last rotated 2016-01-22 \(\d+ days\)$'
+        $f.CurrentValue | Should -Match '^Last rotated 2016-01-22 \(\d+ days\); key 1024-bit$'
+        $f.Detail       | Should -Match 'The DKIM key is 1024-bit, below the 2048 bits NIST SP 800-177r1 recommends'
         $f.Detail       | Should -Match 'Key sizes: selector1 1024-bit, selector2 1024-bit\.'
         $f.Detail       | Should -Match 'Published selector1 key created 2016-01-22, 1024-bit \(DKIM n= timestamp\)\.'
         $f.Detail       | Should -Match 'normal for the inactive selector'
     }
 
     It 'does not attribute a 365-day cryptoperiod to NIST SP 800-57' {
-        Collect -KeyCreationTime ([datetime]::UtcNow.AddDays(-30).ToString('MM/dd/yyyy HH:mm:ss', [cultureinfo]::InvariantCulture)) | Out-Null
+        Collect -KeyCreationTime ([datetime]::UtcNow.AddDays(-30).ToString('MM/dd/yyyy HH:mm:ss', [cultureinfo]::InvariantCulture)) -KeySize 2048 | Out-Null
         $f = Verdict
         $f.State  | Should -Be 'Satisfied'
         $f.Detail | Should -Match '365-day rotation interval this assessment uses'
         $f.Detail | Should -Not -Match 'recommended by NIST'
         $src = Get-Content (Join-Path $script:RepoRoot 'Evaluators/Test-TPControlDNS.ps1') -Raw
         $src | Should -Not -Match '365-day cryptoperiod recommended by NIST'
+    }
+
+    It 'a recently rotated key below 2048 bits is Partial, never Satisfied (NIST SP 800-177r1 Table 4-3)' {
+        Collect -KeyCreationTime ([datetime]::UtcNow.AddDays(-30).ToString('MM/dd/yyyy HH:mm:ss', [cultureinfo]::InvariantCulture)) | Out-Null
+        $f = Verdict
+        $f.State        | Should -Be 'Partial'
+        $f.Detail       | Should -Match '^Verified: first\.test DKIM key last rotated .* Shortfall: The DKIM key is 1024-bit'
+        $f.RequiredValue | Should -Be 'Rotated within the last 365 days, with a 2048-bit key'
+    }
+
+    It 'a 2048-bit selector beside a 1024-bit one is a rotation in progress, not a weak key (as EXO-1.4 reads it)' {
+        Clear-TPState
+        Set-TPRawData -Key 'DNS-EmailRecords' -Data @{ Success = $true
+            Data = @{ DomainCount = 1; Domains = @{ 'first.test' = @{ DKIM = @{ KeyAgeDays = 10; LastRotated = '2026-10-16'; Selector1KeySize = 1024; Selector2KeySize = 2048; KeyRecords = @() } } } } }
+        $f = Verdict
+        $f.State  | Should -Be 'Satisfied'
+        $f.Detail | Should -Match 'Key size: 2048-bit, at least 2048 bits\.'
+    }
+
+    It 'falls back to the published key size when Exchange reports none' {
+        Clear-TPState
+        Set-TPRawData -Key 'DNS-EmailRecords' -Data @{ Success = $true
+            Data = @{ DomainCount = 1; Domains = @{ 'first.test' = @{ DKIM = @{ KeyAgeDays = 10; LastRotated = '2026-10-16'
+                KeyRecords = @(@{ Selector = 'selector1'; Lookup = 'Answered'; KeyCreated = '2026-10-16'; KeyBits = 1024 }) } } } } }
+        $f = Verdict
+        $f.State  | Should -Be 'Partial'
+        $f.Detail | Should -Match '1024-bit \(from the published key\)'
+    }
+
+    It 'a key size that was not read is never a pass on size: the rotation verdict stands and says so' {
+        Clear-TPState
+        Set-TPRawData -Key 'DNS-EmailRecords' -Data @{ Success = $true
+            Data = @{ DomainCount = 1; Domains = @{ 'first.test' = @{ DKIM = @{ KeyAgeDays = 10; LastRotated = '2026-10-16'; KeyRecords = @() } } } } }
+        $f = Verdict
+        $f.State  | Should -Be 'Satisfied'
+        $f.Detail | Should -Match 'Key size not read, so it is not judged here\.'
+        $f.Detail | Should -Not -Match 'at least 2048'
+    }
+
+    It 'a weak key with no rotation date is a Gap naming both halves, not a silent not-assessed' {
+        Clear-TPState
+        Set-TPRawData -Key 'DNS-EmailRecords' -Data @{ Success = $true
+            Data = @{ DomainCount = 1; Domains = @{ 'first.test' = @{ DKIM = @{ KeyAgeDays = $null; Selector1KeySize = 1024; KeyRecords = @() } } } } }
+        $f = Verdict
+        $f.State  | Should -Be 'Gap'
+        $f.Detail | Should -Match '^Shortfall: The DKIM key is 1024-bit.* Not assessed: first\.test DKIM last rotation date'
     }
 
     It 'says when Exchange and the published key disagree on the date' {

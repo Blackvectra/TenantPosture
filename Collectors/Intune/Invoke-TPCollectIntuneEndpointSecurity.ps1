@@ -1,12 +1,14 @@
 #Requires -Version 7.0
 #
 # Invoke-TPCollectIntuneEndpointSecurity.ps1
-# Collects Intune Endpoint Security policies (LAPS, ASR, Firewall, EDR, Antivirus).
+# Collects Intune Endpoint Security policies (LAPS, ASR, Firewall, EDR, Antivirus),
+# with the setting values of assigned ASR, Antivirus, Firewall and LAPS policies.
 #
 # READ-ONLY: GET-only Graph calls. Does not create, modify, or remove configuration.
 #
 # Returns: structured hashtable under key 'Intune-EndpointSecurity' via Set-TPRawData.
-# Reads:   Graph deviceManagement/configurationPolicies and deviceManagement/intents.
+# Reads:   Graph deviceManagement/configurationPolicies (and /{id}/settings) and
+#          deviceManagement/intents. Scope: DeviceManagementConfiguration.Read.All (already requested).
 #
 # NIST SP 800-53: CM-7 (least functionality), SI-3 (malicious code protection),
 #                 SI-4 (system monitoring), SC-7 (boundary protection),
@@ -123,8 +125,10 @@ function Invoke-TPCollectIntuneEndpointSecurity {
 
                 # For an assigned ASR policy, read the rules it configures and each rule's
                 # mode: a policy existing does not show Block mode. A failed read is recorded
-                # on the entry, never guessed.
-                if ($bucket -in @('ASR','Antivirus') -and $entry.IsAssigned -ne $false -and $entry.Id) {
+                # on the entry, never guessed. Firewall (INT-2.3: each network profile turned
+                # on) and Windows LAPS (INT-4.1: where the password is backed up) are judged
+                # from their settings the same way, so their values are stored too.
+                if ($bucket -in @('ASR','Antivirus','Firewall','LAPS') -and $entry.IsAssigned -ne $false -and $entry.Id) {
                     try {
                         $sUri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$($entry.Id)/settings"
                         $sAll = @(); $sPages = 0
@@ -138,6 +142,10 @@ function Invoke-TPCollectIntuneEndpointSecurity {
                         if ($bucket -eq 'ASR') {
                             $entry.AsrRuleModes = Get-TPAsrRuleModes -Settings $sAll
                             $entry.AsrSettingsStatus = $sStatus
+                        } elseif ($bucket -in @('Firewall','LAPS')) {
+                            # Every value the policy sets, keyed by setting definition id.
+                            $entry.SettingValues  = Get-TPAvSettingValues -Settings $sAll
+                            $entry.SettingsStatus = $sStatus
                         } else {
                             $entry.AvSettings = Get-TPAvSettings -Settings $sAll
                             # Every value the policy sets, so INT-1.5 can judge the approved
@@ -146,7 +154,9 @@ function Invoke-TPCollectIntuneEndpointSecurity {
                             $entry.AvSettingsStatus = $sStatus
                         }
                     } catch {
-                        if ($bucket -eq 'ASR') { $entry.AsrSettingsStatus = 'Failed' } else { $entry.AvSettingsStatus = 'Failed' }
+                        if ($bucket -eq 'ASR') { $entry.AsrSettingsStatus = 'Failed' }
+                        elseif ($bucket -in @('Firewall','LAPS')) { $entry.SettingsStatus = 'Failed' }
+                        else { $entry.AvSettingsStatus = 'Failed' }
                         if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                             Register-TPException -Source "Intune-EndpointSecurity-${bucket}Settings" -Message $_.Exception.Message
                         }
