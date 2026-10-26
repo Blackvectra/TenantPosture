@@ -1,5 +1,7 @@
 # NRG Security Baseline v1.0 — live validation runbook
 
+> Written for the v1.0 validation (PR #104). Baseline v2.0 (2026-10-25) is built from CIS Microsoft 365 Foundations v7.0.0, so tiers are no longer edited here; the evidence checks below apply unchanged, and the many `CIS-<number>` manual rows are expected to read NotVerified.
+
 PR #104 is feature-complete pending this validation. Nothing in it merges until one representative tenant has been run and every Minimum and Standard result has been checked back to its evidence. No baseline feature is added before that.
 
 Pick an ugly tenant on purpose: missing licensing, a third-party EDR, old policies, odd Conditional Access, incomplete configuration. A well-configured tenant proves nothing about the assumptions.

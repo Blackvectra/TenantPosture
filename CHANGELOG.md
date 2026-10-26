@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **[Baseline v2.0] The NRG Security Baseline is the CIS Microsoft 365 Foundations Benchmark v7.0.0 (owner's
+  decision, 2026-10-25).** Minimum is the E3 Level 1 profile, Standard adds the E5-only Level 1 recommendations,
+  Hardened adds Level 2; every recommendation sits at its own profile's tier. A control that cites a recommendation is
+  its row; a recommendation no control checks is a manual `CIS-<number>` row that always reads NotVerified; one the
+  tool checks only in part keeps a manual row for the rest. 189 rows cover all 160 recommendations (70 tool-checked,
+  119 manual); Minimum has 114 (46 checked). v1.x's NRG-only requirements, VM-VERIFY-01 and every control without a
+  CIS citation (the Intune endpoint policies, DNS hardening beyond SPF/DKIM/DMARC, PIM settings), are assessment-only:
+  still assessed and reported, no longer required. **Expect baseline results to change shape**: far more rows, most of
+  the new ones NotVerified until the tool reads them, and a v2.0 run compared with a v1.x run reports that the standard
+  changed rather than a regression. An exception on file for a control v2.0 no longer requires is unused; review client
+  exception files. `docs/TP-SECURITY-BASELINE-CANDIDATES.md` is now generated from the CIS mapping. Also fixed: the
+  scope classifier filed SPO-1.4, SPO-2.6, SPO-2.7 and SPO-3.4 as not applicable to the tenant when the SharePoint
+  shell was not connected (their "Re-run with -IncludeSharePointShell" sentence matched no collection pattern); they
+  are a collection gap now, which the baseline reports as OptionalCollectorRequired. And the Markdown summary's All
+  Findings table now carries each finding's Detail (and the Not Applicable list says why each was not scored): a
+  Partial or not-assessed finding's reason reached the Markdown only when its control was a baseline row.
+
 - **[Baseline v1.1] AAD-3.1 allows two to four Global Administrators, not eight (owner's decision, 2026-10-25).**
   CIS Microsoft 365 Foundations v7.0.0 1.1.3 sets two to four; the tool and the NRG baseline v1.0 allowed eight, as
   CISA SCuBA MS.AAD.7.1v1 does. The count includes eligible assignments, the break-glass pair included. A tenant with

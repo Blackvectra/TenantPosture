@@ -99,6 +99,13 @@ function Get-TPBaselineDefinition {
             EffectivenessEvidence   = (Get-TPObjectField -Item $c -Key 'EffectivenessEvidence' -Default $null)
             Automated               = [bool](Get-TPObjectField -Item $c -Key 'Automated' -Default $true)
             Reason                  = [string](Get-TPObjectField -Item $c -Key 'Reason' -Default '')
+            # v2.0: the CIS Microsoft 365 Foundations recommendation the row
+            # stands for, its CIS profile, and how the control relates to it
+            # (Equivalent / Subset, or Manual for a CIS-<number> row). Empty
+            # on a v1.x file.
+            Cis                     = [string](Get-TPObjectField -Item $c -Key 'Cis' -Default '')
+            CisProfile              = [string](Get-TPObjectField -Item $c -Key 'CisProfile' -Default '')
+            CisRelation             = [string](Get-TPObjectField -Item $c -Key 'CisRelation' -Default '')
         }
     }
 

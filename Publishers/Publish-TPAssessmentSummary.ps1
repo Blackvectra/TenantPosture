@@ -549,8 +549,12 @@ function Publish-TPAssessmentSummary {
     $actionable = @($Findings | Where-Object { $_.State -ne 'NotApplicable' })
     $naFindings = @($Findings | Where-Object { $_.State -eq 'NotApplicable' })
 
-    $null = $sb.AppendLine("| Control | Category | State | Severity | Title |")
-    $null = $sb.AppendLine("|---------|----------|-------|----------|-------|")
+    # The Detail column carries each verdict's reason and limitation. Without
+    # it a Partial or not-assessed finding reached the Markdown only when the
+    # control was also a baseline row (TP.OutputParity.Tests.ps1 passed on that
+    # coincidence until baseline v2.0 dropped DEF-2.2 and DEF-2.3).
+    $null = $sb.AppendLine("| Control | Category | State | Severity | Title | Detail |")
+    $null = $sb.AppendLine("|---------|----------|-------|----------|-------|--------|")
     # `?? 99` coerces unknown State / Severity values to a sortable tail position
     # so a malformed finding (null or unexpected enum value) sorts last instead
     # of mixing $null into the comparison and producing unpredictable order.
@@ -560,7 +564,7 @@ function Publish-TPAssessmentSummary {
         Category, ControlId
     foreach ($f in $sorted) {
         $icon = $stateIcon[$f.State] ?? $f.State
-        $null = $sb.AppendLine("| $(EscMd $f.ControlId) | $(EscMd $f.Category) | $icon $(EscMd $f.State) | $(EscMd $f.Severity) | $(EscMd $f.Title)$(Get-TPEvidenceLimitMd $f.ControlId) |")
+        $null = $sb.AppendLine("| $(EscMd $f.ControlId) | $(EscMd $f.Category) | $icon $(EscMd $f.State) | $(EscMd $f.Severity) | $(EscMd $f.Title)$(Get-TPEvidenceLimitMd $f.ControlId) | $(EscMd ([string](Get-TPObjectField -Item $f -Key 'Detail' -Default ''))) |")
     }
     $null = $sb.AppendLine()
 
@@ -571,10 +575,10 @@ function Publish-TPAssessmentSummary {
         $null = $sb.AppendLine()
         $null = $sb.AppendLine("<details><summary>Show $($naFindings.Count) Not Applicable controls</summary>")
         $null = $sb.AppendLine()
-        $null = $sb.AppendLine("| Control | Category | Title |")
-        $null = $sb.AppendLine("|---------|----------|-------|")
+        $null = $sb.AppendLine("| Control | Category | Title | Why not scored |")
+        $null = $sb.AppendLine("|---------|----------|-------|----------------|")
         foreach ($f in ($naFindings | Sort-Object Category, ControlId)) {
-            $null = $sb.AppendLine("| $(EscMd $f.ControlId) | $(EscMd $f.Category) | $(EscMd $f.Title)$(Get-TPEvidenceLimitMd $f.ControlId) |")
+            $null = $sb.AppendLine("| $(EscMd $f.ControlId) | $(EscMd $f.Category) | $(EscMd $f.Title)$(Get-TPEvidenceLimitMd $f.ControlId) | $(EscMd ([string](Get-TPObjectField -Item $f -Key 'Detail' -Default ''))) |")
         }
         $null = $sb.AppendLine()
         $null = $sb.AppendLine("</details>")

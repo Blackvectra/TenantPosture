@@ -54,10 +54,12 @@
 
 $script:TPComparisonTierOrder = @('Minimum', 'Standard', 'Hardened')
 
-# A baseline control ID: the tool's AAD-1.1 shape, or the manual VM-VERIFY-01
-# shape. Strict on purpose: the ID is copied into every output, and a
-# permissive pattern would let a hostile file smuggle a tenant name through it.
-$script:TPComparisonControlIdPattern = '^[A-Z]{2,8}-(?:\d+\.\d+|[A-Z]+-\d+)$'
+# A baseline control ID: the tool's AAD-1.1 shape, a manual CIS row
+# (CIS-5.2.3.2, baseline v2.0), or the v1.x manual VM-VERIFY-01 shape, which an
+# older results file can still carry. Strict on purpose: the ID is copied into
+# every output, and a permissive pattern would let a hostile file smuggle a
+# tenant name through it.
+$script:TPComparisonControlIdPattern = '^(?:[A-Z]{2,8}-(?:\d+\.\d+|[A-Z]+-\d+)|CIS-\d{1,2}(?:\.\d{1,2}){1,3})$'
 
 function ConvertTo-TPComparisonText {
     <#

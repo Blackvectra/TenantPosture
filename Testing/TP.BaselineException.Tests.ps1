@@ -24,7 +24,7 @@ Describe 'Baseline exception cmdlets' {
         $script:Future = (Get-Date).AddMonths(4)
         $script:NewFile = { Join-Path $script:Tmp ([guid]::NewGuid().ToString('N') + '.psd1') }
         $script:Add = {
-            param([string] $Path, [string] $Cid = 'AAD-2.3')
+            param([string] $Path, [string] $Cid = 'AAD-1.2')
             New-TPBaselineException -TenantDomain contoso.com -ControlId $Cid -Reason 'No managed device program' -CompensatingControl 'MFA and browser-only access' -Approver 'security@nrg.example' -ReviewDate $script:Future -Path $Path -Confirm:$false
         }
     }
@@ -43,12 +43,12 @@ Describe 'Baseline exception cmdlets' {
         $r.Entry.Approved | Should -BeTrue
         $r.Entry.ApprovedDate | Should -Be (Get-Date).ToString('yyyy-MM-dd')
         $text = Get-Content -LiteralPath $f -Raw
-        $text | Should -Match "ControlId\s+= 'AAD-2.3'"
+        $text | Should -Match "ControlId\s+= 'AAD-1.2'"
         $text | Should -Not -Match 'ExpiryDate' -Because 'an omitted expiry is omitted, not written empty'
         $text | Should -Not -Match '\$\(|\$[A-Za-z]|Invoke-|&' -Because 'data only'
         $loaded = Get-TPBaselineExceptions -Path $f
-        $loaded.Approved.ContainsKey('AAD-2.3') | Should -BeTrue
-        (Get-TPBaselineException -TenantDomain contoso.com -Path $f -ControlId 'AAD-2.3').Count | Should -Be 1
+        $loaded.Approved.ContainsKey('AAD-1.2') | Should -BeTrue
+        (Get-TPBaselineException -TenantDomain contoso.com -Path $f -ControlId 'AAD-1.2').Count | Should -Be 1
     }
 
     It 'quotes are preserved through the PSD1 round trip' {
@@ -64,9 +64,9 @@ Describe 'Baseline exception cmdlets' {
     It 'refuses a control outside the baseline, a review date not in the future, and an expiry before the review' {
         $f = & $script:NewFile
         { New-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-13.1' -Reason r -CompensatingControl c -Approver a -ReviewDate $script:Future -Path $f -Confirm:$false } | Should -Throw '*not an NRG Security Baseline control*'
-        { New-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-2.3' -Reason r -CompensatingControl c -Approver a -ReviewDate (Get-Date) -Path $f -Confirm:$false } | Should -Throw '*must be a future date*'
-        { New-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-2.3' -Reason r -CompensatingControl c -Approver a -ReviewDate $script:Future -ExpiryDate $script:Future.AddDays(-1) -Path $f -Confirm:$false } | Should -Throw '*before ReviewDate*'
-        { New-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-2.3' -Reason '' -CompensatingControl c -Approver a -ReviewDate $script:Future -Path $f -Confirm:$false } | Should -Throw
+        { New-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-1.2' -Reason r -CompensatingControl c -Approver a -ReviewDate (Get-Date) -Path $f -Confirm:$false } | Should -Throw '*must be a future date*'
+        { New-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-1.2' -Reason r -CompensatingControl c -Approver a -ReviewDate $script:Future -ExpiryDate $script:Future.AddDays(-1) -Path $f -Confirm:$false } | Should -Throw '*before ReviewDate*'
+        { New-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-1.2' -Reason '' -CompensatingControl c -Approver a -ReviewDate $script:Future -Path $f -Confirm:$false } | Should -Throw
         Test-Path -LiteralPath $f | Should -BeFalse -Because 'nothing was written'
     }
 
@@ -85,31 +85,31 @@ Describe 'Baseline exception cmdlets' {
 
     It '-WhatIf writes nothing and says what it would do' {
         $f = & $script:NewFile
-        $w = New-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-2.3' -Reason r -CompensatingControl c -Approver a -ReviewDate $script:Future -Path $f -WhatIf
+        $w = New-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-1.2' -Reason r -CompensatingControl c -Approver a -ReviewDate $script:Future -Path $f -WhatIf
         $w.Change | Should -Be 'WhatIf'
         Test-Path -LiteralPath $f | Should -BeFalse
         $null = & $script:Add $f
-        $s = Set-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-2.3' -Reason 'changed' -Path $f -WhatIf
+        $s = Set-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-1.2' -Reason 'changed' -Path $f -WhatIf
         $s.Change | Should -Be 'WhatIf'
         (Get-TPBaselineException -TenantDomain contoso.com -Path $f)[0].Reason | Should -Be 'No managed device program'
-        $d = Remove-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-2.3' -Path $f -WhatIf
+        $d = Remove-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-1.2' -Path $f -WhatIf
         $d.Change | Should -Be 'WhatIf'
         (Get-TPBaselineException -TenantDomain contoso.com -Path $f).Count | Should -Be 1
     }
 
     It 'Set changes only the given fields, re-validates, and re-dates the approval when the approver changes' {
         $f = & $script:NewFile
-        $null = New-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-2.3' -Reason r -CompensatingControl c -Approver 'first@nrg.example' -ApprovedDate (Get-Date).AddDays(-10) -ReviewDate $script:Future -Path $f -Confirm:$false
-        $s = Set-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-2.3' -Reason 'Client has no managed device program (BYOD)' -Path $f -Confirm:$false
+        $null = New-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-1.2' -Reason r -CompensatingControl c -Approver 'first@nrg.example' -ApprovedDate (Get-Date).AddDays(-10) -ReviewDate $script:Future -Path $f -Confirm:$false
+        $s = Set-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-1.2' -Reason 'Client has no managed device program (BYOD)' -Path $f -Confirm:$false
         $s.Change | Should -Be 'Updated'
         @($s.ChangedFields) | Should -Be @('Reason')
         $s.After.ApprovedDate | Should -Be (Get-Date).AddDays(-10).ToString('yyyy-MM-dd') -Because 'the approver did not change'
         $s.After.CompensatingControl | Should -Be 'c'
-        $s2 = Set-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-2.3' -Approver 'lead@nrg.example' -Path $f -Confirm:$false
+        $s2 = Set-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-1.2' -Approver 'lead@nrg.example' -Path $f -Confirm:$false
         $s2.After.ApprovedDate | Should -Be (Get-Date).ToString('yyyy-MM-dd')
         @($s2.ChangedFields) | Should -Contain 'Approver'
-        { Set-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-2.3' -ReviewDate (Get-Date).AddDays(-1) -Path $f -Confirm:$false } | Should -Throw '*must be a future date*'
-        (Set-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-2.3' -Reason 'Client has no managed device program (BYOD)' -Path $f -Confirm:$false).Change | Should -Be 'Unchanged'
+        { Set-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-1.2' -ReviewDate (Get-Date).AddDays(-1) -Path $f -Confirm:$false } | Should -Throw '*must be a future date*'
+        (Set-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-1.2' -Reason 'Client has no managed device program (BYOD)' -Path $f -Confirm:$false).Change | Should -Be 'Unchanged'
         { Set-TPBaselineException -TenantDomain contoso.com -ControlId 'EXO-1.2' -Reason x -Path $f -Confirm:$false } | Should -Throw '*No exception for EXO-1.2*'
     }
 
@@ -117,7 +117,7 @@ Describe 'Baseline exception cmdlets' {
         $f = & $script:NewFile
         $null = & $script:Add $f
         $null = & $script:Add $f 'EXO-1.2'
-        $r = Remove-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-2.3' -Path $f -Confirm:$false
+        $r = Remove-TPBaselineException -TenantDomain contoso.com -ControlId 'AAD-1.2' -Path $f -Confirm:$false
         $r.Change | Should -Be 'Removed'
         $r.Before.Entries | Should -Be 2
         $r.After.Entries | Should -Be 1
@@ -158,7 +158,7 @@ Describe 'Baseline exception cmdlets' {
         ($r.NotInForce -join ' ') | Should -Match 'DEF-1.1: Not approved: missing'
         $loaded = Get-TPBaselineExceptions -Path $f
         @($loaded.Entries).Count | Should -Be 3
-        $loaded.Approved.Keys | Should -Be @('AAD-2.3')
+        $loaded.Approved.Keys | Should -Be @('AAD-1.2')
         $old = @($loaded.Entries | Where-Object { $_.ControlId -eq 'EXO-1.2' })[0]
         $old.Approved | Should -BeFalse
         $old.ReviewDate | Should -Be '2025-06-01' -Because 'the lapsed entry is written back unchanged'
@@ -176,13 +176,13 @@ Describe 'Baseline exception cmdlets' {
         # write fails before anything replaces the original.
         $blocked = Join-Path $f 'child.psd1'
         $writer = & (Get-Module 'TenantPosture') { Get-Command Write-TPBaselineExceptionFile }
-        { & $writer -Path $blocked -Entries @([pscustomobject]@{ ControlId = 'AAD-2.3'; Reason = 'r'; CompensatingControl = 'c'; Approver = 'a'; ApprovedDate = '2026-01-01'; ReviewDate = '2030-01-01'; ExpiryDate = '' }) } | Should -Throw
+        { & $writer -Path $blocked -Entries @([pscustomobject]@{ ControlId = 'AAD-1.2'; Reason = 'r'; CompensatingControl = 'c'; Approver = 'a'; ApprovedDate = '2026-01-01'; ReviewDate = '2030-01-01'; ExpiryDate = '' }) } | Should -Throw
         (Get-Content -LiteralPath $f -Raw) | Should -Be $beforeText
         (Get-ChildItem -LiteralPath (Split-Path -Parent $f) -Filter '*.tmp.psd1').Count | Should -Be 0 -Because 'no temp file is left behind'
         # And the round-trip check itself: a document that reads back with a
         # different entry count is refused.
         $render = & (Get-Module 'TenantPosture') { Get-Command ConvertTo-TPBaselineExceptionPsd1 }
-        $text = & $render -Entries @([pscustomobject]@{ ControlId = 'AAD-2.3'; Reason = "it's"; CompensatingControl = 'c'; Approver = 'a'; ApprovedDate = '2026-01-01'; ReviewDate = '2030-01-01'; ExpiryDate = '' })
+        $text = & $render -Entries @([pscustomobject]@{ ControlId = 'AAD-1.2'; Reason = "it's"; CompensatingControl = 'c'; Approver = 'a'; ApprovedDate = '2026-01-01'; ReviewDate = '2030-01-01'; ExpiryDate = '' })
         $text | Should -Match "Reason              = 'it''s'"
         $text | Should -Not -Match 'ExpiryDate'
     }
@@ -191,18 +191,18 @@ Describe 'Baseline exception cmdlets' {
         $f = & $script:NewFile
         $null = & $script:Add $f
         Clear-TPState
-        Add-TPFinding -ControlId 'AAD-2.3' -State 'Gap' -Category 'Identity' -Title 'Device compliance CA' -Severity 'High' -Detail 'No CA policy requires a compliant or hybrid-joined device.'
+        Add-TPFinding -ControlId 'AAD-1.2' -State 'Gap' -Category 'Identity' -Title 'Device compliance CA' -Severity 'High' -Detail 'No CA policy requires a compliant or hybrid-joined device.'
         $exc = Get-TPBaselineExceptions -Path $f
         $now = Get-Date
         $raw = @{}
         foreach ($k in @('AAD-CAPolicies', 'AAD-AuthPolicies', 'Intune-DeviceCompliance')) { $raw[$k] = @{ CollectorId = $k; CollectedAt = $now.ToString('o'); Success = $true; Data = @{} } }
         $c = Get-TPBaselineCompliance -Findings (Get-TPFindings) -TargetTier Standard -RawData $raw -Coverage @{} -Exceptions $exc
-        $row = @($c.Controls | Where-Object { $_.ControlId -eq 'AAD-2.3' })[0]
+        $row = @($c.Controls | Where-Object { $_.ControlId -eq 'AAD-1.2' })[0]
         $row.ObservedState | Should -Be 'Failed'
         $row.Disposition | Should -Be 'ApprovedException'
         $row.BaselineStatus | Should -Be 'ApprovedException'
         $row.ReasonCode | Should -Be 'ControlFailed'
-        $c.BaselineVersion | Should -Be '1.1'
+        $c.BaselineVersion | Should -Be '2.0'
         Clear-TPState
     }
 
