@@ -37,7 +37,6 @@ Create compliance policies per platform in Intune > Devices > Compliance. Requir
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CM-2, CM-6 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.1.1 |
 | CIS Controls v8.1 | 4.1 |
 | CMMC 2.0 | CM.L2-3.4.1 |
 | ISO/IEC 27001:2022 | A.8.1 |
@@ -68,7 +67,6 @@ Create CA policy: require compliant device or hybrid join for all cloud apps.
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3, CM-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.1.3 |
 | CIS Controls v8.1 | 13.5 |
 | CMMC 2.0 | AC.L1-3.1.2 |
 | ISO/IEC 27001:2022 | A.8.1, A.8.3 |
@@ -99,7 +97,6 @@ Intune compliance policy for Windows: Device Health > Require BitLocker = Requir
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-28 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.1.2 |
 | CIS Controls v8.1 | 3.6 |
 | CMMC 2.0 | MP.L2-3.8.9 |
 | ISO/IEC 27001:2022 | A.8.1, A.8.24 |
@@ -130,7 +127,6 @@ Create app protection policies in Intune > Apps > App protection policies for iO
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-19, SC-28 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.3.1 |
 | CIS Controls v8.1 | 3.3, 4.12 |
 | CMMC 2.0 | AC.L2-3.1.19 |
 | ISO/IEC 27001:2022 | A.8.1 |
@@ -161,7 +157,6 @@ In Intune, create an Endpoint security > Antivirus policy (Microsoft Defender An
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.4.1 |
 | CIS Controls v8.1 | 10.1, 10.2 |
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.7 |
@@ -192,7 +187,6 @@ Intune > Endpoint security > Endpoint detection and response > Create policy for
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3, SI-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.4.2 |
 | CIS Controls v8.1 | 10.7, 13.2 |
 | CMMC 2.0 | SI.L2-3.14.7 |
 | ISO/IEC 27001:2022 | A.8.7, A.8.16 |
@@ -223,7 +217,6 @@ In Intune, open Endpoint security > Attack surface reduction and create (or edit
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3, CM-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.4.3 |
 | CIS Controls v8.1 | 10.5 |
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.7 |
@@ -254,7 +247,6 @@ Intune > Endpoint security > Firewall > Create Windows Firewall policy. Enable d
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.4.4 |
 | CIS Controls v8.1 | 4.5 |
 | CMMC 2.0 | SC.L1-3.13.1 |
 | ISO/IEC 27001:2022 | A.8.20, A.8.21 |
@@ -285,7 +277,6 @@ Intune > Devices > Compliance > macOS > Create policy > System Security > Requir
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-28 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.2.1 |
 | CIS Controls v8.1 | 3.6 |
 | CMMC 2.0 | MP.L2-3.8.9 |
 | ISO/IEC 27001:2022 | A.8.1, A.8.24 |
@@ -316,7 +307,6 @@ Intune > Devices > Windows update rings > Create update ring with feature and qu
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.5.1 |
 | CIS Controls v8.1 | 7.3 |
 | CMMC 2.0 | SI.L1-3.14.1 |
 | ISO/IEC 27001:2022 | A.8.8 |
@@ -347,7 +337,6 @@ Intune > Devices > Enrollment > Enrollment restrictions > Create policy restrict
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CM-7, AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.1.4 |
 | CIS Controls v8.1 | 4.1 |
 | CMMC 2.0 | CM.L2-3.4.1 |
 | ISO/IEC 27001:2022 | A.8.1 |
@@ -378,7 +367,6 @@ Intune > Apps > App configuration policies > Create policy for iOS/Android targe
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CM-6, AC-19 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.3.2 |
 | CIS Controls v8.1 | 4.1 |
 | CMMC 2.0 | CM.L2-3.4.2 |
 | ISO/IEC 27001:2022 | A.8.1 |
@@ -409,7 +397,6 @@ Intune > Apps > App protection policies > Conditional launch > Add: Jailbroken/r
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-28, CM-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.3.3 |
 | CIS Controls v8.1 | 4.1 |
 | CMMC 2.0 | CM.L2-3.4.1 |
 | ISO/IEC 27001:2022 | A.8.1 |
@@ -440,7 +427,6 @@ Intune > Endpoint security > Account protection > Create Windows LAPS policy. Co
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-2, IA-5 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.1.5 |
 | CIS Controls v8.1 | 5.4, 4.7 |
 | CMMC 2.0 | IA.L1-3.5.1 |
 | ISO/IEC 27001:2022 | A.5.17, A.8.2 |
@@ -471,7 +457,6 @@ Intune > Devices > Windows > Windows enrollment > Windows Hello for Business set
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2(1) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.1.6 |
 | CMMC 2.0 | IA.L2-3.5.3 |
 | ISO/IEC 27001:2022 | A.5.17, A.8.5 |
 | SOC 2 | CC6.1 |
@@ -501,7 +486,6 @@ Intune > Devices > Compliance policies > Create policy > OS minimum version = la
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-2 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.5.5 |
 | CIS Controls v8.1 | 7.3 |
 | CMMC 2.0 | SI.L1-3.14.1 |
 | ISO/IEC 27001:2022 | A.8.8 |
@@ -532,7 +516,6 @@ Intune > Devices > Compliance > iOS/Android policy > System security > Require p
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-5, AC-11 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 4.2.2 |
 | CIS Controls v8.1 | 4.3, 4.10 |
 | CMMC 2.0 | IA.L1-3.5.1 |
 | ISO/IEC 27001:2022 | A.5.17, A.8.1 |

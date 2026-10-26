@@ -130,11 +130,11 @@ Describe 'baselines/*.md agree with Config/controls.json' {
         $bad = @()
         foreach ($f in Get-ChildItem (Join-Path $script:RepoRoot 'baselines') -Filter '*.md' -File) {
             $t = Get-Content -LiteralPath $f.FullName -Raw -Encoding utf8
-            if ($t -match 'CIS (Microsoft 365 )?Foundations Benchmark v[1-5]\b') {
+            if ($t -match 'CIS (Microsoft 365 )?Foundations Benchmark v[1-6]\b') {
                 $bad += $f.Name
             }
         }
         $bad -join ', ' | Should -BeNullOrEmpty `
-            -Because 'the tool scores against CIS M365 Foundations v6.0.1; citing v3 misstates the standard the client was measured against'
+            -Because 'the tool scores against CIS M365 Foundations v7.0.0; citing an older edition misstates the standard the client was measured against'
     }
 }

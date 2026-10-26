@@ -452,7 +452,7 @@ function Publish-TPAssessmentHTML {
 
     # ── Framework matrix HTML ────────────────────────────────────────────────
     $fwMeta = @{
-        CIS   = @{Full='CIS M365 Foundations v6.0.1'; Bg='#1e40af'}
+        CIS   = @{Full='CIS M365 Foundations v7.0.0'; Bg='#1e40af'}
         SCuBA = @{Full='CISA SCuBA v1.7.1';            Bg='#0c4a6e'}
         NIST  = @{Full='NIST SP 800-53 Rev 5';         Bg='#4c1d95'}
         CMMC  = @{Full='CMMC 2.0 Level 2';             Bg='#134e4a'}

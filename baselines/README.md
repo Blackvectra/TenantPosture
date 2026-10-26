@@ -46,7 +46,7 @@ A control that could not be assessed reports **Not Applicable** and is excluded 
 Controls carry citations into:
 
 - NIST SP 800-53 Rev 5
-- CIS Microsoft 365 Foundations Benchmark v6.0.1
+- CIS Microsoft 365 Foundations Benchmark v7.0.0 (cited only where the check matches the recommendation; see docs/TP-CIS-M365-ALIGNMENT.md)
 - CIS Controls v8.1
 - CISA SCuBA
 - CMMC 2.0

@@ -37,7 +37,7 @@ Publish: v=spf1 include:spf.protection.outlook.com -all. Add include: for all th
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8, SC-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.2.2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.8 |
 | CIS Controls v8.1 | 9.5 |
 | CISA SCuBA | MS.EXO.2.2v2 |
 | CMMC 2.0 | SI.L1-3.14.2 |
@@ -69,7 +69,6 @@ Enable DKIM in M365 admin center for each domain. Publish the two CNAME records 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-8, SC-13 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.2.1 |
 | CIS Controls v8.1 | 9.5 |
 | CISA SCuBA | MS.EXO.3.1v1 |
 | CMMC 2.0 | SC.L2-3.13.8 |
@@ -101,7 +100,6 @@ Start with p=none and rua= reporting. Advance to p=quarantine then p=reject as a
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8, SC-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.2.3 |
 | CIS Controls v8.1 | 9.5 |
 | CISA SCuBA | MS.EXO.4.2v1 |
 | CMMC 2.0 | SI.L1-3.14.2 |
@@ -133,7 +131,6 @@ Publish _mta-sts TXT record and host policy file at https://mta-sts.domain.com/.
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-8, SC-8(1) |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.2.4 |
 | CIS Controls v8.1 | 3.10 |
 | CMMC 2.0 | SC.L2-3.13.8 |
 | ISO/IEC 27001:2022 | A.8.24 |
@@ -164,7 +161,6 @@ Publish: _smtp._tls.domain.com TXT 'v=TLSRPTv1; rua=mailto:tlsrpt@domain.com'
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-2, SC-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.2.4 |
 | CIS Controls v8.1 | 3.10 |
 | CMMC 2.0 | AU.L2-3.3.1 |
 | ISO/IEC 27001:2022 | A.8.24 |
@@ -195,7 +191,6 @@ Enable DNSSEC at your registrar. GoDaddy: Domains > DNS > DNSSEC > Enable. Free 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-20, SC-21 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.2.5 |
 | CMMC 2.0 | SC.L2-3.13.8 |
 | ISO/IEC 27001:2022 | A.8.20 |
 | SOC 2 | CC6.7 |
@@ -225,7 +220,6 @@ Rotate DKIM keys: Rotate-DkimSigningConfig -Identity domain.com -KeySize 2048. P
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-12, SC-13, SC-17 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.2.1 |
 | CIS Controls v8.1 | 9.5 |
 | CMMC 2.0 | SC.L2-3.13.10 |
 | ISO/IEC 27001:2022 | A.8.24 |
@@ -256,7 +250,6 @@ Publish CAA records at the registrar naming approved CAs. Example: 'domain.com. 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-12, SC-17, CM-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.2.5 |
 | CIS Controls v8.1 | 3.10 |
 | CMMC 2.0 | SC.L2-3.13.10 |
 | ISO/IEC 27001:2022 | A.8.24 |
@@ -287,7 +280,6 @@ Renew TLS certs at least 30 days before expiry. Automate renewal via ACME (Let's
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-12, SC-17 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.2.5 |
 | CIS Controls v8.1 | 3.10 |
 | CMMC 2.0 | SC.L2-3.13.10 |
 | ISO/IEC 27001:2022 | A.8.24 |
@@ -318,7 +310,6 @@ Review crt.sh entries for the domain. Confirm each unrecognized issuer correspon
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-12, SC-17, AU-6 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.2.5 |
 | CIS Controls v8.1 | 3.10 |
 | CMMC 2.0 | AU.L2-3.3.5 |
 | ISO/IEC 27001:2022 | A.8.16 |

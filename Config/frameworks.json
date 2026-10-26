@@ -2,8 +2,8 @@
   "frameworks": [
     {
       "Id": "CIS",
-      "FullName": "CIS Microsoft 365 Foundations Benchmark v6.0.1",
-      "Version": "6.0.1",
+      "FullName": "CIS Microsoft 365 Foundations Benchmark v7.0.0",
+      "Version": "7.0.0",
       "Publisher": "Center for Internet Security",
       "URL": "https://www.cisecurity.org/benchmark/microsoft_365",
       "Applicable": "All commercial M365 tenants"

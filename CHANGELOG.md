@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **[Accuracy] CIS Microsoft 365 Foundations citations moved to v7.0.0, and only where the check matches.** Every
+  control carried a CIS number because a test required one; 78 of the 159 distinct numbers do not exist in v7.0.0,
+  most of the others name a different recommendation there, and the Intune, Power Platform and DNS controls cited
+  sections the benchmark does not have. Each control was checked against the v7.0.0 audit procedure and its own
+  evaluator, and cites a recommendation only when every state it passes also passes that audit. 61 controls now cite
+  47 of the 160 recommendations; 143 are deliberately uncited, each with its reason, in
+  `Config/cis-m365-uncited-controls.json`. Expect the CIS card to score fewer controls and to move: it now measures
+  only what the tool verified against this benchmark. The report, workbook and playbook name v7.0.0. New:
+  `Config/framework-baselines/cis-m365-v7.0.0.txt` (the 160 numbers) and `docs/TP-CIS-M365-ALIGNMENT.md` (every
+  citation's reason, the evaluator fixes that would earn dropped citations back, and the recommendations no control
+  checks). `TP.FrameworkAccuracy.Tests.ps1` rejects a number not in v7.0.0 and a baseline document or publisher label
+  that disagrees; `TP.FrameworkCoverage.Tests.ps1` accepts an empty CIS citation only for a listed control.
+
 - **[Accuracy] INT-2.2 judges the 17 ASR rules of the CIS Intune for Defender Antivirus benchmark, each in its
   required mode.** The approved rule list held Microsoft's three standard protection rules and required Block for
   every listed rule. With the owner's approval (2026-10-25) `Config/asr-required-rules.json` now holds the 17

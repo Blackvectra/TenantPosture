@@ -37,7 +37,7 @@ Defender portal > Policies > Safe Attachments > Create policy for all recipients
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.3.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.4 |
 | CIS Controls v8.1 | 9.7, 10.7 |
 | CISA SCuBA | MS.DEFENDER.1.1v1 |
 | CMMC 2.0 | SI.L1-3.14.2 |
@@ -69,7 +69,7 @@ Create Safe Links policy with AllowClickThrough=$false, TrackClicks=$true, Enabl
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.3.2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.1 |
 | CIS Controls v8.1 | 9.3 |
 | CISA SCuBA | MS.DEFENDER.1.3v1 |
 | CMMC 2.0 | SI.L1-3.14.2 |
@@ -101,7 +101,7 @@ Set-AntiPhishPolicy -Identity "Office365 AntiPhish Default" -EnableSpoofIntellig
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8, SI-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.7 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.7 |
 | CIS Controls v8.1 | 9.7 |
 | CISA SCuBA | MS.DEFENDER.1.3v1 |
 | CMMC 2.0 | SI.L1-3.14.2 |
@@ -133,7 +133,7 @@ Set-AntiPhishPolicy -Identity "Office365 AntiPhish Default" -HonorDmarcPolicy $t
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.7 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.7 |
 | CIS Controls v8.1 | 9.5 |
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.23 |
@@ -164,7 +164,6 @@ Set-AntiPhishPolicy -Identity "Office365 AntiPhish Default" -PhishThresholdLevel
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3, SI-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.7 |
 | CIS Controls v8.1 | 9.7 |
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.7, A.8.23 |
@@ -195,7 +194,7 @@ Set-AntiPhishPolicy -Identity "Office365 AntiPhish Default" -EnableFirstContactS
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.7 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.7 |
 | CIS Controls v8.1 | 9.7 |
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.7 |
@@ -226,7 +225,6 @@ Defender portal > Email & Collaboration > Policies > Preset security policies > 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.3.3 |
 | CIS Controls v8.1 | 4.1 |
 | CISA SCuBA | MS.DEFENDER.1.1v1 |
 | CMMC 2.0 | SI.L1-3.14.2 |
@@ -258,7 +256,6 @@ Set-HostedContentFilterPolicy -ZapEnabled $true
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.8 |
 | CIS Controls v8.1 | 9.7, 10.7 |
 | CISA SCuBA | MS.DEFENDER.1.2v1 |
 | CMMC 2.0 | SI.L1-3.14.2 |
@@ -290,7 +287,7 @@ Set-MalwareFilterPolicy -Identity Default -EnableFileFilter $true
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.9 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.2 |
 | CIS Controls v8.1 | 9.6 |
 | CISA SCuBA | MS.EXO.9.1v2 |
 | CMMC 2.0 | SI.L1-3.14.2 |
@@ -322,7 +319,6 @@ Set-HostedContentFilterPolicy -PhishSpamAction Quarantine
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.10 |
 | CIS Controls v8.1 | 9.7 |
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.7 |
@@ -353,7 +349,6 @@ Set-HostedContentFilterPolicy -HighConfidenceSpamAction Quarantine
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.11 |
 | CIS Controls v8.1 | 9.7 |
 | CISA SCuBA | MS.DEFENDER.1.1v1 |
 | CMMC 2.0 | SI.L2-3.14.7 |
@@ -385,7 +380,6 @@ Set-HostedContentFilterPolicy -BulkThreshold 6
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.12 |
 | CIS Controls v8.1 | 9.7 |
 | CISA SCuBA | MS.DEFENDER.1.1v1 |
 | CMMC 2.0 | SI.L2-3.14.7 |
@@ -417,7 +411,6 @@ Set-AntiPhishPolicy -Identity "Office365 AntiPhish Default" -EnableUnauthenticat
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.7 |
 | CIS Controls v8.1 | 9.7 |
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.23 |
@@ -448,7 +441,6 @@ Set-AntiPhishPolicy -Identity "Office365 AntiPhish Default" -EnableViaTag $true
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.7 |
 | CIS Controls v8.1 | 9.7 |
 | CMMC 2.0 | SI.L2-3.14.7 |
 | ISO/IEC 27001:2022 | A.8.23 |
@@ -479,7 +471,7 @@ Defender XDR > Settings > Cloud Apps > Connected apps > Office 365 > Connect.
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.4.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.4.3 |
 | CIS Controls v8.1 | 13.1 |
 | CMMC 2.0 | SI.L2-3.14.7 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.16 |
@@ -510,7 +502,6 @@ Defender portal > Settings > Email notifications > Create notification rule for 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IR-6, AU-6 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.1.3 |
 | CIS Controls v8.1 | 13.1, 8.11 |
 | CISA SCuBA | MS.DEFENDER.5.2v1 |
 | CMMC 2.0 | IR.L2-3.6.1 |
@@ -542,7 +533,7 @@ Purview > DLP > Create or edit policy > Choose where to apply > Enable Exchange,
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-28, AC-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.3.4 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 3.2.1 |
 | CIS Controls v8.1 | 3.13 |
 | CISA SCuBA | MS.DEFENDER.4.2v1 |
 | CMMC 2.0 | MP.L2-3.8.1 |
@@ -574,7 +565,6 @@ Purview > DLP > Edit policy > Add condition > Content contains > Sensitive info 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-28 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.3.5 |
 | CIS Controls v8.1 | 3.13 |
 | CISA SCuBA | MS.DEFENDER.4.1v2 |
 | CMMC 2.0 | MP.L2-3.8.1 |
@@ -606,7 +596,6 @@ Defender XDR > Cloud Apps > Policies > OAuth app policies. Create policy: App = 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-4, AU-12 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.4.2 |
 | CIS Controls v8.1 | 13.1 |
 | CISA SCuBA | MS.DEFENDER.5.1v1 |
 | CMMC 2.0 | SI.L2-3.14.7 |
@@ -638,7 +627,7 @@ Defender portal > Settings > Email & collaboration > User tags > Global Settings
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3, IR-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.3.5 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.4.1 |
 | CISA SCuBA | MS.DEFENDER.2.1v1 |
 | CMMC 2.0 | SI.L1-3.14.2 |
 | ISO/IEC 27001:2022 | A.8.2 |
@@ -669,7 +658,6 @@ Purview > DLP > Create policy > Devices location > Enable. Requires Defender for
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-28, MP-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 3.3.6 |
 | CIS Controls v8.1 | 3.13 |
 | CISA SCuBA | MS.DEFENDER.4.2v1 |
 | CMMC 2.0 | MP.L2-3.8.1 |
@@ -701,7 +689,6 @@ Defender portal > Email & collaboration > Attack simulation training > Simulatio
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AT-2, AT-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.3.6 |
 | CIS Controls v8.1 | 14.2 |
 | CMMC 2.0 | AT.L2-3.2.1 |
 | ISO/IEC 27001:2022 | A.6.3 |
@@ -732,7 +719,7 @@ Set-SafeLinksPolicy -Identity <PolicyName> -EnableSafeLinksForOffice $true. Or v
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.3.2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.1 |
 | CIS Controls v8.1 | 9.3 |
 | CISA SCuBA | MS.DEFENDER.1.3v1 |
 | CMMC 2.0 | SI.L1-3.14.2 |
@@ -762,7 +749,6 @@ Defender portal > Policies & rules > Threat policies > Tenant Allow/Block Lists.
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-3, SI-4, SI-8, CM-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 2.1.6 |
 | CIS Controls v8.1 | 9.6, 13.4 |
 | CMMC 2.0 | SI.L2-3.14.2, SI.L1-3.14.5 |
 | MITRE ATT&CK | T1566.001, T1566.002, T1562.001 |

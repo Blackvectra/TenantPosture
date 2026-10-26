@@ -37,7 +37,7 @@ Set-CsTenantFederationConfiguration -AllowFederatedUsers $false, or restrict to 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-17, SC-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.2.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.2.1 |
 | CIS Controls v8.1 | 4.8, 6.7 |
 | CISA SCuBA | MS.TEAMS.2.1v2 |
 | CMMC 2.0 | AC.L1-3.1.2 |
@@ -69,7 +69,7 @@ Set-CsTenantFederationConfiguration -AllowTeamsConsumer $false -AllowTeamsConsum
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-17 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.2.2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.2.2 |
 | CIS Controls v8.1 | 4.8 |
 | CMMC 2.0 | AC.L1-3.1.2 |
 | ISO/IEC 27001:2022 | A.5.23 |
@@ -100,7 +100,7 @@ Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToJoinMeeting $false
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3, AC-17 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.5.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.5.1 |
 | CIS Controls v8.1 | 4.1 |
 | CMMC 2.0 | AC.L1-3.1.2 |
 | ISO/IEC 27001:2022 | A.5.16 |
@@ -131,7 +131,7 @@ Set-CsTeamsMeetingPolicy -AllowExternalParticipantGiveRequestControl $false
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.5.3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.5.7 |
 | CIS Controls v8.1 | 4.1 |
 | CISA SCuBA | MS.TEAMS.1.1v1 |
 | CMMC 2.0 | AC.L1-3.1.2 |
@@ -163,7 +163,6 @@ Ensure Purview retention policies cover SharePoint to capture Teams recording da
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-9, AU-11 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.6.1 |
 | CIS Controls v8.1 | 3.4 |
 | CMMC 2.0 | AU.L2-3.3.1 |
 | ISO/IEC 27001:2022 | A.5.23, A.8.10 |
@@ -194,7 +193,6 @@ Set-CsTeamsClientConfiguration -AllowGuestUser $false, or configure guest invita
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-2, AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.2.3 |
 | CIS Controls v8.1 | 4.8 |
 | CMMC 2.0 | AC.L1-3.1.2 |
 | ISO/IEC 27001:2022 | A.5.18 |
@@ -225,7 +223,6 @@ Set-CsTenantFederationConfiguration -AllowPublicUsers $false
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-17 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.2.4 |
 | CIS Controls v8.1 | 4.8 |
 | CMMC 2.0 | AC.L2-3.1.12 |
 | ISO/IEC 27001:2022 | A.5.23 |
@@ -256,7 +253,7 @@ Teams admin center > Teams apps > Manage apps > Org-wide app settings: turn off 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CM-7 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.3.1 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.4.1 |
 | CIS Controls v8.1 | 2.5 |
 | CISA SCuBA | MS.TEAMS.5.2v2 |
 | CMMC 2.0 | CM.L2-3.4.6 |
@@ -288,7 +285,7 @@ Set-CsTeamsClientConfiguration -AllowDropbox $false -AllowBox $false -AllowGoogl
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.3.2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.1.1 |
 | CIS Controls v8.1 | 4.8 |
 | CMMC 2.0 | MP.L2-3.8.1 |
 | ISO/IEC 27001:2022 | A.5.23 |
@@ -319,7 +316,7 @@ Set-CsTeamsClientConfiguration -AllowEmailIntoChannels $false
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SI-8 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.3.3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.1.2 |
 | CIS Controls v8.1 | 4.8 |
 | CISA SCuBA | MS.TEAMS.4.1v1 |
 | CMMC 2.0 | SI.L2-3.14.7 |
@@ -351,7 +348,6 @@ Set-CsTeamsMeetingPolicy -AllowCloudRecordingForCalls $false for externally-scop
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-9 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.5.4 |
 | CIS Controls v8.1 | 4.1 |
 | CMMC 2.0 | AU.L2-3.3.8 |
 | ISO/IEC 27001:2022 | A.8.10, A.8.12 |
@@ -382,7 +378,6 @@ Review AllowChannelMeetingScheduling in meeting policy — restrict if channels 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.5.5 |
 | CIS Controls v8.1 | 4.1 |
 | CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.18 |
@@ -413,7 +408,7 @@ Set-CsTenantFederationConfiguration -AllowFederatedUsers $false or restrict to a
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-17 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.2.5 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.2.1 |
 | CIS Controls v8.1 | 4.8 |
 | CISA SCuBA | MS.TEAMS.2.3v2 |
 | CMMC 2.0 | AC.L2-3.1.12 |
@@ -445,7 +440,7 @@ Set-CsTeamsMeetingPolicy -AllowPSTNUsersToBypassLobby $false
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3, IA-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.5.6 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.5.4 |
 | CIS Controls v8.1 | 4.1 |
 | CISA SCuBA | MS.TEAMS.1.5v1 |
 | CMMC 2.0 | AC.L1-3.1.1 |
@@ -477,7 +472,6 @@ Set-CsTeamsMeetingPolicy -AllowWatermarkForScreenSharing $true
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-4 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.5.7 |
 | CIS Controls v8.1 | 4.1 |
 | CMMC 2.0 | AC.L2-3.1.3 |
 | ISO/IEC 27001:2022 | A.8.11 |
@@ -508,7 +502,7 @@ Set-CsTeamsMeetingPolicy -AutoAdmittedUsers EveryoneInCompanyExcludingGuests
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3, IA-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.5.2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.5.3 |
 | CIS Controls v8.1 | 4.1 |
 | CISA SCuBA | MS.TEAMS.1.3v1 |
 | CMMC 2.0 | AC.L1-3.1.2 |
@@ -540,7 +534,7 @@ Set-CsTeamsMeetingPolicy -AllowMeetingChat EnabledExceptAnonymous
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.5.8 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.5.5 |
 | CIS Controls v8.1 | 4.1 |
 | CMMC 2.0 | AC.L1-3.1.2 |
 | ISO/IEC 27001:2022 | A.5.18 |
@@ -571,7 +565,6 @@ Purview > DLP > Create policy targeting Teams with sensitive info types to restr
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-4, SC-28 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.3.4 |
 | CIS Controls v8.1 | 3.13 |
 | CMMC 2.0 | AC.L2-3.1.3 |
 | ISO/IEC 27001:2022 | A.8.12 |
@@ -602,7 +595,6 @@ Set-CsTeamsMeetingPolicy -Identity Global -NewMeetingRecordingExpirationDays 60.
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AU-11 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.5.9 |
 | CIS Controls v8.1 | 3.4 |
 | CMMC 2.0 | AU.L2-3.3.1 |
 | ISO/IEC 27001:2022 | A.5.33, A.8.10 |
@@ -633,7 +625,7 @@ Set-CsTeamsMeetingPolicy -AllowAnonymousUsersToStartMeeting $false.
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3, IA-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.5.3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.5.2 |
 | CIS Controls v8.1 | 4.1 |
 | CISA SCuBA | MS.TEAMS.1.2v2 |
 | CMMC 2.0 | AC.L1-3.1.2 |
@@ -665,7 +657,7 @@ Teams Admin Center > External access > Allow only specific external domains. Add
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-17 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.2.6 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.2.1 |
 | CIS Controls v8.1 | 4.8, 6.7 |
 | CISA SCuBA | MS.TEAMS.2.1v2 |
 | CMMC 2.0 | AC.L1-3.1.2 |
@@ -697,7 +689,6 @@ Set-CsTeamsEventsPolicy -Identity Global -EventAccessType EveryoneInCompanyExclu
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3 |
-| CIS Microsoft 365 Foundations Benchmark v6.0.1 | 8.5.10 |
 | CIS Controls v8.1 | 4.1 |
 | CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.18 |
