@@ -12,11 +12,11 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 
 | Relation | Meaning | Controls |
 |---|---|---|
-| Equivalent | The evaluator checks what R audits, and every pass meets R. | 52 |
+| Equivalent | The evaluator checks what R audits, and every pass meets R. | 55 |
 | Subset | The evaluator checks some of the settings R lists, and every pass meets R for those settings. R can still fail on a setting the tool does not read. | 19 |
 | Not cited | No v7.0.0 recommendation describes the check, or the evaluator passes something R fails. | 133 |
 
-71 controls cite 53 of the 160 recommendations. The CIS card in the report scores only those controls, so it is a narrower number than before, and an honest one: it covers what the tool verified against this benchmark.
+74 controls cite 56 of the 160 recommendations. The CIS card in the report scores only those controls, so it is a narrower number than before, and an honest one: it covers what the tool verified against this benchmark.
 
 **Scope differences kept as citations.** EXO-1.3, EXO-5.3, EXO-8.2 and DEF-2.3 judge the policies and rules in force (`Get-TPInForcePolicies`; enabled transport rules), while the CIS audit reads every policy, or only the Default malware policy. A disabled rule or a policy no recipient falls under changes nothing about what happens to mail, so the judgment is the same requirement; it is recorded here because a CIS audit run by hand can disagree with the tool on such a tenant.
 
@@ -38,6 +38,9 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 | AAD-6.1 User App Registration Disabled | 5.1.2.2 | Ensure users cannot register applications (Automated) | Equivalent | Satisfied when defaultUserRolePermissions.allowedToCreateApps is false (not-read is NotApplicable), which is 5.1.2.2's audit value. |
 | AAD-6.3 Admin Consent Workflow Enabled | 5.1.5.2 | Ensure the admin consent workflow is enabled (Automated) | Equivalent | Satisfied when adminConsentRequestPolicy.isEnabled is true, which is 5.1.5.2's audit. |
 | AAD-7.1 Password Protection Lockout Configured | 5.2.3.8 | Ensure that Account 'Lockout threshold' is '10' or less (Automated) | Equivalent | Satisfied when Password Rule Settings LockoutThreshold <= 10 (absent value read as Microsoft's default 10), the same groupSettings value and threshold as 5.2.3.8. |
+| AAD-7.3 Smart Lockout Duration at Least 60 Seconds | 5.2.3.9 | Ensure that Account 'Lockout duration in seconds' is at least 60 seconds (Automated) | Equivalent | Satisfied when Password Rule Settings LockoutDurationInSeconds >= 60 (absent value read as Microsoft's default 60), the value 5.2.3.9 audits. |
+| AAD-7.4 Custom Banned Password List Enforced | 5.2.3.2 | Ensure custom banned passwords lists are used (Automated) | Equivalent | Satisfied when EnableBannedPasswordCheck is True and the custom list holds at least one entry, which is 5.2.3.2's audit (the entries themselves are not collected). |
+| AAD-7.5 Passwords Set to Never Expire | 1.3.1 | Ensure the 'Password expiration policy' is set to 'Set passwords to never expire (recommended)' (Automated) | Equivalent | Satisfied when passwordValidityPeriodInDays is 2147483647 on every verified domain, the Get-MgDomain value 1.3.1 audits; an unset value is Microsoft's 90-day default. |
 | AAD-7.2 Break-Glass Accounts Configured | 1.1.2 | Ensure two emergency access accounts have been defined (Manual) | Subset | Satisfied when >= 2 cloud-only Global Administrators are excluded from every enabled CA policy reaching them; 1.1.2 (Manual) requires two cloud-only GA emergency accounts with at least one excluded from all CA rules, and also items the tool does not check (unlicensed, .onmicrosoft.com domain, not disabled, generic naming, written procedure). |
 | AAD-9.1 Authenticator Number Matching Enabled | 5.2.3.1 | Ensure Microsoft Authenticator is configured to protect against MFA fatigue (Automated) | Subset | Always NotApplicable "Enforced by the platform" for Authenticator number matching, which 5.2.3.1's subject (Authenticator MFA-fatigue protection) notes as platform-enforced; it never passes, but it does not read the app-name/location settings R audits (the collector already reads displayAppInformationRequiredState). |
 | AAD-10.3 Break-Glass Account Sign-In Monitoring | 2.2.1 | Ensure emergency access account activity is monitored (Manual) | Equivalent | Always NotApplicable manual verification that an alert fires on any break-glass sign-in; same subject as 2.2.1 (Manual), never passes. |
@@ -109,14 +112,13 @@ The reasons are in `Config/cis-m365-uncited-controls.json`. Several are one chan
 
 ## Recommendations no control checks
 
-107 of the 160 recommendations have no citing control. Some are settings the collectors already read and no evaluator scores (5.2.3.2 banned passwords, 5.2.3.3 on-premises password protection, 5.2.3.9 lockout duration, 2.1.12 the connection filter IP allow list); the rest need a new read. Section 9 (Microsoft Fabric) is outside what the tool assesses.
+104 of the 160 recommendations have no citing control. Some are settings the collectors already read and no evaluator scores (5.2.3.3 on-premises password protection, 2.1.12 the connection filter IP allow list); the rest need a new read. Section 9 (Microsoft Fabric) is outside what the tool assesses.
 
 **1. Microsoft 365 admin center** (11)
 
 - 1.1.1 Ensure Administrative accounts are cloud-only (Automated)
 - 1.1.4 Ensure administrative accounts use licenses with a reduced application footprint (Automated)
 - 1.2.1 Ensure that only organizationally managed/approved public groups exist (Automated)
-- 1.3.1 Ensure the 'Password expiration policy' is set to 'Set passwords to never expire (recommended)' (Automated)
 - 1.3.2 Ensure 'Idle session timeout' is set to '3 hours (or less)' for unmanaged devices (Automated)
 - 1.3.3 Ensure 'External sharing' of calendars is not available (Automated)
 - 1.3.4 Ensure 'User owned apps and services' is restricted (Automated)
@@ -184,12 +186,10 @@ The reasons are in `Config/cis-m365-uncited-controls.json`. Several are one chan
 - 5.2.2.15 Ensure exclusionary geographic access controls are utilized (Automated)
 - 5.2.2.16 Ensure Token Protection is enforced for session tokens (Automated)
 - 5.2.2.17 Ensure authentication transfer is blocked (Automated)
-- 5.2.3.2 Ensure custom banned passwords lists are used (Automated)
 - 5.2.3.3 Ensure password protection is enabled for on-prem Active Directory (Automated)
 - 5.2.3.5 Ensure weak authentication methods are disabled (Automated)
 - 5.2.3.6 Ensure system-preferred multifactor authentication is enabled (Automated)
 - 5.2.3.7 Ensure the email OTP authentication method is disabled (Automated)
-- 5.2.3.9 Ensure that Account 'Lockout duration in seconds' is at least 60 seconds (Automated)
 - 5.2.3.10 Ensure Microsoft Authenticator on companion applications is disabled (Automated)
 - 5.2.4.3 Ensure SSPR registration and authentication re-confirmation are required (Manual)
 - 5.2.4.4 Ensure that users are notified on password resets (Manual)

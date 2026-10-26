@@ -1382,29 +1382,133 @@ function Test-TPControlAADPasswordProtection {
     if (-not $auth -or -not $auth.Success -or -not $auth.Data['PasswordProtection']) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Password protection data not collected (the Password Rule Settings read from /v1.0/groupSettings failed or did not run).'; return
     }
-    # Two components (CIS 5.2.3.8 and 5.2.3.9): a lockout threshold of 10 or
-    # fewer failed attempts, and a lockout duration of at least 60 seconds.
-    # The collector stores Microsoft's template defaults (10 and 60) when the
-    # setting was never customized, and $null for a value that was present but
-    # not a whole number; an older results file carries the duration it read.
+    # CIS 5.2.3.8: a lockout threshold of 10 or fewer failed attempts. The
+    # lockout duration (5.2.3.9) is AAD-7.3's and shows here as context only, so
+    # one setting never costs two baseline failures. The collector stores
+    # Microsoft's template defaults (10 and 60) when the setting was never
+    # customized, and $null for a value that was present but not a whole number.
     $pp = $auth.Data['PasswordProtection']
+    $lockout  = ConvertTo-TPWholeNumber (Get-TPObjectField -Item $pp -Key 'LockoutThreshold' -Default $null)
+    $duration = ConvertTo-TPWholeNumber (Get-TPObjectField -Item $pp -Key 'LockoutDurationSeconds' -Default $null)
     $v = @(); $sf = @(); $ne = @()
-    $rawT = Get-TPObjectField -Item $pp -Key 'LockoutThreshold' -Default $null
-    $rawD = Get-TPObjectField -Item $pp -Key 'LockoutDurationSeconds' -Default $null
-    $asInt = { param($x) $n = 0; if ($x -is [int] -or $x -is [long]) { [int]$x } elseif ($null -ne $x -and ([string]$x) -cmatch '\A[0-9]{1,9}\z' -and [int]::TryParse([string]$x, [ref]$n)) { $n } else { $null } }
-    $lockout  = & $asInt $rawT
-    $duration = & $asInt $rawD
     if ($null -eq $lockout) { $ne += 'the lockout threshold was not read as a number.' }
     elseif ($lockout -le 10) { $v += "Lockout threshold: $lockout failed attempts (10 or fewer)." }
     else { $sf += "Lockout threshold is $lockout failed attempts; it must be 10 or fewer to limit the brute-force window." }
-    if ($null -eq $duration) { $ne += 'the lockout duration was not read as a number.' }
-    elseif ($duration -ge 60) { $v += "Lockout duration: $duration seconds (at least 60)." }
-    else { $sf += "Lockout duration is $duration seconds; it must be at least 60 seconds." }
+    $ctx = if ($null -ne $duration) { "lockout duration $duration seconds (AAD-7.3)." } else { 'lockout duration not read (AAD-7.3).' }
     $tTxt = if ($null -ne $lockout) { "$lockout" } else { 'not read' }
-    $dTxt = if ($null -ne $duration) { "$duration s" } else { 'not read' }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $v -Shortfalls $sf -NotEstablished $ne -Context $ctx `
+        -CurrentValue "LockoutThreshold = $tTxt" -RequiredValue 'Lockout threshold 10 or fewer failed attempts'
+}
+
+# Parses a Password Rule Settings number: an int from the collector, or a
+# string of ASCII digits from an older results file; anything else is $null.
+function ConvertTo-TPWholeNumber {
+    [CmdletBinding()]
+    param([AllowNull()] $Value)
+    if ($Value -is [int] -or $Value -is [long]) { return [long]$Value }
+    $n = [long]0
+    if ($null -ne $Value -and ([string]$Value) -cmatch '\A[0-9]{1,10}\z' -and [long]::TryParse([string]$Value, [ref]$n)) { return $n }
+    return $null
+}
+
+# ── AAD-7.3 Smart Lockout Duration at Least 60 Seconds ───────────────────────
+function Test-TPControlAADLockoutDuration {
+    [CmdletBinding()] param()
+    $cid = 'AAD-7.3'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-TPFrameworkCitations -ControlId $cid
+    $auth = Get-TPRawData -Key 'AAD-AuthPolicies'
+    if (-not $auth -or -not $auth.Success -or -not $auth.Data['PasswordProtection']) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Password protection data not collected (the Password Rule Settings read from /v1.0/groupSettings failed or did not run).'; return
+    }
+    # CIS 5.2.3.9: lockout duration of at least 60 seconds (Microsoft's
+    # default). An absent value in an instantiated setting, or a setting never
+    # created, is that default in effect.
+    $duration = ConvertTo-TPWholeNumber (Get-TPObjectField -Item $auth.Data['PasswordProtection'] -Key 'LockoutDurationSeconds' -Default $null)
+    if ($null -eq $duration) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'The lockout duration was not read as a whole number of seconds; not assessed.'
+    } elseif ($duration -ge 60) {
+        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "Smart lockout holds an account for $duration seconds after the lockout threshold is reached (at least 60)." -CurrentValue "LockoutDurationInSeconds = $duration"
+    } else {
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail "Smart lockout holds an account for only $duration seconds; at least 60 is required, so an attacker can resume guessing almost at once." `
+            -CurrentValue "LockoutDurationInSeconds = $duration" -RequiredValue 'Lockout duration at least 60 seconds' -Remediation $ctrl.Remediation
+    }
+}
+
+# ── AAD-7.4 Custom Banned Password List Enforced ─────────────────────────────
+function Test-TPControlAADBannedPasswords {
+    [CmdletBinding()] param()
+    $cid = 'AAD-7.4'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-TPFrameworkCitations -ControlId $cid
+    $auth = Get-TPRawData -Key 'AAD-AuthPolicies'
+    if (-not $auth -or -not $auth.Success -or -not $auth.Data['PasswordProtection']) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Password protection data not collected (the Password Rule Settings read from /v1.0/groupSettings failed or did not run).'; return
+    }
+    # CIS 5.2.3.2: enforcement of the custom list on, and the list holding
+    # entries. The entries themselves are never collected, only their count
+    # (BannedPasswordCount; an older results file carries only whether the list
+    # was non-empty).
+    $pp = $auth.Data['PasswordProtection']
+    $enforced = Get-TPObjectField -Item $pp -Key 'EnableBannedPasswordCheck' -Default $null
+    $count = ConvertTo-TPWholeNumber (Get-TPObjectField -Item $pp -Key 'BannedPasswordCount' -Default $null)
+    $present = Get-TPObjectField -Item $pp -Key 'BannedPasswordListPresent' -Default $null
+    $v = @(); $sf = @(); $ne = @()
+    if ($enforced -eq $true) { $v += 'Enforce custom list is on.' }
+    elseif ($enforced -eq $false) { $sf += 'Enforce custom list is off, so the custom banned passwords are not applied.' }
+    else { $ne += 'whether the custom list is enforced was not read.' }
+    if ($null -ne $count) {
+        if ($count -gt 0) { $v += "The custom banned password list holds $count entries." } else { $sf += 'The custom banned password list is empty.' }
+    } elseif ($present -eq $true) { $v += 'The custom banned password list holds entries.' }
+    elseif ($present -eq $false) { $sf += 'The custom banned password list is empty.' }
+    else { $ne += 'whether the custom list holds entries was not read.' }
+    $cv = "EnableBannedPasswordCheck = $(if ($null -eq $enforced) { 'not read' } else { $enforced }); entries = $(if ($null -ne $count) { $count } elseif ($null -ne $present) { if ($present) { 'some' } else { 0 } } else { 'not read' })"
     Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $v -Shortfalls $sf -NotEstablished $ne `
-        -CurrentValue "LockoutThreshold = $tTxt; LockoutDurationInSeconds = $dTxt" `
-        -RequiredValue 'Lockout threshold 10 or fewer failed attempts; lockout duration at least 60 seconds'
+        -CurrentValue $cv -RequiredValue 'Enforce custom list on, with the organization''s own terms in the list'
+}
+
+# ── AAD-7.5 Passwords Set to Never Expire ────────────────────────────────────
+function Test-TPControlAADPasswordExpiry {
+    [CmdletBinding()] param()
+    $cid = 'AAD-7.5'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-TPFrameworkCitations -ControlId $cid
+    $auth = Get-TPRawData -Key 'AAD-AuthPolicies'
+    if (-not $auth -or -not $auth.Success) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AAD-AuthPolicies collector did not run; not assessed.'; return
+    }
+    # The Domains section is new: an older results file has no status for it and
+    # no list, and must not read as "no domains, nothing expires".
+    $status = Get-TPNestedProperty -Object $auth -Path 'Data.SectionStatus.Domains' -Default $null
+    if ([string]$status -ne 'Collected') {
+        $why = if ($null -eq $status) { 'were not read (a results file from before this check)' } else { "were not read (section $status)" }
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "Domain password validity periods $why; not assessed."; return
+    }
+    # CIS 1.3.1: every domain's passwordValidityPeriodInDays is 2147483647
+    # ("never expire"). Microsoft: an unset value means the 90-day default.
+    # Unverified domains cannot be used to sign in and are not judged.
+    $never = 2147483647
+    $doms = @(@(Get-TPNestedProperty -Object $auth -Path 'Data.Domains' -Default @()) | Where-Object { $null -ne $_ -and (Get-TPObjectField -Item $_ -Key 'IsVerified' -Default $null) -eq $true })
+    if ($doms.Count -eq 0) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'No verified domain was returned; not assessed.'; return
+    }
+    $ok = @(); $bad = @(); $unk = @(); $fed = @()
+    foreach ($d in $doms) {
+        $id = [string](Get-TPObjectField -Item $d -Key 'Id' -Default '')
+        if ([string](Get-TPObjectField -Item $d -Key 'AuthenticationType' -Default '') -eq 'Federated') { $fed += $id }
+        $set = Get-TPObjectField -Item $d -Key 'PasswordValiditySet' -Default $null
+        $days = ConvertTo-TPWholeNumber (Get-TPObjectField -Item $d -Key 'PasswordValidityPeriodInDays' -Default $null)
+        if ($null -ne $days -and $days -eq $never) { $ok += $id }
+        elseif ($null -ne $days) { $bad += "$id ($days days)" }
+        elseif ($set -eq $false) { $bad += "$id (not set: Microsoft's 90-day default)" }
+        else { $unk += $id }
+    }
+    $v = @(); $sf = @(); $ne = @()
+    if ($ok.Count)  { $v  += "Passwords never expire on $($ok.Count) verified domain(s): $(@($ok | Select-Object -First 5) -join ', ')$(if ($ok.Count -gt 5) { ", and $($ok.Count - 5) more" })." }
+    if ($bad.Count) { $sf += "Passwords expire on $($bad.Count) verified domain(s): $(@($bad | Select-Object -First 5) -join ', ')$(if ($bad.Count -gt 5) { ", and $($bad.Count - 5) more" }). Forced periodic changes push users to predictable patterns (NIST SP 800-63B)." }
+    if ($unk.Count) { $ne += "the password validity period of $($unk -join ', ') was not read as a number." }
+    $ctx = if ($fed.Count) { "federated domain(s) $($fed -join ', ') take their password policy from the federation provider, which this check does not read." } else { '' }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $v -Shortfalls $sf -NotEstablished $ne -Context $ctx `
+        -CurrentValue "$($ok.Count) of $($doms.Count) verified domain(s) set to never expire" -RequiredValue 'passwordValidityPeriodInDays = 2147483647 (never expire) on every verified domain'
 }
 
 # ── AAD-7.2 Break-Glass Accounts Configured ───────────────────────────────────

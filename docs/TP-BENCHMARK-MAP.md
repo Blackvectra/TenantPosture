@@ -2,7 +2,7 @@
 
 Generated from `Config/controls.json` (CIS Microsoft 365 and ScubaGear citations), `Config/scuba-alignment.json` and `Config/benchmark-mappings.json` on 2026-10-26; `Get-TPBenchmarkMapping` returns the same view and `Testing/TP.BenchmarkMapping.Tests.ps1` fails when a control is in neither list.
 
-**148 of 204 controls are mapped to at least one configuration benchmark; 56 are not, each with the reason.** A control cites a benchmark item only when its evaluator judges the setting the item audits and every state it scores Satisfied passes that audit: a similar topic is not enough, so a control with no such item is listed below rather than given a near-miss. Relations: Equivalent (same setting and threshold), Subset (part of what the item requires; the rest is named in the mapping file), Stricter (passes only when the item passes, can fail where it passes); ScubaGear relations are the ones recorded in `Config/scuba-alignment.json`.
+**151 of 207 controls are mapped to at least one configuration benchmark; 56 are not, each with the reason.** A control cites a benchmark item only when its evaluator judges the setting the item audits and every state it scores Satisfied passes that audit: a similar topic is not enough, so a control with no such item is listed below rather than given a near-miss. Relations: Equivalent (same setting and threshold), Subset (part of what the item requires; the rest is named in the mapping file), Stricter (passes only when the item passes, can fail where it passes); ScubaGear relations are the ones recorded in `Config/scuba-alignment.json`.
 
 Control frameworks (NIST SP 800-53, CIS Controls v8.1, CMMC, ISO 27001, SOC 2, HIPAA, PCI DSS, MITRE ATT&CK) are mapped separately in `References` and are not configuration benchmarks.
 
@@ -66,6 +66,9 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | AAD-6.3 | Admin Consent Workflow Enabled | CIS M365 v7.0.0 5.1.5.2; ScubaGear 2.0.0 MS.AAD.5.3v1 (Equivalent) |
 | AAD-7.1 | Password Protection Lockout Configured | CIS M365 v7.0.0 5.2.3.8 |
 | AAD-7.2 | Break-Glass Accounts Configured | CIS M365 v7.0.0 1.1.2 |
+| AAD-7.3 | Smart Lockout Duration at Least 60 Seconds | CIS M365 v7.0.0 5.2.3.9 |
+| AAD-7.4 | Custom Banned Password List Enforced | CIS M365 v7.0.0 5.2.3.2 |
+| AAD-7.5 | Passwords Set to Never Expire | CIS M365 v7.0.0 1.3.1 |
 | AAD-8.1 | PIM Alerts Configured | ScubaGear 2.0.0 MS.AAD.7.7v1 (Manual) |
 | AAD-9.1 | Authenticator Number Matching Enabled | CIS M365 v7.0.0 5.2.3.1; ScubaGear 2.0.0 MS.AAD.3.3v2 (Partial) |
 | AAD-9.2 | Passwordless Authentication Methods Available | ScubaGear 2.0.0 MS.AAD.3.1v1 (Unsupported) |
@@ -284,10 +287,10 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 
 | Setting | CIS Microsoft 365 v7.0.0 (the baseline) | CIS Password Policy Guide v21.12 | DISA Entra ID STIG V1R1 |
 |---|---|---|---|
-| Password expiration | Never expire (1.3.1) | Event-based, with an annual backstop | 60 days or less (V-270239) |
-| Lockout threshold | 10 or fewer (5.2.3.8) | Temporary lockout after 5 | 3 (V-270208) |
-| Lockout duration | 60 seconds or more (5.2.3.9) | 15 minutes or more | 900 seconds or more (V-270208) |
-| Custom banned passwords | Used (5.2.3.2) | Deny list incl. previous passwords | Enforced and populated (V-270475) |
+| Password expiration | Never expire (1.3.1, AAD-7.5) | Event-based, with an annual backstop | 60 days or less (V-270239) |
+| Lockout threshold | 10 or fewer (5.2.3.8, AAD-7.1) | Temporary lockout after 5 | 3 (V-270208) |
+| Lockout duration | 60 seconds or more (5.2.3.9, AAD-7.3) | 15 minutes or more | 900 seconds or more (V-270208) |
+| Custom banned passwords | Used (5.2.3.2, AAD-7.4) | Deny list incl. previous passwords | Enforced and populated (V-270475) |
 | Idle session | 3 hours or less, unmanaged devices (1.3.2) | 15 minutes | 15 minutes, directory level (V-270200) |
 | Inactive accounts | No recommendation | Suspend after 45 days | Disable after 35 days (V-270204) |
 

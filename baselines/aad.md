@@ -713,7 +713,7 @@ Account lockout threshold is configured at 10 or fewer failed attempts.
 High lockout thresholds allow extensive brute force attempts before accounts are locked.
 
 **Remediation:**
-Entra ID > Security > Authentication methods > Password protection > Lockout threshold ≤10.
+Entra ID > Protection > Authentication methods > Password protection > Lockout threshold 10 or fewer.
 
 **Framework mappings:**
 
@@ -726,6 +726,98 @@ Entra ID > Security > Authentication methods > Password protection > Lockout thr
 | SOC 2 | CC6.1 |
 | HIPAA | §164.308(a)(5)(ii)(C), §164.308(a)(5)(ii)(D) |
 | PCI DSS | Req 8.3.4 |
+| MITRE ATT&CK | T1110 |
+
+---
+
+### AAD-7.3 — Smart Lockout Duration at Least 60 Seconds
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Smart lockout holds an account for at least 60 seconds (Microsoft's default) after the lockout threshold is reached.
+
+**Business risk:**
+A short lockout duration lets an attacker resume password guessing almost at once, so the lockout threshold barely slows a brute-force or spray attack.
+
+**Remediation:**
+Entra ID > Protection > Authentication methods > Password protection > Lockout duration in seconds: 60 or more.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-7 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.3.9 |
+| CMMC 2.0 | AC.L2-3.1.8 |
+| ISO/IEC 27001:2022 | A.5.17, A.8.5 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.308(a)(5)(ii)(C), §164.308(a)(5)(ii)(D) |
+| PCI DSS | Req 8.3 |
+| MITRE ATT&CK | T1110 |
+
+---
+
+### AAD-7.4 — Custom Banned Password List Enforced
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** M365 Business Premium or Entra ID P1
+
+**Description:**
+Microsoft Entra Password Protection enforces a custom banned password list that holds the organization's own terms (brand, product and location names). Only whether the list is enforced and how many entries it holds is read; the entries are never collected.
+
+**Business risk:**
+Users choose passwords built from the company name, products and city; attackers try exactly those first in password spray. The global banned list does not know the organization's own terms.
+
+**Remediation:**
+Entra ID > Protection > Authentication methods > Password protection > Enforce custom list: Yes, and add the organization's brand, product, location and other guessable terms to the custom banned password list.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IA-5(1) |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.3.2 |
+| CIS Controls v8.1 | 5.2 |
+| CMMC 2.0 | IA.L2-3.5.7 |
+| ISO/IEC 27001:2022 | A.5.17 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.308(a)(5)(ii)(D) |
+| PCI DSS | Req 8.3.6 |
+| MITRE ATT&CK | T1110.001, T1110.003 |
+
+---
+
+### AAD-7.5 — Passwords Set to Never Expire
+
+**Severity:** Low  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Every verified domain's password validity period is set to never expire (passwordValidityPeriodInDays 2147483647), as CIS and NIST SP 800-63B recommend; an unset value is Microsoft's 90-day default. PCI DSS 8.3.9 still expects a 90-day change where a password is the only factor, so a cardholder-data environment answers that requirement with MFA.
+
+**Business risk:**
+Forced periodic password changes push users to predictable patterns (Season2026!, then Season2027!) that attackers guess, and add help-desk resets without stopping a stolen password from being used.
+
+**Remediation:**
+Microsoft 365 admin center > Settings > Org settings > Security & privacy > Password expiration policy: Set passwords to never expire (or Update-MgDomain -DomainId <domain> -PasswordValidityPeriodInDays 2147483647 for each domain).
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IA-5(1) |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 1.3.1 |
+| CIS Controls v8.1 | 5.2 |
+| CMMC 2.0 | IA.L2-3.5.7 |
+| ISO/IEC 27001:2022 | A.5.17 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.308(a)(5)(ii)(D) |
+| PCI DSS | Req 8.3 |
 | MITRE ATT&CK | T1110 |
 
 ---

@@ -9,7 +9,7 @@ GitHub: [Blackvectra/TenantPosture](https://github.com/Blackvectra/TenantPosture
 [![Secret Scan](https://github.com/Blackvectra/TenantPosture/actions/workflows/secret-scan.yml/badge.svg?branch=main)](https://github.com/Blackvectra/TenantPosture/actions/workflows/secret-scan.yml)
 [![Release](https://github.com/Blackvectra/TenantPosture/actions/workflows/release.yml/badge.svg)](https://github.com/Blackvectra/TenantPosture/actions/workflows/release.yml)
 [![PowerShell 7](https://img.shields.io/badge/PowerShell-7.0%2B-5391FE?logo=powershell&logoColor=white)](https://learn.microsoft.com/powershell/scripting/install/installing-powershell)
-[![Controls](https://img.shields.io/badge/controls-204-0c7d8c)](Config/controls.json)
+[![Controls](https://img.shields.io/badge/controls-207-0c7d8c)](Config/controls.json)
 
 [![OpenSSF Best Practices](https://img.shields.io/badge/OpenSSF_Best_Practices-Passing_(self--assessed)-blue)](docs/OPENSSF-BEST-PRACTICES.md)
 [![SSDF](https://img.shields.io/badge/NIST_SP_800--218-self--attested-green)](docs/SECURE-DEVELOPMENT.md)
@@ -26,7 +26,7 @@ GitHub: [Blackvectra/TenantPosture](https://github.com/Blackvectra/TenantPosture
 
 > **New here, or back after a while?** [`docs/WHAT-CAN-I-RUN.md`](docs/WHAT-CAN-I-RUN.md) lists every entry point, what it needs, and what it produces — including what this tool deliberately does *not* cover. Known issues and what has not yet been run against a live tenant are in [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md).
 
-Connects to a Microsoft 365 tenant via delegated auth (or GDAP for MSP batch runs), collects raw configuration data across all M365 services, evaluates **204 security controls with license-aware scoring**, and produces client-ready HTML and Markdown reports with citations into six frameworks (CIS M365, CISA SCuBA, NIST 800-53r5, CMMC 2.0, ISO 27001, MITRE ATT&CK) plus CIS Controls v8.1.
+Connects to a Microsoft 365 tenant via delegated auth (or GDAP for MSP batch runs), collects raw configuration data across all M365 services, evaluates **207 security controls with license-aware scoring**, and produces client-ready HTML and Markdown reports with citations into six frameworks (CIS M365, CISA SCuBA, NIST 800-53r5, CMMC 2.0, ISO 27001, MITRE ATT&CK) plus CIS Controls v8.1.
 
 **Zero writes to tenant. Read-only by design.**
 
@@ -195,7 +195,7 @@ or product name that is not valid stops the batch before any sign-in. The assess
 Three separate entry points for a *suspected account compromise* (BEC, stolen
 credentials, attacker inbox rules, mass outbound). These are distinct from the
 posture assessment above — they focus on one or more **mailboxes during an
-incident**, not the 204 tenant controls.
+incident**, not the 207 tenant controls.
 
 **1. You already know which user** — `Invoke-TPEmailAssessment.ps1`
 Runs with **the user's own credentials** (delegated sign-in, *no admin scope
@@ -388,7 +388,7 @@ Publishers/                       (7 files)
   Publish-TPRemediationPlaybook.ps1 / -RemediationScript.ps1  Remediation guidance
 
 Config/
-  controls.json                   204 control definitions + framework citations
+  controls.json                   207 control definitions + framework citations
   frameworks.json                 CIS, SCuBA, NIST, CMMC, MITRE metadata
   distribution-list-baseline.json Distribution-list recommendations, each with its Microsoft Learn source
   clients.json                    MSP client registry (TenantId + GDAP config)
@@ -408,27 +408,27 @@ Testing/                          126 Pester suites — the FULL suite gates eve
 
 ## Controls Coverage
 
-**204 controls across 9 workloads** — every count below is generated from `Config/controls.json` and schema-validated in CI.
+**207 controls across 9 workloads** — every count below is generated from `Config/controls.json` and schema-validated in CI.
 
 | Workload | Controls | Key Areas |
 |---|---|---|
-| Entra ID (AAD) | 46 | MFA, legacy auth, CA policies, PIM, guest access, app consent, risky users & workload identities, break-glass |
-| Exchange Online | 31 | Mailbox audit, SMTP auth, auto-forward, DKIM, anti-phish, priority-account protection, DMARC |
-| Defender for O365 | 23 | Safe Attachments/Links, spoof intel, ZAP, quarantine, attack-simulation training, preset policies |
+| Entra ID (AAD) | 52 | MFA, legacy auth, CA policies, PIM, guest access, app consent, risky users & workload identities, break-glass |
+| Exchange Online | 35 | Mailbox audit, SMTP auth, auto-forward, DKIM, anti-phish, priority-account protection, DMARC |
+| Defender for O365 | 24 | Safe Attachments/Links, spoof intel, ZAP, quarantine, attack-simulation training, preset policies |
 | Teams | 22 | Federation allowlists, meeting lobby, PSTN bypass, recording expiry, live events, app governance |
 | Purview | 18 | Unified audit log, DLP, sensitivity labels, retention, insider risk |
-| SharePoint / OneDrive | 17 | External sharing, link expiration, email attestation, guest expiry, unmanaged sync |
+| SharePoint / OneDrive | 18 | External sharing, link expiration, email attestation, guest expiry, unmanaged sync |
 | Intune | 17 | Device compliance, BitLocker, EDR, ASR rules, MAM conditional launch |
 | Power Platform | 11 | Tenant isolation, DLP connector classification, maker governance |
 | DNS Email Auth | 10 | External SPF, DKIM, DMARC enforcement, MTA-STS, TLS-RPT, DNSSEC — resolved from public DNS, not just tenant config |
 
-**Severity distribution:** 11 Critical · 92 High · 65 Medium · 27 Low
+**Severity distribution:** 13 Critical · 97 High · 69 Medium · 28 Low
 
-**Framework citations per control:** CIS M365 Foundations v7.0.0 (71 controls, cited only where the check matches the recommendation's audit; [alignment](docs/TP-CIS-M365-ALIGNMENT.md)) · CISA SCuBA (ScubaGear v2.0.0 policy IDs) · NIST SP 800-53 Rev 5 · CMMC 2.0 · ISO/IEC 27001:2022 · MITRE ATT&CK — plus CIS Controls v8.1 safeguards, SOC 2, HIPAA, and PCI DSS references. Controls whose license requirement the tenant doesn't meet are routed to an Upgrade Unlocks section instead of dragging the score down.
+**Framework citations per control:** CIS M365 Foundations v7.0.0 (74 controls, cited only where the check matches the recommendation's audit; [alignment](docs/TP-CIS-M365-ALIGNMENT.md)) · CISA SCuBA (ScubaGear v2.0.0 policy IDs) · NIST SP 800-53 Rev 5 · CMMC 2.0 · ISO/IEC 27001:2022 · MITRE ATT&CK — plus CIS Controls v8.1 safeguards, SOC 2, HIPAA, and PCI DSS references. Controls whose license requirement the tenant doesn't meet are routed to an Upgrade Unlocks section instead of dragging the score down.
 
 ### NIST SP 800-53 Rev 5 — family rollup
 
-All 204 controls carry an 800-53 citation, and the report rolls them up **by control family**, not only as a single aggregate percentage. Every other view in the report groups by M365 workload — the right lens for the engineer doing the remediation, the wrong one for a reader working an 800-53, FedRAMP, or CMMC assessment, whose own POA&M is organized by family.
+All 207 controls carry an 800-53 citation, and the report rolls them up **by control family**, not only as a single aggregate percentage. Every other view in the report groups by M365 workload — the right lens for the engineer doing the remediation, the wrong one for a reader working an 800-53, FedRAMP, or CMMC assessment, whose own POA&M is organized by family.
 
 The rollup covers 12 families and 59 distinct 800-53 controls, and appears in three places: a family table in the HTML report, the same table in the Markdown summary, and a dedicated `NIST Families` sheet in the XLSX matrix.
 
@@ -444,7 +444,7 @@ The active profile's `DefaultFramework` decides which framework cards the HTML r
 .\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com -Framework CIS    # one other
 ```
 
-**This narrows the report, never the assessment.** Every one of the 204 controls still carries its CIS, SCuBA, CMMC, ISO 27001, SOC 2, HIPAA, PCI DSS and MITRE citations; every framework is still scored; the results JSON and the XLSX matrix are byte-identical either way. `-Framework` decides what the HTML puts in front of the reader and nothing else — a test renders the report both ways and asserts no framework score moves.
+**This narrows the report, never the assessment.** Every one of the 207 controls still carries its CIS, SCuBA, CMMC, ISO 27001, SOC 2, HIPAA, PCI DSS and MITRE citations; every framework is still scored; the results JSON and the XLSX matrix are byte-identical either way. `-Framework` decides what the HTML puts in front of the reader and nothing else — a test renders the report both ways and asserts no framework score moves.
 
 `-NISTMatrix` additionally emits a **standalone NIST-only HTML report** alongside the Markdown and XLSX — a self-contained page with the family table, the full control matrix, the not-assessable list and the physical/device section, that names no other framework anywhere on it. That's the artifact for a client who is assessed against 800-53 and shouldn't have to read their posture out of a multi-framework document.
 
@@ -739,4 +739,4 @@ You may use, modify and redistribute it under that license, including commercial
 
 ---
 
-*TenantPosture v4.14.3 · 204 posture controls + EMAIL/SIGNIN IR heuristics · 424 exported functions · full Pester suite (126 suites) gating CI*
+*TenantPosture v4.14.3 · 207 posture controls + EMAIL/SIGNIN IR heuristics · 424 exported functions · full Pester suite (126 suites) gating CI*

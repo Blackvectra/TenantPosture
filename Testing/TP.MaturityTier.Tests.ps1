@@ -159,7 +159,7 @@ Describe 'TenantPosture Maturity Tier Classification' {
             $m.Tier             | Should -Be 5
             $m.EvidenceComplete | Should -BeFalse
             $m.Label            | Should -Be 'Optimizing (provisional: evidence incomplete)'
-            $m.Qualification    | Should -Match '^1 of 204 finding\(s\) produced no verdict \(1 errored, 0 with an unrecognized state\)'
+            $m.Qualification    | Should -Match '^1 of 207 finding\(s\) produced no verdict \(1 errored, 0 with an unrecognized state\)'
         }
 
         It 'an unrecognized state counts as no verdict, like an Error' {
