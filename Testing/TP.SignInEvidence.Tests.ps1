@@ -254,5 +254,13 @@ return @{ value = @() }
             $with.ObservedState | Should -Be $without.ObservedState
             $with.ReasonCode | Should -Be $without.ReasonCode
         }
+
+        It 'accepts an exceptions object that carries no EmergencyAccess block' {
+            $finding = @{ ControlId = 'AAD-1.2'; State = 'Satisfied'; Detail = 'MFA required for all users.'; Timestamp = (Get-Date).ToUniversalTime().ToString('o') }
+            $raw = Evidence -Single @(Ev 'alice@contoso.test' 'a1' 'Browser')
+            $older = @{ Available = $false; Approved = @{}; Rejected = @() }
+            $c = & $script:Mod { param($f, $r, $d, $x) Get-TPBaselineCompliance -Findings @($f) -TargetTier Minimum -Definition $d -Exceptions $x -RawData $r -Coverage @{} } $finding $raw $script:Def $older
+            @($c.Controls | Where-Object { $_.ControlId -eq 'AAD-1.2' })[0].EffectivenessState | Should -Be 'Ineffective'
+        }
     }
 }
