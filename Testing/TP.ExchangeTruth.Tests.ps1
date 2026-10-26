@@ -126,6 +126,7 @@ Describe 'Exchange controls read the setting they name' {
         }
         It 'EXO-4.1 does not score AuditLogAgeLimit, which Microsoft says no longer governs retention (was: Partial at 90)' {
             Set-TPRawData -Key 'EXO-MailboxConfig' -Data (Raw $script:Exo)
+            Set-TPRawData -Key 'Purview' -Data (Raw @{ SectionStatus = @{ AuditRetentionPolicies = 'Collected' }; AuditRetentionPolicies = @() })
             (Verdict 'Test-TPControlEXOAuditAgeLimit' 'EXO-4.1').State | Should -Be 'Satisfied'
         }
         It 'EXO-4.1 is a Gap when a custom audit retention policy keeps Exchange records under 180 days' {
@@ -144,13 +145,16 @@ Describe 'Exchange controls read the setting they name' {
         }
     }
 
-    Context 'EXO-3.2 outbound spam notification' {
-        It 'the enabled "User restricted from sending email" alert policy satisfies it (was: Gap on NotifyOutboundSpam = False, the default)' {
-            Set-TPRawData -Key 'EXO-MailboxConfig' -Data (Raw @{ OutboundSpamPolicies = @(@{ Name = 'Default'; IsDefault = $true; NotifyOutboundSpam = $false })
+    Context 'EXO-3.2 outbound spam' {
+        It 'NotifyOutboundSpam = False (Microsoft''s recommended value) never costs the verdict; the alert policy is reported as context' {
+            Set-TPRawData -Key 'EXO-MailboxConfig' -Data (Raw @{ OutboundSpamPolicies = @(@{ Name = 'Default'; IsDefault = $true; NotifyOutboundSpam = $false
+                    RecipientLimitExternalPerHour = 500; RecipientLimitInternalPerHour = 1000; RecipientLimitPerDay = 1000; ActionWhenThresholdReached = 'BlockUser' })
                 SectionStatus = @{ OutboundSpamPolicies = 'Collected' } })
             Set-TPRawData -Key 'Purview' -Data (Raw @{ SectionStatus = @{ ProtectionAlerts = 'Collected' }
                 ProtectionAlerts = @(@{ Name = 'User restricted from sending email'; Disabled = $false }) })
-            (Verdict 'Test-TPControlEXOOutboundLimits' 'EXO-3.2').State | Should -Be 'Satisfied'
+            $f = Verdict 'Test-TPControlEXOOutboundLimits' 'EXO-3.2'
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match "Context \(not part of this verdict\): alert policy 'User restricted from sending email' is enabled"
         }
     }
 
@@ -981,6 +985,305 @@ Describe 'DEF-4.4 reads the Priority account tag' {
             $f.State  | Should -Be 'Satisfied'
             $f.Detail | Should -Match 'user5@contoso\.com and 3 more'
             $f.Detail | Should -Not -Match 'user6@contoso\.com'
+        }
+    }
+}
+
+# ── 2026-10-26: five verdicts pinned to the settings their controls claim ────
+#   EXO-3.2  outbound sending limits (Microsoft's recommended-settings page,
+#            Outbound spam policy table, Standard column) on every policy in force
+#   EXO-2.6  shared mailbox sign-in read from Entra accountEnabled; the license
+#            heuristic is never a verdict
+#   EXO-4.1  custom audit retention policies not read -> not assessed
+#   EXO-4.4  SpamZapEnabled / PhishZapEnabled, never the deprecated ZapEnabled
+#   DEF-2.1  a preset is on only with BOTH its EOP and its Defender for Office
+#            365 rule Enabled
+# Helpers carry a J prefix so they never replace the ones above.
+Describe 'Exchange and Defender controls judge the settings they claim' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
+        $script:Mod = Get-Module 'TenantPosture'
+
+        function script:JRaw { param([hashtable] $Data, [bool] $Success = $true) [ordered]@{ CollectorId = 'x'; CollectedAt = '2026-10-01T00:00:00Z'; Success = $Success; Data = $Data } }
+        function script:JVerdict { param([string] $Fn, [string] $Cid) & $Fn | Out-Null; @(Get-TPFindings | Where-Object { $_.ControlId -eq $Cid })[0] }
+        # The stand-in is a literal scriptblock, unbound from this file (Ast.GetScriptBlock) so it
+        # runs in module scope and reads the module's $script: variables, as the cmdlet's caller does.
+        function script:JInject { param([string] $Name, [scriptblock] $Body)
+            & $script:Mod { param($n, $b) Set-Item -Path "function:script:$n" -Value $b.Ast.GetScriptBlock() } $Name $Body }
+        function script:JRemove { param([string] $Name)
+            # function:script:X removes nothing inside a module; function:X does.
+            & $script:Mod { param($n) Remove-Item -Path "function:$n" -ErrorAction SilentlyContinue } $Name }
+
+        # Microsoft's Standard values for the outbound spam policy.
+        function script:JOutbound { param([hashtable] $Over = @{})
+            $p = @{ Name = 'Default'; IsDefault = $true; RecommendedPolicyType = ''; Enabled = $true; AutoForwardingMode = 'Off'
+                    NotifyOutboundSpam = $false; NotifyOutboundSpamRecipients = @()
+                    RecipientLimitExternalPerHour = 500; RecipientLimitInternalPerHour = 1000; RecipientLimitPerDay = 1000; ActionWhenThresholdReached = 'BlockUser' }
+            foreach ($k in $Over.Keys) { if ($null -eq $Over[$k]) { $p.Remove($k) } else { $p[$k] = $Over[$k] } }
+            $p }
+        function script:JSetOutbound { param([object[]] $Policies, $Rules = @())
+            Set-TPRawData -Key 'EXO-MailboxConfig' -Data (JRaw @{ OutboundSpamPolicies = @($Policies); OutboundSpamRules = $Rules
+                AcceptedDomains = @(@{ DomainName = 'contoso.com' })
+                SectionStatus = @{ OutboundSpamPolicies = 'Collected'; AcceptedDomains = 'Collected' } }) }
+    }
+    BeforeEach { Clear-TPState }
+    AfterAll   { Clear-TPState }
+
+    Context 'EXO-3.2 outbound sending limits' {
+        It 'Microsoft Standard values on the default policy are Satisfied; the notification is context only' {
+            JSetOutbound @(JOutbound)
+            $f = JVerdict 'Test-TPControlEXOOutboundLimits' 'EXO-3.2'
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'RecipientLimitExternalPerHour = 500'
+            $f.Detail | Should -Match 'Context \(not part of this verdict\)'
+        }
+        It 'the Strict values (400, 800, 800) are lower and pass' {
+            JSetOutbound @(JOutbound @{ RecipientLimitExternalPerHour = 400; RecipientLimitInternalPerHour = 800; RecipientLimitPerDay = 800 })
+            (JVerdict 'Test-TPControlEXOOutboundLimits' 'EXO-3.2').State | Should -Be 'Satisfied'
+        }
+        It 'the shipped defaults (0 = service default, BlockUserForToday) are a Gap even with NotifyOutboundSpam on (was: Satisfied on the notification alone)' {
+            JSetOutbound @(JOutbound @{ RecipientLimitExternalPerHour = 0; RecipientLimitInternalPerHour = 0; RecipientLimitPerDay = 0
+                ActionWhenThresholdReached = 'BlockUserForToday'; NotifyOutboundSpam = $true; NotifyOutboundSpamRecipients = @('admin@contoso.com') })
+            $f = JVerdict 'Test-TPControlEXOOutboundLimits' 'EXO-3.2'
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'service default'
+            $f.Detail | Should -Match 'BlockUserForToday'
+        }
+        It 'boundaries: 501 external, 1001 internal and 1001 per day each fall short; 500/1000/1000 do not' {
+            foreach ($case in @(@{ RecipientLimitExternalPerHour = 501 }, @{ RecipientLimitInternalPerHour = 1001 }, @{ RecipientLimitPerDay = 1001 })) {
+                Clear-TPState
+                JSetOutbound @(JOutbound $case)
+                $f = JVerdict 'Test-TPControlEXOOutboundLimits' 'EXO-3.2'
+                $f.State  | Should -Be 'Partial' -Because "$(@($case.Keys)[0]) above the Standard value is a shortfall beside the settings that meet it"
+                $f.Detail | Should -Match "Shortfall: Default: $(@($case.Keys)[0]) = $(@($case.Values)[0])"
+            }
+        }
+        It 'judges every policy in force: a custom policy with an enabled rule and default limits is a shortfall' {
+            JSetOutbound @((JOutbound), (JOutbound @{ Name = 'Sales'; IsDefault = $false; RecipientLimitPerDay = 0 })) @(@{ Name = 'Sales'; HostedOutboundSpamFilterPolicy = 'Sales'; State = 'Enabled' })
+            $f = JVerdict 'Test-TPControlEXOOutboundLimits' 'EXO-3.2'
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Sales: RecipientLimitPerDay = 0'
+            @($f.AffectedObjects).Count | Should -Be 1
+        }
+        It 'a custom policy whose rule is disabled applies to no one and is not judged' {
+            JSetOutbound @((JOutbound), (JOutbound @{ Name = 'Sales'; IsDefault = $false; RecipientLimitPerDay = 0 })) @(@{ Name = 'Sales'; HostedOutboundSpamFilterPolicy = 'Sales'; State = 'Disabled' })
+            (JVerdict 'Test-TPControlEXOOutboundLimits' 'EXO-3.2').State | Should -Be 'Satisfied'
+        }
+        It 'a limit not returned (an older results file) is not assessed, never a pass' {
+            JSetOutbound @(JOutbound @{ RecipientLimitPerDay = $null })
+            $f = JVerdict 'Test-TPControlEXOOutboundLimits' 'EXO-3.2'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'Not assessed: Default: RecipientLimitPerDay was not returned'
+            Clear-TPState
+            JSetOutbound @(JOutbound @{ ActionWhenThresholdReached = $null })
+            (JVerdict 'Test-TPControlEXOOutboundLimits' 'EXO-3.2').State | Should -Be 'NotApplicable'
+        }
+        It 'a shortfall is still reported when another value was not read' {
+            JSetOutbound @(JOutbound @{ RecipientLimitPerDay = $null; ActionWhenThresholdReached = 'Alert' })
+            (JVerdict 'Test-TPControlEXOOutboundLimits' 'EXO-3.2').State | Should -Be 'Partial'
+        }
+        It 'the collector keeps an omitted limit as not read, never 0, and stores the returned values' {
+            JInject 'Get-HostedOutboundSpamFilterPolicy' { [pscustomobject]@{ Name = 'Default'; IsDefault = $true; Enabled = $true; AutoForwardingMode = 'Off'; NotifyOutboundSpam = $false; NotifyOutboundSpamRecipients = @(); RecipientLimitExternalPerHour = 500; RecipientLimitInternalPerHour = 1000; ActionWhenThresholdReached = 'BlockUser' } }
+            JInject 'Get-HostedOutboundSpamFilterRule' { @() }
+            try {
+                $r = Invoke-TPCollectEXOMailboxConfig
+                $r.Data.SectionStatus.OutboundSpamPolicies | Should -Be 'Collected'
+                $p = $r.Data.OutboundSpamPolicies[0]
+                $p.RecipientLimitExternalPerHour | Should -Be 500
+                $p.RecipientLimitInternalPerHour | Should -Be 1000
+                $p.RecipientLimitPerDay          | Should -BeNullOrEmpty -Because 'an omitted value is not the service default'
+                $p.ActionWhenThresholdReached    | Should -Be 'BlockUser'
+                Clear-TPState
+                Set-TPRawData -Key 'EXO-MailboxConfig' -Data $r
+                (JVerdict 'Test-TPControlEXOOutboundLimits' 'EXO-3.2').State | Should -Be 'NotApplicable'
+            } finally { JRemove 'Get-HostedOutboundSpamFilterPolicy'; JRemove 'Get-HostedOutboundSpamFilterRule' }
+        }
+    }
+
+    Context 'EXO-2.6 shared mailbox sign-in' {
+        BeforeAll {
+            JInject 'Get-Mailbox' { param($RecipientTypeDetails, $ResultSize, $Identity, [Parameter(ValueFromRemainingArguments)] $Rest) if ($RecipientTypeDetails -eq 'SharedMailbox') { @($script:SharedMbx) } else { @() } }
+        }
+        AfterAll { JRemove 'Get-Mailbox' }
+
+        It 'every shared mailbox read from Entra as blocked is Satisfied' {
+            & $script:Mod { $script:SharedMbx = @([pscustomobject]@{ DisplayName = 'Info'; PrimarySmtpAddress = 'info@contoso.com'; Guid = 'g1'; UserPrincipalName = 'info@contoso.com'; SkuAssigned = $false }) }
+            Set-TPRawData -Key 'AAD-Users' -Data (JRaw @{ Users = @(@{ UserPrincipalName = 'info@contoso.com'; AccountEnabled = $false }) })
+            $r = Invoke-TPCollectEXOInventory
+            $r.Data.SectionStatus.SharedMailboxes | Should -Be 'Collected'
+            @($r.Data.SharedMailboxUnconfirmed).Count | Should -Be 0
+            Set-TPRawData -Key 'EXO-Inventory' -Data $r
+            $f = JVerdict 'Test-TPControlEXOSharedMailbox' 'EXO-2.6'
+            $f.State | Should -Be 'Satisfied'
+        }
+        It 'Entra data unavailable: an unlicensed mailbox the heuristic does not flag is not assessed (was: Satisfied)' {
+            & $script:Mod { $script:SharedMbx = @([pscustomobject]@{ DisplayName = 'Info'; PrimarySmtpAddress = 'info@contoso.com'; Guid = 'g1'; UserPrincipalName = 'info@contoso.com'; SkuAssigned = $false }) }
+            $r = Invoke-TPCollectEXOInventory
+            @($r.Data.SharedMailboxSignIn).Count | Should -Be 0 -Because 'the license heuristic does not fire'
+            $r.Data.SharedMailboxUnconfirmed[0].Reason | Should -Be 'AAD-Users data unavailable'
+            Set-TPRawData -Key 'EXO-Inventory' -Data $r
+            $f = JVerdict 'Test-TPControlEXOSharedMailbox' 'EXO-2.6'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'info@contoso\.com'
+        }
+        It 'Entra data unavailable: a mailbox the license heuristic flags is not assessed, never a Partial verdict' {
+            & $script:Mod { $script:SharedMbx = @([pscustomobject]@{ DisplayName = 'Info'; PrimarySmtpAddress = 'info@contoso.com'; Guid = 'g1'; UserPrincipalName = 'info@contoso.com'; SkuAssigned = $true }) }
+            $r = Invoke-TPCollectEXOInventory
+            Set-TPRawData -Key 'EXO-Inventory' -Data $r
+            $f = JVerdict 'Test-TPControlEXOSharedMailbox' 'EXO-2.6'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'license or reconciliation flag'
+        }
+        It 'a mailbox not found in AAD-Users is not assessed; a confirmed enabled one is still the Gap' {
+            & $script:Mod { $script:SharedMbx = @(
+                [pscustomobject]@{ DisplayName = 'Info'; PrimarySmtpAddress = 'info@contoso.com'; Guid = 'g1'; UserPrincipalName = 'info@contoso.com' },
+                [pscustomobject]@{ DisplayName = 'HR'; PrimarySmtpAddress = 'hr@contoso.com'; Guid = 'g2'; UserPrincipalName = 'hr@contoso.com' }) }
+            Set-TPRawData -Key 'AAD-Users' -Data (JRaw @{ Users = @(@{ UserPrincipalName = 'info@contoso.com'; AccountEnabled = $false }) })
+            $r = Invoke-TPCollectEXOInventory
+            $r.Data.SharedMailboxUnconfirmed[0].Reason | Should -Be 'Not found in AAD-Users'
+            Set-TPRawData -Key 'EXO-Inventory' -Data $r
+            (JVerdict 'Test-TPControlEXOSharedMailbox' 'EXO-2.6').State | Should -Be 'NotApplicable'
+
+            Clear-TPState
+            Set-TPRawData -Key 'AAD-Users' -Data (JRaw @{ Users = @(@{ UserPrincipalName = 'info@contoso.com'; AccountEnabled = $true }) })
+            $r = Invoke-TPCollectEXOInventory
+            Set-TPRawData -Key 'EXO-Inventory' -Data $r
+            $f = JVerdict 'Test-TPControlEXOSharedMailbox' 'EXO-2.6'
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'A further 1 shared mailbox'
+        }
+        It 'an older results file without the unconfirmed list is not assessed' {
+            Set-TPRawData -Key 'EXO-Inventory' -Data (JRaw @{ AllSharedMailboxes = @(@{ DisplayName = 'Info'; UPN = 'info@contoso.com' }); SharedMailboxSignIn = @()
+                SectionStatus = @{ AllSharedMailboxes = 'Collected'; SharedMailboxes = 'Collected' } })
+            (JVerdict 'Test-TPControlEXOSharedMailbox' 'EXO-2.6').State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'EXO-4.1 audit retention' {
+        BeforeEach {
+            Set-TPRawData -Key 'EXO-MailboxConfig' -Data (JRaw @{ OrganizationConfig = @{ AuditDisabled = $false }; AdminAuditLogConfig = @{ UnifiedAuditLogIngestionEnabled = $true }
+                SectionStatus = @{ OrganizationConfig = 'Collected'; AdminAuditLogConfig = 'Collected' } })
+        }
+        It 'custom audit retention policies not read is not assessed (was: Satisfied)' {
+            $f = JVerdict 'Test-TPControlEXOAuditAgeLimit' 'EXO-4.1'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'custom audit retention policies were not read'
+            Clear-TPState
+            Set-TPRawData -Key 'EXO-MailboxConfig' -Data (JRaw @{ OrganizationConfig = @{ AuditDisabled = $false }; AdminAuditLogConfig = @{ UnifiedAuditLogIngestionEnabled = $true }
+                SectionStatus = @{ OrganizationConfig = 'Collected'; AdminAuditLogConfig = 'Collected' } })
+            Set-TPRawData -Key 'Purview' -Data (JRaw @{ AuditRetentionPolicies = @(); SectionStatus = @{ AuditRetentionPolicies = 'Failed' } })
+            (JVerdict 'Test-TPControlEXOAuditAgeLimit' 'EXO-4.1').State | Should -Be 'NotApplicable'
+        }
+        It 'read with none shortening Exchange records is Satisfied; a 90-day Exchange policy is the Gap' {
+            Set-TPRawData -Key 'Purview' -Data (JRaw @{ AuditRetentionPolicies = @(@{ Name = 'Teams 90'; RetentionDuration = 'ThreeMonths'; RetentionDays = 90; RecordTypes = @('MicrosoftTeams') }); SectionStatus = @{ AuditRetentionPolicies = 'Collected' } })
+            (JVerdict 'Test-TPControlEXOAuditAgeLimit' 'EXO-4.1').State | Should -Be 'Satisfied'
+            Clear-TPState
+            Set-TPRawData -Key 'EXO-MailboxConfig' -Data (JRaw @{ OrganizationConfig = @{ AuditDisabled = $false }; AdminAuditLogConfig = @{ UnifiedAuditLogIngestionEnabled = $true }
+                SectionStatus = @{ OrganizationConfig = 'Collected'; AdminAuditLogConfig = 'Collected' } })
+            Set-TPRawData -Key 'Purview' -Data (JRaw @{ AuditRetentionPolicies = @(@{ Name = 'Mail 90'; RetentionDuration = 'ThreeMonths'; RetentionDays = 90; RecordTypes = @('ExchangeItem') }); SectionStatus = @{ AuditRetentionPolicies = 'Collected' } })
+            (JVerdict 'Test-TPControlEXOAuditAgeLimit' 'EXO-4.1').State | Should -Be 'Gap'
+        }
+        It 'an Exchange policy whose duration was not recognized is not assessed, never a pass' {
+            Set-TPRawData -Key 'Purview' -Data (JRaw @{ AuditRetentionPolicies = @(@{ Name = 'All'; RetentionDuration = ''; RetentionDays = $null; RecordTypes = @() }); SectionStatus = @{ AuditRetentionPolicies = 'Collected' } })
+            (JVerdict 'Test-TPControlEXOAuditAgeLimit' 'EXO-4.1').State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'EXO-4.4 inbound anti-spam' {
+        BeforeAll {
+            function script:JSetSpam { param([hashtable] $Over = @{})
+                $p = @{ Name = 'Default'; IsDefault = $true; SpamAction = 'MoveToJmf'; BulkThreshold = 6; SpamZapEnabled = $true; PhishZapEnabled = $true }
+                foreach ($k in $Over.Keys) { if ($null -eq $Over[$k]) { $p.Remove($k) } else { $p[$k] = $Over[$k] } }
+                Set-TPRawData -Key 'EXO-MailboxConfig' -Data (JRaw @{ AntiSpamPolicies = @($p); SectionStatus = @{ AntiSpamPolicies = 'Collected' } }) }
+        }
+        It 'Standard values with spam and phishing ZAP on are Satisfied' {
+            JSetSpam
+            (JVerdict 'Test-TPControlEXOAntiSpamInbound' 'EXO-4.4').State | Should -Be 'Satisfied'
+        }
+        It 'PhishZapEnabled off is a shortfall even when the deprecated ZapEnabled reads True (was: Satisfied)' {
+            JSetSpam @{ PhishZapEnabled = $false; ZapEnabled = $true }
+            $f = JVerdict 'Test-TPControlEXOAntiSpamInbound' 'EXO-4.4'
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'PhishZapEnabled = False'
+        }
+        It 'only the deprecated ZapEnabled present is not assessed, never credited' {
+            JSetSpam @{ SpamZapEnabled = $null; PhishZapEnabled = $null; ZapEnabled = $true }
+            (JVerdict 'Test-TPControlEXOAntiSpamInbound' 'EXO-4.4').State | Should -Be 'NotApplicable'
+        }
+        It 'BulkThreshold 6 passes, 7 falls short, and an absent value is not assessed (was: a pass)' {
+            JSetSpam @{ BulkThreshold = 7 }
+            (JVerdict 'Test-TPControlEXOAntiSpamInbound' 'EXO-4.4').State | Should -Be 'Partial'
+            Clear-TPState; JSetSpam @{ BulkThreshold = $null }
+            (JVerdict 'Test-TPControlEXOAntiSpamInbound' 'EXO-4.4').State | Should -Be 'NotApplicable'
+        }
+        It 'every setting short is a Gap' {
+            JSetSpam @{ SpamAction = 'AddXHeader'; BulkThreshold = 9; SpamZapEnabled = $false; PhishZapEnabled = $false }
+            (JVerdict 'Test-TPControlEXOAntiSpamInbound' 'EXO-4.4').State | Should -Be 'Gap'
+        }
+    }
+
+    Context 'DEF-2.1 preset rules' {
+        BeforeAll {
+            function script:JRule { param([string] $Name, [string] $State)
+                [pscustomobject]@{ Name = $Name; State = $State; RecipientDomainIs = @(); SentTo = @(); SentToMemberOf = @(); ExceptIfSentTo = @(); ExceptIfSentToMemberOf = @(); ExceptIfRecipientDomainIs = @() } }
+            function script:JRunDefender { param([string] $EopState, [string] $AtpState, [switch] $NoAtpCmdlet)
+                & $script:Mod { param($e, $a) $script:EopRules = @($e); $script:AtpRules = @($a) } (JRule 'Standard Preset Security Policy' $EopState) $(if ($AtpState) { JRule 'Standard Preset Security Policy' $AtpState } else { @() })
+                JInject 'Get-EOPProtectionPolicyRule' { @($script:EopRules) }
+                if (-not $NoAtpCmdlet) { JInject 'Get-ATPProtectionPolicyRule' { @($script:AtpRules) } }
+                try { Invoke-TPCollectDefender } finally { JRemove 'Get-EOPProtectionPolicyRule'; JRemove 'Get-ATPProtectionPolicyRule' }
+            }
+            function script:JSetAccepted { Set-TPRawData -Key 'EXO-MailboxConfig' -Data (JRaw @{ AcceptedDomains = @(@{ DomainName = 'contoso.com' }); SectionStatus = @{ AcceptedDomains = 'Collected' } }) }
+        }
+        It 'both rules Enabled and applying to everyone is Satisfied' {
+            $r = JRunDefender -EopState 'Enabled' -AtpState 'Enabled'
+            $r.Data.PresetRules.ATPRead | Should -BeTrue
+            Clear-TPState; JSetAccepted; Set-TPRawData -Key 'Defender-Policies' -Data $r
+            (JVerdict 'Test-TPControlDefenderPresetPolicies' 'DEF-2.1').State | Should -Be 'Satisfied'
+        }
+        It 'the EOP rule on and the Defender for Office 365 rule off is Partial (was: Satisfied)' {
+            $r = JRunDefender -EopState 'Enabled' -AtpState 'Disabled'
+            Clear-TPState; JSetAccepted; Set-TPRawData -Key 'Defender-Policies' -Data $r
+            $f = JVerdict 'Test-TPControlDefenderPresetPolicies' 'DEF-2.1'
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Defender for Office 365 rule is Disabled'
+        }
+        It 'the EOP rule on with no Defender rule returned is Partial' {
+            $r = JRunDefender -EopState 'Enabled'
+            Clear-TPState; JSetAccepted; Set-TPRawData -Key 'Defender-Policies' -Data $r
+            (JVerdict 'Test-TPControlDefenderPresetPolicies' 'DEF-2.1').State | Should -Be 'Partial'
+        }
+        It 'only the Defender rule on is a Gap' {
+            $r = JRunDefender -EopState 'Disabled' -AtpState 'Enabled'
+            Clear-TPState; JSetAccepted; Set-TPRawData -Key 'Defender-Policies' -Data $r
+            (JVerdict 'Test-TPControlDefenderPresetPolicies' 'DEF-2.1').State | Should -Be 'Gap'
+        }
+        It 'the Defender rules not read (no cmdlet in the session) is not assessed' {
+            $r = JRunDefender -EopState 'Enabled' -NoAtpCmdlet
+            $r.Data.PresetRules.ATPRead | Should -BeFalse
+            Clear-TPState; JSetAccepted; Set-TPRawData -Key 'Defender-Policies' -Data $r
+            (JVerdict 'Test-TPControlDefenderPresetPolicies' 'DEF-2.1').State | Should -Be 'NotApplicable'
+        }
+        It 'an older result without ATPRead and no Defender rules is not assessed; one holding them was read' {
+            JSetAccepted
+            $eop = @{ Name = 'Standard Preset Security Policy'; State = 'Enabled'; RecipientDomainIs = @(); SentTo = @(); SentToMemberOf = @(); ExceptIfSentTo = @(); ExceptIfSentToMemberOf = @(); ExceptIfRecipientDomainIs = @() }
+            Set-TPRawData -Key 'Defender-Policies' -Data (JRaw @{ PresetRules = @{ Available = $true; EOP = @($eop); ATP = @() } })
+            (JVerdict 'Test-TPControlDefenderPresetPolicies' 'DEF-2.1').State | Should -Be 'NotApplicable'
+            Clear-TPState; JSetAccepted
+            $atp = $eop.Clone(); $atp.State = 'Enabled'
+            Set-TPRawData -Key 'Defender-Policies' -Data (JRaw @{ PresetRules = @{ Available = $true; EOP = @($eop); ATP = @($atp) } })
+            (JVerdict 'Test-TPControlDefenderPresetPolicies' 'DEF-2.1').State | Should -Be 'Satisfied'
+        }
+        It 'a fully-on Strict preset covering everyone is not undone by a half-on Standard preset' {
+            JSetAccepted
+            $mk = { param($n, $s) @{ Name = $n; State = $s; RecipientDomainIs = @(); SentTo = @(); SentToMemberOf = @(); ExceptIfSentTo = @(); ExceptIfSentToMemberOf = @(); ExceptIfRecipientDomainIs = @() } }
+            Set-TPRawData -Key 'Defender-Policies' -Data (JRaw @{ PresetRules = @{ Available = $true; ATPRead = $true
+                EOP = @((& $mk 'Strict Preset Security Policy' 'Enabled'), (& $mk 'Standard Preset Security Policy' 'Enabled'))
+                ATP = @((& $mk 'Strict Preset Security Policy' 'Enabled'), (& $mk 'Standard Preset Security Policy' 'Disabled')) } })
+            $f = JVerdict 'Test-TPControlDefenderPresetPolicies' 'DEF-2.1'
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'Also: Standard Preset Security Policy has its EOP rule on'
         }
     }
 }

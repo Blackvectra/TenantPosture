@@ -247,12 +247,43 @@ function Test-TPControlDefenderPresetPolicies {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'PresetRules (Get-EOPProtectionPolicyRule) was not collected; not assessed.'
         return
     }
-    $on = @(@(Get-TPObjectField -Item $pr -Key 'EOP' -Default @()) + @(Get-TPObjectField -Item $pr -Key 'ATP' -Default @()) |
-        Where-Object { [string](Get-TPObjectField -Item $_ -Key 'State' -Default '') -eq 'Enabled' })
-    if ($on.Count -eq 0) {
+    $isOn = { param($r) [string](Get-TPObjectField -Item $r -Key 'State' -Default '') -eq 'Enabled' }
+    $prName = { param($r) [string](Get-TPObjectField -Item $r -Key 'Name' -Default '?') }
+    $eopRules = @(Get-TPObjectField -Item $pr -Key 'EOP' -Default @() | Where-Object { $null -ne $_ })
+    $atpRules = @(Get-TPObjectField -Item $pr -Key 'ATP' -Default @() | Where-Object { $null -ne $_ })
+    $allOn = @(@($eopRules) + @($atpRules) | Where-Object { & $isOn $_ })
+    if ($allOn.Count -eq 0) {
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'No Standard or Strict preset security policy is turned on. Protection depends on the default and any custom policies, which must each be kept at recommended values by hand.' -CurrentValue 'No preset turned on' -RequiredValue 'Standard or Strict preset applied' -Remediation $ctrl.Remediation
         return
     }
+    # Microsoft: in an organization with Defender for Office 365 a Standard or Strict preset is
+    # turned on by enabling BOTH its rules, the EOP rule (Get-EOPProtectionPolicyRule: anti-spam,
+    # anti-malware, anti-phishing) and the Defender for Office 365 rule (Get-ATPProtectionPolicyRule:
+    # Safe Links, Safe Attachments, impersonation). One rule on is a preset half applied. ATPRead
+    # (absent from older results) says whether the Defender rules were asked for; a result without
+    # it that holds Defender rules evidently read them, one that holds none cannot say.
+    $atpReadRaw = Get-TPObjectField -Item $pr -Key 'ATPRead' -Default $null
+    $atpRead = if ($null -ne $atpReadRaw) { $atpReadRaw -eq $true } else { $atpRules.Count -gt 0 }
+    $presetNames = @($allOn | ForEach-Object { & $prName $_ } | Sort-Object -Unique)
+    $fullNames = @(); $halfShort = @(); $halfUnknown = @()
+    foreach ($pn in $presetNames) {
+        $eopOn = @($eopRules | Where-Object { (& $prName $_) -eq $pn -and (& $isOn $_) }).Count -gt 0
+        $atpOfName = @($atpRules | Where-Object { (& $prName $_) -eq $pn })
+        $atpOn = @($atpOfName | Where-Object { & $isOn $_ }).Count -gt 0
+        if ($eopOn -and $atpOn) { $fullNames += $pn; continue }
+        if (-not $eopOn) { $halfShort += "$pn has its Defender for Office 365 rule on but its EOP rule (Get-EOPProtectionPolicyRule) is not Enabled, so the preset's anti-spam, anti-malware and anti-phishing settings do not apply."; continue }
+        if (-not $atpRead) { $halfUnknown += "whether $pn has its Defender for Office 365 rule (Get-ATPProtectionPolicyRule) on: its EOP rule is on, but the Defender rules were not read."; continue }
+        if ($atpOfName.Count -eq 0) { $halfShort += "$pn has its EOP rule on but no Defender for Office 365 rule (Get-ATPProtectionPolicyRule returned none for it), so the preset applies no Safe Links, Safe Attachments or impersonation protection."; continue }
+        $halfShort += "$pn has its EOP rule on but its Defender for Office 365 rule is $([string](Get-TPObjectField -Item $atpOfName[0] -Key 'State' -Default 'not Enabled')), so the preset applies no Safe Links, Safe Attachments or impersonation protection."
+    }
+    if ($fullNames.Count -eq 0) {
+        $eopOnly = @($presetNames | Where-Object { $pn = $_; @($eopRules | Where-Object { (& $prName $_) -eq $pn -and (& $isOn $_) }).Count -gt 0 })
+        $verifiedHalf = @(); if ($eopOnly.Count) { $verifiedHalf += "EOP rule of $($eopOnly -join ', ') turned on." }
+        Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verifiedHalf -Shortfalls $halfShort -NotEstablished $halfUnknown `
+            -CurrentValue "Partly on: $($presetNames -join ', ')" -RequiredValue 'A Standard or Strict preset with both its EOP and its Defender for Office 365 rule Enabled, applying to every recipient'
+        return
+    }
+    $on = @($allOn | Where-Object { (& $prName $_) -in $fullNames })
     # A preset turned on is not a preset that applies to everyone. Judge WHO it covers: a
     # rule that names every accepted domain, names no other recipient scope and has no
     # exclusions covers everyone; otherwise recipients in a scope gap or an exclusion fall
@@ -300,7 +331,7 @@ function Test-TPControlDefenderPresetPolicies {
         $cands += [pscustomobject]@{ Name = $g.Name; Exclusions = $ex }
     }
     $cov = Get-TPExclusionCoverage -Candidates $cands
-    $verified = @("Preset security policy turned on: $names."); $short = @(); $unknown = @()
+    $verified = @("Preset security policy turned on (EOP and Defender for Office 365 rules both Enabled): $names."); $short = @(); $unknown = @()
     switch ($cov.Kind) {
         'Full'       { $verified += "$($cov.FullNames -join ', ') applies to every accepted domain with no recipient exclusions." }
         'Exceptions' { $short += "Every preset that covers all domains excludes the same recipients ($($cov.Exceptions -join ', ')), so they get no preset protection and fall back to the Built-In, custom or default policies (see DEF-1.1 to DEF-1.6 for what those provide)." }
@@ -311,8 +342,11 @@ function Test-TPControlDefenderPresetPolicies {
     # With another preset proven to cover everyone, the unread scope cannot change the verdict.
     foreach ($n in $scopeUnread) { if ($cov.Kind -eq 'Full') { $verified += "Also: $n." } else { $unknown += "$n." } }
     foreach ($n in $scopeNotes) { if ($cov.Kind -eq 'Full') { $verified += "Also: $n." } else { $short += "$n." } }
+    # A second preset only half on cannot take away what a fully-on preset covering everyone gives.
+    foreach ($n in $halfShort) { if ($cov.Kind -eq 'Full') { $verified += "Also: $n" } else { $short += $n } }
+    foreach ($n in $halfUnknown) { if ($cov.Kind -eq 'Full') { $verified += "Also not established: $n" } else { $unknown += $n } }
     Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown `
-        -CurrentValue $names -RequiredValue 'A Standard or Strict preset that applies to every recipient, with no exclusion unless another preset covers those recipients'
+        -CurrentValue $names -RequiredValue 'A Standard or Strict preset with both its EOP and its Defender for Office 365 rule Enabled that applies to every recipient, with no exclusion unless another preset covers those recipients'
 }
 
 # ── DEF-2.2 Zero-hour auto purge (spam, phishing AND malware) ────────────────

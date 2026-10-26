@@ -65,7 +65,10 @@ Describe 'Defender, Purview and Power Platform verdicts' {
         It 'DEF-2.1 needs an ENABLED preset rule, not a policy named "Standard"' {
             Def @{ AntiPhishing = @{ Available = $true; Rules = @(); Policies = @(@{ Name = 'Standard users - anti-phish' }) } }
             (V 'Test-TPControlDefenderPresetPolicies' 'DEF-2.1').State | Should -Be 'Gap'
-            Def @{ PresetRules = @{ Available = $true; ATP = @(); EOP = @(@{ Name = 'Standard Preset Security Policy'; State = 'Enabled'; RecipientDomainIs = @('contoso.com'); SentTo = @(); SentToMemberOf = @(); HasExceptions = $false }) } }
+            # Microsoft: with Defender for Office 365 the preset is on only when its EOP rule AND its
+            # Defender for Office 365 rule are both Enabled.
+            $stdRule = @{ Name = 'Standard Preset Security Policy'; State = 'Enabled'; RecipientDomainIs = @('contoso.com'); SentTo = @(); SentToMemberOf = @(); HasExceptions = $false }
+            Def @{ PresetRules = @{ Available = $true; ATPRead = $true; ATP = @($stdRule); EOP = @($stdRule) } }
             Set-TPRawData -Key 'EXO-MailboxConfig' -Data (Bag @{ AcceptedDomains = @(@{ DomainName = 'contoso.com' }); SectionStatus = @{ AcceptedDomains = 'Collected' } })
             (V 'Test-TPControlDefenderPresetPolicies' 'DEF-2.1').State | Should -Be 'Satisfied'
         }

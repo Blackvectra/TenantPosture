@@ -1033,12 +1033,15 @@ Describe 'EXO-2.6 shared mailbox sign-in — implemented, evidence-graded' {
         Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
 
         function script:SharedRaw {
-            param([object[]] $All = @(), [object[]] $Risky = @(), [string] $Section = 'Collected')
+            # Unconfirmed: the mailboxes whose sign-in state was NOT read from Entra (the
+            # collector's SharedMailboxUnconfirmed); empty means every one was read.
+            param([object[]] $All = @(), [object[]] $Risky = @(), [string] $Section = 'Collected', [object[]] $Unconfirmed = @())
             [ordered]@{
                 CollectorId='EXO-Inventory'; CollectedAt='2026-07-30T00:00:00.0000000+00:00'; Success=$true
                 Data=@{
                     AllSharedMailboxes  = $All
                     SharedMailboxSignIn = $Risky
+                    SharedMailboxUnconfirmed = $Unconfirmed
                     SectionStatus       = @{ SharedMailboxes = $Section }
                 }
             }
@@ -1084,19 +1087,28 @@ Describe 'EXO-2.6 shared mailbox sign-in — implemented, evidence-graded' {
         ($v.AffectedObjects | ConvertTo-Json -Depth 4) | Should -Match 'Confirmed via Entra'
     }
 
-    It 'Partial — not Gap — when only the license heuristic fired and Entra data was unavailable' {
+    It 'not assessed — never a verdict — when only the license heuristic fired and Entra data was unavailable' {
         Set-TPRawData -Key 'EXO-Inventory' -Data (SharedRaw `
-            -All @((MB 'billing')) -Risky @((Risk 'billing' 'LicenseProxy' 'Probable')))
+            -All @((MB 'billing')) -Risky @((Risk 'billing' 'LicenseProxy' 'Probable')) `
+            -Unconfirmed @([pscustomobject]@{ DisplayName = 'billing'; UPN = 'billing@contoso.com'; Reason = 'AAD-Users data unavailable' }))
         $v = SharedVerdict
-        $v.State | Should -Be 'Partial' `
-            -Because 'an inferred signal is not a confirmed finding — reporting a guess as a Gap is how a report loses credibility'
+        $v.State | Should -Be 'NotApplicable' `
+            -Because 'an inferred signal is not a reading of the sign-in state: it is neither a Gap nor a partial verdict'
         ($v.AffectedObjects | ConvertTo-Json -Depth 4) | Should -Match 'Inferred from license state'
+    }
+
+    It 'not assessed when Entra data was unavailable and the heuristic stayed silent (was: Satisfied)' {
+        Set-TPRawData -Key 'EXO-Inventory' -Data (SharedRaw `
+            -All @((MB 'billing')) -Risky @() `
+            -Unconfirmed @([pscustomobject]@{ DisplayName = 'billing'; UPN = 'billing@contoso.com'; Reason = 'AAD-Users data unavailable' }))
+        (SharedVerdict).State | Should -Be 'NotApplicable'
     }
 
     It 'a confirmed hit outranks heuristic-only noise in the same tenant' {
         Set-TPRawData -Key 'EXO-Inventory' -Data (SharedRaw `
             -All @((MB 'billing'),(MB 'support')) `
-            -Risky @((Risk 'billing' 'LicenseProxy' 'Probable'), (Risk 'support')))
+            -Risky @((Risk 'billing' 'LicenseProxy' 'Probable'), (Risk 'support')) `
+            -Unconfirmed @([pscustomobject]@{ DisplayName = 'billing'; UPN = 'billing@contoso.com'; Reason = 'AAD-Users data unavailable' }))
         (SharedVerdict).State | Should -Be 'Gap'
     }
 
@@ -1122,7 +1134,7 @@ Describe 'EXO-4.4 anti-spam thresholds agree with the control remediation' {
             [ordered]@{
                 CollectorId='EXO'; CollectedAt='2026-07-30T00:00:00.0000000+00:00'; Success=$true
                 Data=@{ AntiSpamPolicies = @([pscustomobject]@{
-                    IsDefault=$true; SpamAction=$Action; BulkThreshold=$Bulk; ZapEnabled=$Zap }) }
+                    IsDefault=$true; SpamAction=$Action; BulkThreshold=$Bulk; SpamZapEnabled=$Zap; PhishZapEnabled=$Zap }) }
             }
         }
         function script:SpamVerdict {

@@ -1650,7 +1650,7 @@
     {
       "ControlId": "EXO-2.6",
       "Title": "Shared Mailboxes Block Direct Sign-In",
-      "Description": "Shared mailbox accounts are blocked from direct sign-in (no active user account associated).",
+      "Description": "Every shared mailbox account is blocked from direct sign-in, as read from Entra accountEnabled; a mailbox whose account state could not be read leaves the control not assessed.",
       "BusinessRisk": "Shared mailboxes with active accounts can be signed into directly with a password, bypassing MFA. Attackers target shared mailboxes for persistence.",
       "Severity": "High",
       "Workload": "EXO",
@@ -2245,7 +2245,7 @@
     {
       "ControlId": "DEF-2.1",
       "Title": "Preset Security Policies Applied",
-      "Description": "Microsoft Standard or Strict preset security policy is active, providing baseline Defender configuration.",
+      "Description": "A Microsoft Standard or Strict preset security policy is turned on, with both its EOP rule and its Defender for Office 365 rule Enabled, and applies to every recipient.",
       "BusinessRisk": "Custom-only configurations may miss settings covered by preset policies. Presets provide Microsoft-recommended defaults as a starting floor.",
       "Severity": "Low",
       "Workload": "DEF",
@@ -2455,7 +2455,7 @@
     {
       "ControlId": "EXO-3.2",
       "Title": "Outbound Spam Sending Limits Configured",
-      "Description": "Outbound spam policy is configured with appropriate per-user sending limits and admin notification.",
+      "Description": "Every outbound spam policy in force sets Microsoft's recommended Standard sending limits or lower (500 external and 1000 internal recipients per hour, 1000 recipients per day; 0, the service default, is not a configured limit) and restricts a user who reaches one until an administrator reviews the account (ActionWhenThresholdReached BlockUser). Whether an administrator is alerted is reported as context.",
       "BusinessRisk": "Compromised accounts can send mass phishing without rate limiting. Limits and alerts provide early BEC detection.",
       "Severity": "Medium",
       "Workload": "EXO",
@@ -2463,7 +2463,7 @@
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
       "EvaluatorFunction": "Test-TPControlEXOOutboundLimits",
-      "Remediation": "Keep the default alert policy \"User restricted from sending email\" enabled with an administrator recipient (Defender portal > Policies & rules > Alert policy), or set NotifyOutboundSpam $true with NotifyOutboundSpamRecipients on every outbound spam policy in force: Set-HostedOutboundSpamFilterPolicy -Identity <policy> -NotifyOutboundSpam $true -NotifyOutboundSpamRecipients <admin>.",
+      "Remediation": "On every outbound spam policy in force: Set-HostedOutboundSpamFilterPolicy -Identity <policy> -RecipientLimitExternalPerHour 500 -RecipientLimitInternalPerHour 1000 -RecipientLimitPerDay 1000 -ActionWhenThresholdReached BlockUser (Microsoft Standard; Strict is 400, 800, 800). Keep the default alert policy \"User restricted from sending email\" enabled with an administrator recipient so a restricted user is noticed.",
       "References": {
         "CISControls": [
           "9.7"
@@ -3640,7 +3640,7 @@
     {
       "ControlId": "EXO-4.1",
       "Title": "Mailbox Audit Log Age Limit Sufficient",
-      "Description": "Mailbox audit log retention is set to at least 90 days (180 days recommended).",
+      "Description": "Mailbox auditing and Unified Audit Log ingestion are on and no custom audit retention policy keeps Exchange audit records for less than 180 days; custom audit retention policies not read leave the control not assessed.",
       "BusinessRisk": "Short audit retention prevents investigation of incidents discovered after the retention window closes. 90 days is the absolute minimum for most IR scenarios.",
       "Severity": "Medium",
       "Workload": "EXO",
@@ -3732,7 +3732,7 @@
     {
       "ControlId": "EXO-4.4",
       "Title": "Anti-Spam Inbound Policy Properly Configured",
-      "Description": "Default inbound anti-spam policy has appropriate action settings for spam, phish, and bulk mail.",
+      "Description": "The default inbound anti-spam policy moves spam to Junk Email or quarantines it (SpamAction), uses a bulk email threshold of 6 or lower (BulkThreshold), and has zero-hour auto purge on for spam and phishing (SpamZapEnabled, PhishZapEnabled).",
       "BusinessRisk": "Misconfigured inbound anti-spam allows higher volumes of spam and phishing to reach user inboxes.",
       "Severity": "Medium",
       "Workload": "EXO",
@@ -3740,7 +3740,7 @@
       "Automated": true,
       "CollectorDependency": "EXO-MailboxConfig",
       "EvaluatorFunction": "Test-TPControlEXOAntiSpamInbound",
-      "Remediation": "Set-HostedContentFilterPolicy -Identity Default -SpamAction MoveToJmf -BulkThreshold 6 -ZapEnabled $true",
+      "Remediation": "Set-HostedContentFilterPolicy -Identity Default -SpamAction MoveToJmf -BulkThreshold 6 -SpamZapEnabled $true -PhishZapEnabled $true",
       "References": {
         "CISControls": [
           "9.7"

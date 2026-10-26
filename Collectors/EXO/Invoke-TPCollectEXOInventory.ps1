@@ -20,6 +20,8 @@
 #                              gap, never evidence of a rule that does nothing
 #   - SharedMailboxSignIn      shared mailboxes whose AAD account is not blocked
 #                              (sign-in attack surface — should be BlockCredential)
+#   - SharedMailboxUnconfirmed shared mailboxes whose sign-in state was not read
+#                              from AAD-Users (EXO-2.6 cannot pass while any remain)
 #   - AllSharedMailboxes       inventory join key for evaluators
 #   - AuditDisabledMailboxes   mailboxes with AuditEnabled = $false
 #   - SmtpAuthEnabledPerUser   per-user SMTP AUTH override bypassing org disable
@@ -404,9 +406,17 @@ function Invoke-TPCollectEXOInventory {
                 }
             }
 
+            # Every shared mailbox whose sign-in state was NOT read from Entra (no AAD-Users data,
+            # or its UPN not found there). EXO-2.6 passes only when this list is empty: a mailbox
+            # judged by the license heuristic alone was never established as blocked.
+            $unconfirmed = [System.Collections.Generic.List[object]]::new()
             $signInRisky = foreach ($mbx in $shared) {
                 $upn = [string]$mbx.UserPrincipalName
                 $aadHit = if ($aadUsers) { $aadUsers[$upn] } else { $null }
+                if (-not $aadHit) {
+                    $unconfirmed.Add([ordered]@{ DisplayName = [string]$mbx.DisplayName; UPN = $upn
+                        Reason = $(if ($aadUsers) { 'Not found in AAD-Users' } else { 'AAD-Users data unavailable' }) })
+                }
                 if ($aadHit) {
                     # accountEnabled comes through Graph; if missing assume $true
                     # for shared mailboxes (default state) which is the unsafe side
@@ -438,6 +448,7 @@ function Invoke-TPCollectEXOInventory {
                 }
             }
             $result.Data.SharedMailboxSignIn = @($signInRisky)
+            $result.Data.SharedMailboxUnconfirmed = @($unconfirmed)
             $result.Data.SectionStatus.SharedMailboxes = 'Collected'
         } catch {
             $result.Data.SectionStatus.SharedMailboxes = 'Failed'
