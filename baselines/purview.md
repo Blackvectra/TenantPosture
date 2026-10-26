@@ -99,6 +99,7 @@ Create DLP policies in Purview > Data loss prevention using Microsoft-provided t
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-28, AC-4 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 3.2.1 |
 | CIS Controls v8.1 | 3.13 |
 | CMMC 2.0 | MP.L2-3.8.1 |
 | ISO/IEC 27001:2022 | A.8.12 |

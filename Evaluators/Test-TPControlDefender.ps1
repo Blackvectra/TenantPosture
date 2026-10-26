@@ -219,8 +219,8 @@ function Test-TPControlDefender {
     }
     if (& $apGate 'DEF-1.5') {
         Add-TPPolicySetFinding -ControlId 'DEF-1.5' -Control (Get-TPControlById -ControlId 'DEF-1.5') -FrameworkIds (Get-TPFrameworkCitations -ControlId 'DEF-1.5') -Policies $apForce `
-            -Pass { [int](& $f $_ 'PhishThresholdLevel' 1) -ge 2 } -Value { "PhishThresholdLevel=$(& $f $_ 'PhishThresholdLevel' 1)" } `
-            -PassDetail 'Phishing threshold is 2 (Aggressive) or higher.' -FailDetail 'Phishing threshold is 1 (the default) for these recipients; CIS and CISA SCuBA recommend 2 or higher.' -RequiredValue 'PhishThresholdLevel >= 2'
+            -Pass { [int](& $f $_ 'PhishThresholdLevel' 1) -ge 3 } -Value { "PhishThresholdLevel=$(& $f $_ 'PhishThresholdLevel' 1)" } `
+            -PassDetail 'Phishing threshold is 3 (More aggressive) or higher.' -FailDetail 'Phishing threshold is below 3 (More aggressive) for these recipients; CIS Microsoft 365 Foundations v7.0.0 2.1.7 requires at least 3, the level of Microsoft''s Standard preset (Strict uses 4).' -RequiredValue 'PhishThresholdLevel >= 3'
     }
     if (& $apGate 'DEF-1.6') {
         Add-TPPolicySetFinding -ControlId 'DEF-1.6' -Control (Get-TPControlById -ControlId 'DEF-1.6') -FrameworkIds (Get-TPFrameworkCitations -ControlId 'DEF-1.6') -Policies $apForce `

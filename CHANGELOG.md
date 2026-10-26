@@ -2,12 +2,31 @@
 
 ## Unreleased
 
+- **[Baseline v1.1] AAD-3.1 allows two to four Global Administrators, not eight (owner's decision, 2026-10-25).**
+  CIS Microsoft 365 Foundations v7.0.0 1.1.3 sets two to four; the tool and the NRG baseline v1.0 allowed eight, as
+  CISA SCuBA MS.AAD.7.1v1 does. The count includes eligible assignments, the break-glass pair included. A tenant with
+  five to eight Global Administrators now fails AAD-3.1 while still meeting SCuBA, whose alignment becomes Partial
+  (stricter). `Config/tp-baseline.json` is version 1.1, so a run compared against a v1.0 run reports that the standard
+  changed instead of counting a regression. AAD-3.1 now cites CIS 1.1.3; 70 controls cite 52 recommendations.
+
+- **[Accuracy] Eight checks tightened to CIS Microsoft 365 Foundations v7.0.0, each now citing it.** The v7.0.0
+  re-map left these uncited because each passed something the benchmark's audit fails. They now judge what the
+  benchmark audits, so client verdicts change: DEF-1.5 requires anti-phishing threshold 3, Microsoft's Standard preset
+  level (2 passed); AAD-12.1 lists every member user who is not MFA capable, which includes users registered only
+  with a method the authentication methods policy turned off (it read "registered"); EXO-1.4 requires DKIM to be
+  signing (Status Valid) on every accepted domain, relay domains included; SPO-1.4 and SPO-3.4 require guest access
+  to expire after 30 days (any expiry passed; a longer one is now Partial); SPO-2.6 and SPO-2.7 require re-verification
+  within 15 days (SPO-2.6 accepted any period and SPO-2.7 accepted 30; longer is Partial); PVW-1.3 counts only an
+  enforced DLP policy that covers Exchange, SharePoint, OneDrive or Teams. A results file that lacks the value a check
+  now needs (MFA capability, DKIM Status, DLP workloads) reports that check not assessed, never a pass.
+  `TP.CisV7Thresholds.Tests.ps1` pins every boundary.
+
 - **[Accuracy] CIS Microsoft 365 Foundations citations moved to v7.0.0, and only where the check matches.** Every
   control carried a CIS number because a test required one; 78 of the 159 distinct numbers do not exist in v7.0.0,
   most of the others name a different recommendation there, and the Intune, Power Platform and DNS controls cited
   sections the benchmark does not have. Each control was checked against the v7.0.0 audit procedure and its own
-  evaluator, and cites a recommendation only when every state it passes also passes that audit. 61 controls now cite
-  47 of the 160 recommendations; 143 are deliberately uncited, each with its reason, in
+  evaluator, and cites a recommendation only when every state it passes also passes that audit. 61 controls cited
+  47 of the 160 recommendations at the re-map (69 and 51 after the tightening above); the rest are deliberately uncited, each with its reason, in
   `Config/cis-m365-uncited-controls.json`. Expect the CIS card to score fewer controls and to move: it now measures
   only what the tool verified against this benchmark. The report, workbook and playbook name v7.0.0. New:
   `Config/framework-baselines/cis-m365-v7.0.0.txt` (the 160 numbers) and `docs/TP-CIS-M365-ALIGNMENT.md` (every

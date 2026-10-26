@@ -36,9 +36,9 @@ Describe 'NRG baseline plan — predictive, never a verdict' {
         foreach ($r in $script:Plan.Controls) { $r.Expected | Should -BeIn $script:Buckets -Because "$($r.ControlId) must land in a known bucket" }
     }
 
-    It 'keeps BaselineVersion 1.0 and names the tier' {
-        $script:Plan.BaselineVersion | Should -Be '1.0'
-        $script:Plan.Summary.BaselineVersion | Should -Be '1.0'
+    It 'keeps BaselineVersion 1.1 and names the tier' {
+        $script:Plan.BaselineVersion | Should -Be '1.1'
+        $script:Plan.Summary.BaselineVersion | Should -Be '1.1'
         $script:Plan.TargetTier | Should -Be 'Standard'
     }
 

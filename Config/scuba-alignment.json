@@ -180,14 +180,14 @@
     },
     {
       "Control": "AAD-3.1",
-      "Title": "Global Administrator Count 2-8, Cloud-Only",
+      "Title": "Global Administrator Count 2-4, Cloud-Only",
       "CitedBefore": "MS.AAD.7.1v1",
       "CitedIdStatus": "current",
       "MigrationNewId": null,
       "Current": "MS.AAD.7.1v1",
-      "Relation": "Equivalent",
+      "Relation": "Partial",
       "RequirementStrength": "SHALL",
-      "Note": "Both require between two and eight Global Administrators."
+      "Note": "Stricter than the rule: SCuBA allows two to eight Global Administrators, NRG (since baseline v1.1) two to four, as CIS 1.1.3 does. Every NRG pass meets SCuBA; a tenant with five to eight passes SCuBA and fails NRG."
     },
     {
       "Control": "AAD-3.2",

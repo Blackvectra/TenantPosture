@@ -22,7 +22,7 @@ Describe 'Controls that report the same fact agree' {
         Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
         function Verdict([string]$Cid) { Get-TPFindings | Where-Object { $_.ControlId -eq $Cid } | Select-Object -First 1 }
         function Member([string]$Upn, [bool]$Enabled = $true) { @{ UserPrincipalName = $Upn; DisplayName = $Upn; AccountEnabled = $Enabled; UserType = 'Member' } }
-        function Reg([string]$Upn, [bool]$Mfa) { @{ UserPrincipalName = $Upn; UserDisplayName = $Upn; IsEnabled = $true; IsMfaRegistered = $Mfa } }
+        function Reg([string]$Upn, [bool]$Mfa) { @{ UserPrincipalName = $Upn; UserDisplayName = $Upn; IsEnabled = $true; IsMfaRegistered = $Mfa; IsMfaCapable = $Mfa } }
     }
 
     Context 'AAD-12.1 counts enabled members, as AAD-1.2 does' {

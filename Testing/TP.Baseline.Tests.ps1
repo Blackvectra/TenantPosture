@@ -498,13 +498,13 @@ Describe 'NRG Security Baseline — report rendering' {
             TenantDomain = 'contoso.onmicrosoft.com'; TenantId = '00000000-0000-0000-0000-000000000000'
             Operator = 'assessor@nrgtechservices.com'; AssessmentDate = 'September 29, 2026'
             AssessmentTime = '2026-09-29T00:00:00.0000000+00:00'; ToolVersion = '4.14.3'; QuickScan = $false
-            BaselineVersion = '1.0'; TargetTier = 'Minimum'
+            BaselineVersion = '1.1'; TargetTier = 'Minimum'
         }
         $script:conn = @{ Graph = $true; EXO = $true; IPPSSession = $true; Teams = $true; SharePoint = $true }
         $script:regs = [ordered]@{
             Available = $true; Comparable = $false; BaselineVersionChanged = $true; TargetTierChanged = $false
-            PriorBaselineVersion = '0.9'; PriorTargetTier = 'Minimum'; CurrentBaselineVersion = '1.0'; CurrentTargetTier = 'Minimum'
-            Note = 'The baseline context changed (v0.9 Minimum -> v1.0 Minimum). A lower result does not mean the client got worse; only controls required in both runs at the same tier are compared.'
+            PriorBaselineVersion = '1.0'; PriorTargetTier = 'Minimum'; CurrentBaselineVersion = '1.1'; CurrentTargetTier = 'Minimum'
+            Note = 'The baseline context changed (v1.0 Minimum -> v1.1 Minimum). A lower result does not mean the client got worse; only controls required in both runs at the same tier are compared.'
             Regressions = @([pscustomobject]@{ ControlId = 'AAD-1.2'; Title = 'MFA Required for All Users'; RequiredTier = 'Minimum'; Previous = 'Satisfied'; Current = 'Failed'; Reason = 'Gap: No enforcing policy.' })
             Improvements = @()
         }
@@ -525,8 +525,8 @@ Describe 'NRG Security Baseline — report rendering' {
 
     It 'renders the section in both reports with the version and tier from the metadata' {
         $script:html | Should -Match "id='tp-baseline'"
-        $script:html | Should -Match 'NRG Security Baseline v1\.0 — Minimum tier'
-        $script:md   | Should -Match '## NRG Security Baseline v1\.0 — Minimum tier'
+        $script:html | Should -Match 'NRG Security Baseline v1\.1 — Minimum tier'
+        $script:md   | Should -Match '## NRG Security Baseline v1\.1 — Minimum tier'
     }
     It 'keeps configuration compliance and effectiveness visibility as separate blocks' {
         $script:html | Should -Match 'Configuration compliance'

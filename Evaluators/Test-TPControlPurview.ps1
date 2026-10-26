@@ -115,14 +115,36 @@ function Test-TPControlPurview {
         # Mode is checked too so results from any other source read the same.
         $modeOf  = { param($p) [string](Get-TPObjectField -Item $p -Key 'Mode' -Default '') }
         $testing = @($all | Where-Object { (& $modeOf $_) -like 'Test*' }).Count
-        $enforcedList = @($all | Where-Object { (Get-TPObjectField -Item $_ -Key 'Enabled' -Default $false) -eq $true -and ((& $modeOf $_) -eq 'Enable' -or -not (& $modeOf $_)) })
+        $allEnforced = @($all | Where-Object { (Get-TPObjectField -Item $_ -Key 'Enabled' -Default $false) -eq $true -and ((& $modeOf $_) -eq 'Enable' -or -not (& $modeOf $_)) })
+        # The policy has to reach mail or files: Exchange, SharePoint, OneDrive
+        # or Teams (CIS Microsoft 365 Foundations v7.0.0 3.2.1). An enforcing
+        # Endpoint-only or Copilot-only policy protects neither. A policy whose
+        # workloads were not recorded is not established either way.
+        $core = @('Exchange', 'SharePoint', 'OneDriveForBusiness', 'Teams')
+        $wlOf = { param($p) @(Get-TPObjectField -Item $p -Key 'Workloads' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ }) }
+        $enforcedList = @($allEnforced | Where-Object { @(& $wlOf $_ | Where-Object { $_ -in $core }).Count -gt 0 })
+        $wlUnknown    = @($allEnforced | Where-Object { @(& $wlOf $_).Count -eq 0 })
+        $otherOnly    = @($allEnforced | Where-Object { @(& $wlOf $_).Count -gt 0 -and @(& $wlOf $_ | Where-Object { $_ -in $core }).Count -eq 0 })
         $enabled = $enforcedList.Count
-        if ($enabled -gt 0) {
+        if ($enabled -eq 0 -and $wlUnknown.Count -gt 0) {
+            Add-TPFinding -ControlId 'PVW-1.3' -State 'NotApplicable' `
+                -Category 'Compliance' -Title $c.Title `
+                -Detail "$($wlUnknown.Count) DLP policy(ies) are enforced, but which workloads they cover was not recorded, so whether any protects Exchange, SharePoint, OneDrive or Teams is not established; not assessed." `
+                -FrameworkIds (Get-TPFrameworkCitations -ControlId 'PVW-1.3')
+        } elseif ($enabled -eq 0 -and $otherOnly.Count -gt 0) {
+            Add-TPFinding -ControlId 'PVW-1.3' -State 'Gap' `
+                -Category 'Compliance' -Title $c.Title -Severity $c.Severity `
+                -Detail "$($otherOnly.Count) DLP policy(ies) are enforced, but none covers Exchange, SharePoint, OneDrive or Teams (they cover: $((@($otherOnly | ForEach-Object { & $wlOf $_ }) | Select-Object -Unique) -join ', ')). Sensitive information in mail and files is not protected." `
+                -CurrentValue "0 enforced DLP policies on Exchange, SharePoint, OneDrive or Teams" `
+                -RequiredValue 'An enforced DLP policy covering Exchange, SharePoint, OneDrive or Teams' `
+                -Remediation $c.Remediation `
+                -FrameworkIds (Get-TPFrameworkCitations -ControlId 'PVW-1.3')
+        } elseif ($enabled -gt 0) {
             $rest = $all.Count - $enabled
-            $restNote = if ($rest -gt 0) { " The other $rest are in test mode or turned off." } else { '' }
+            $restNote = if ($rest -gt 0) { " The other $rest are in test mode, turned off, or cover none of Exchange, SharePoint, OneDrive and Teams." } else { '' }
             Add-TPFinding -ControlId 'PVW-1.3' -State 'Satisfied' `
                 -Category 'Compliance' -Title $c.Title -Severity 'Informational' `
-                -Detail "$enabled of $($all.Count) DLP policies are enforced: $((@($enforcedList | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '') }) | Select-Object -First 5) -join ', ').$restNote" `
+                -Detail "$enabled of $($all.Count) DLP policies are enforced on Exchange, SharePoint, OneDrive or Teams: $((@($enforcedList | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '') }) | Select-Object -First 5) -join ', ').$restNote" `
                 -CurrentValue "$enabled of $($all.Count) DLP policies enforced" `
                 -FrameworkIds (Get-TPFrameworkCitations -ControlId 'PVW-1.3')
         } elseif ($testing -gt 0) {

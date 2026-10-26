@@ -202,7 +202,7 @@ Describe 'Baseline exception cmdlets' {
         $row.Disposition | Should -Be 'ApprovedException'
         $row.BaselineStatus | Should -Be 'ApprovedException'
         $row.ReasonCode | Should -Be 'ControlFailed'
-        $c.BaselineVersion | Should -Be '1.0'
+        $c.BaselineVersion | Should -Be '1.1'
         Clear-TPState
     }
 

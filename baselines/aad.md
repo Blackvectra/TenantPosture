@@ -265,26 +265,27 @@ CA policy: Grant = Require device to be marked as compliant, or Require Microsof
 
 ---
 
-### AAD-3.1 — Global Administrator Count 2-8, Cloud-Only
+### AAD-3.1 — Global Administrator Count 2-4, Cloud-Only
 
 **Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
 
 **License required:** Included (all plans)
 
 **Description:**
-The tenant has 2-8 Global Administrators, all cloud-only (not synced from on-premises AD).
+The tenant has 2-4 Global Administrators (permanent and eligible together), all cloud-only (not synced from on-premises AD).
 
 **Business risk:**
 More than 8 GAs increases attack surface. Synced GA accounts allow on-prem compromise to escalate directly to cloud tenant control.
 
 **Remediation:**
-Reduce GA count to 2-8 break-glass accounts. Remove GA from any on-premises synced accounts and assign to cloud-only accounts.
+Reduce the Global Administrator count to between 2 and 4, the break-glass pair included; move day-to-day work to scoped roles (Exchange, User, Security Administrator). Remove GA from any on-premises synced account and assign it to cloud-only accounts.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6, AC-6(5) |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 1.1.3 |
 | CIS Controls v8.1 | 5.4, 6.8 |
 | CISA SCuBA | MS.AAD.7.1v1 |
 | CMMC 2.0 | AC.L2-3.1.6 |
@@ -1296,6 +1297,7 @@ Entra ID > Users > [select user] > Authentication methods > Add method. For bulk
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2(1) |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.3.4 |
 | CIS Controls v8.1 | 6.3 |
 | CISA SCuBA | MS.AAD.3.1v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |

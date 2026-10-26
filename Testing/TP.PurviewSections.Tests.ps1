@@ -182,7 +182,7 @@ Describe 'Purview Security & Compliance sections' {
             St 'PVW-1.2' | Should -Be 'NotApplicable'
         }
         It 'PVW-1.3: an enforced DLP policy passes, test mode is part-way, none is a Gap' {
-            Set-Pvw @{ DLPPolicies = @(@{ Name = 'PII'; Enabled = $true; Mode = 'Enable' }) };                   St 'PVW-1.3' | Should -Be 'Satisfied'
+            Set-Pvw @{ DLPPolicies = @(@{ Name = 'PII'; Enabled = $true; Mode = 'Enable'; Workloads = @('Exchange') }) }; St 'PVW-1.3' | Should -Be 'Satisfied'
             Set-Pvw @{ DLPPolicies = @(@{ Name = 'PII'; Enabled = $false; Mode = 'TestWithNotifications' }) };   St 'PVW-1.3' | Should -Be 'Partial'
             Set-Pvw @{ DLPPolicies = @(@{ Name = 'PII'; Enabled = $false; Mode = 'Disable' }) };                 St 'PVW-1.3' | Should -Be 'Gap'
             Set-Pvw @{};                                                                                           St 'PVW-1.3' | Should -Be 'Gap'

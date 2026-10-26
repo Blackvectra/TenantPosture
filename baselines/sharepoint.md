@@ -130,6 +130,7 @@ Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-2(3) |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.9 |
 | CIS Controls v8.1 | 6.2, 3.4 |
 | CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.18 |
@@ -342,6 +343,7 @@ Set-SPOTenant -EmailAttestationRequired $true -EmailAttestationReAuthDays 30
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-3, AC-3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.10 |
 | CIS Controls v8.1 | 3.3 |
 | CMMC 2.0 | IA.L1-3.5.2 |
 | ISO/IEC 27001:2022 | A.5.17, A.5.18 |
@@ -372,6 +374,7 @@ Set-SPOTenant -EmailAttestationReAuthDays 30
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-12 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.10 |
 | CIS Controls v8.1 | 6.2 |
 | CISA SCuBA | MS.SHAREPOINT.3.3v1 |
 | CMMC 2.0 | AC.L2-3.1.11 |
@@ -523,6 +526,7 @@ Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-2(3) |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.9 |
 | CIS Controls v8.1 | 6.2, 3.4 |
 | CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.18 |

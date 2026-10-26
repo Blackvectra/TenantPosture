@@ -154,13 +154,20 @@ function Test-TPControlSharePoint {
         } else {
             $required = [bool](Get-TPObjectField -Item $shell -Key 'ExternalUserExpirationRequired' -Default $false)
             $expDays  = [int](Get-TPObjectField -Item $shell -Key 'ExternalUserExpireInDays' -Default 0)
-            if ($required -and $expDays -gt 0) {
+            # 30 days: CIS Microsoft 365 Foundations v7.0.0 7.2.9 (the setting
+            # accepts 30 to 730, so 30 or less means exactly 30).
+            if ($required -and $expDays -gt 0 -and $expDays -le 30) {
                 Add-TPFinding -ControlId 'SPO-1.4' -State 'Satisfied' -Category 'SharePoint' -Title $c.Title -Severity 'Informational' `
                     -Detail "Guest access expires after $expDays day(s)." -FrameworkIds $cit
+            } elseif ($required -and $expDays -gt 30) {
+                Add-TPFinding -ControlId 'SPO-1.4' -State 'Partial' -Category 'SharePoint' -Title $c.Title -Severity $c.Severity `
+                    -Detail "Guest access expires, but only after $expDays days; the requirement is 30." `
+                    -CurrentValue "ExternalUserExpireInDays = $expDays" -RequiredValue 'ExternalUserExpirationRequired = True with ExternalUserExpireInDays = 30' `
+                    -Remediation $c.Remediation -FrameworkIds $cit
             } else {
                 Add-TPFinding -ControlId 'SPO-1.4' -State 'Gap' -Category 'SharePoint' -Title $c.Title -Severity $c.Severity `
                     -Detail 'Guest access to SharePoint never expires. External users keep access to shared content indefinitely.' `
-                    -CurrentValue "ExternalUserExpirationRequired = $required" -RequiredValue 'ExternalUserExpirationRequired = True with ExternalUserExpireInDays set' `
+                    -CurrentValue "ExternalUserExpirationRequired = $required" -RequiredValue 'ExternalUserExpirationRequired = True with ExternalUserExpireInDays = 30' `
                     -Remediation $c.Remediation -FrameworkIds $cit
             }
         }
@@ -395,10 +402,13 @@ function Test-TPControlSPOEmailAttestation {
     if ($unread) { Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail $unread; return }
     $required = [bool](Get-TPObjectField -Item $sp -Key 'EmailAttestationRequired' -Default $false)
     $reauth   = [int](Get-TPObjectField -Item $sp -Key 'EmailAttestationReAuthDays' -Default 0)
-    if ($required) {
+    # 15 days or fewer: CIS Microsoft 365 Foundations v7.0.0 7.2.10.
+    if ($required -and $reauth -gt 0 -and $reauth -le 15) {
         Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "External recipients must periodically re-verify their email to keep access (re-attestation every $reauth day(s))."
+    } elseif ($required) {
+        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "Email attestation is required, but recipients re-verify only every $reauth day(s); the requirement is 15 days or fewer." -CurrentValue "EmailAttestationReAuthDays = $reauth" -RequiredValue 'EmailAttestationRequired = True, EmailAttestationReAuthDays <= 15' -Remediation $ctrl.Remediation
     } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Email attestation is not required for external sharing. Recipients of verification-code links are never asked to re-prove control of their mailbox, so forwarded or intercepted links grant lasting access.' -CurrentValue 'EmailAttestationRequired = False' -RequiredValue 'EmailAttestationRequired = True' -Remediation $ctrl.Remediation
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Email attestation is not required for external sharing. Recipients of verification-code links are never asked to re-prove control of their mailbox, so forwarded or intercepted links grant lasting access.' -CurrentValue 'EmailAttestationRequired = False' -RequiredValue 'EmailAttestationRequired = True, EmailAttestationReAuthDays <= 15' -Remediation $ctrl.Remediation
     }
 }
 
@@ -430,12 +440,14 @@ function Test-TPControlSPOReauth {
     if ($unread) { Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail $unread; return }
     $attest     = [bool](Get-TPObjectField -Item $sp -Key 'EmailAttestationRequired' -Default $false)
     $reauthDays = [int](Get-TPObjectField -Item $sp -Key 'EmailAttestationReAuthDays' -Default 0)
-    if ($attest -and $reauthDays -gt 0 -and $reauthDays -le 30) {
+    # 15 days or fewer: CIS Microsoft 365 Foundations v7.0.0 7.2.10 (CISA
+    # SCuBA MS.SHAREPOINT.3.3v2 allows 30, so a pass here meets both).
+    if ($attest -and $reauthDays -gt 0 -and $reauthDays -le 15) {
         Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "External recipients must reauthenticate every $reauthDays day(s)."
-    } elseif ($attest -and $reauthDays -gt 30) {
-        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "External recipients reauthenticate every $reauthDays days — longer than the recommended 30." -CurrentValue "EmailAttestationReAuthDays = $reauthDays" -RequiredValue '30 days or fewer' -Remediation $ctrl.Remediation
+    } elseif ($attest -and $reauthDays -gt 15) {
+        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "External recipients reauthenticate every $reauthDays days, longer than the required 15." -CurrentValue "EmailAttestationReAuthDays = $reauthDays" -RequiredValue '15 days or fewer' -Remediation $ctrl.Remediation
     } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'External recipients are never asked to reauthenticate (email attestation is off).' -CurrentValue "EmailAttestationRequired = $attest" -RequiredValue 'EmailAttestationRequired = True, EmailAttestationReAuthDays <= 30' -Remediation $ctrl.Remediation
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'External recipients are never asked to reauthenticate (email attestation is off).' -CurrentValue "EmailAttestationRequired = $attest" -RequiredValue 'EmailAttestationRequired = True, EmailAttestationReAuthDays <= 15' -Remediation $ctrl.Remediation
     }
 }
 
@@ -591,9 +603,12 @@ function Test-TPControlSPOGuestExpiry {
     if ($unread) { Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail $unread; return }
     $required = [bool](Get-TPObjectField -Item $sp -Key 'ExternalUserExpirationRequired' -Default $false)
     $expDays  = [int](Get-TPObjectField -Item $sp -Key 'ExternalUserExpireInDays' -Default 0)
-    if ($required -and $expDays -gt 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Guest (external user) access automatically expires after $expDays day(s) of inactivity."
+    # 30 days, as SPO-1.4 (CIS Microsoft 365 Foundations v7.0.0 7.2.9).
+    if ($required -and $expDays -gt 0 -and $expDays -le 30) {
+        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Guest (external user) access automatically expires after $expDays day(s)."
+    } elseif ($required -and $expDays -gt 30) {
+        Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail "Guest access expires, but only after $expDays days; the requirement is 30." -CurrentValue "ExternalUserExpireInDays = $expDays" -RequiredValue 'ExternalUserExpirationRequired = True with ExternalUserExpireInDays = 30' -Remediation $ctrl.Remediation
     } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Guest access never automatically expires (ExternalUserExpirationRequired off). External users retain access to shared content indefinitely, accumulating stale standing access.' -CurrentValue "ExternalUserExpirationRequired = $required" -RequiredValue 'ExternalUserExpirationRequired = True with a finite ExternalUserExpireInDays' -Remediation $ctrl.Remediation
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail 'Guest access never automatically expires (ExternalUserExpirationRequired off). External users retain access to shared content indefinitely, accumulating stale standing access.' -CurrentValue "ExternalUserExpirationRequired = $required" -RequiredValue 'ExternalUserExpirationRequired = True with ExternalUserExpireInDays = 30' -Remediation $ctrl.Remediation
     }
 }

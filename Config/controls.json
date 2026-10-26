@@ -130,8 +130,8 @@
     },
     {
       "ControlId": "AAD-3.1",
-      "Title": "Global Administrator Count 2-8, Cloud-Only",
-      "Description": "The tenant has 2-8 Global Administrators, all cloud-only (not synced from on-premises AD).",
+      "Title": "Global Administrator Count 2-4, Cloud-Only",
+      "Description": "The tenant has 2-4 Global Administrators (permanent and eligible together), all cloud-only (not synced from on-premises AD).",
       "BusinessRisk": "More than 8 GAs increases attack surface. Synced GA accounts allow on-prem compromise to escalate directly to cloud tenant control.",
       "Severity": "High",
       "Workload": "AAD",
@@ -139,13 +139,13 @@
       "Automated": true,
       "CollectorDependency": "AAD-DirectoryRoles",
       "EvaluatorFunction": "Test-TPControlAADPrivAccess",
-      "Remediation": "Reduce GA count to 2-8 break-glass accounts. Remove GA from any on-premises synced accounts and assign to cloud-only accounts.",
+      "Remediation": "Reduce the Global Administrator count to between 2 and 4, the break-glass pair included; move day-to-day work to scoped roles (Exchange, User, Security Administrator). Remove GA from any on-premises synced account and assign it to cloud-only accounts.",
       "References": {
         "CISControls": [
           "5.4",
           "6.8"
         ],
-        "CIS": "",
+        "CIS": "1.1.3",
         "SCuBA": "MS.AAD.7.1v1",
         "NIST": "AC-6, AC-6(5)",
         "CMMC": "AC.L2-3.1.6",
@@ -269,7 +269,7 @@
         "CISControls": [
           "9.5"
         ],
-        "CIS": "",
+        "CIS": "2.1.9",
         "SCuBA": "MS.EXO.3.1v1",
         "NIST": "SC-8, SC-13",
         "CMMC": "SC.L2-3.13.8",
@@ -808,7 +808,7 @@
     {
       "ControlId": "DEF-1.5",
       "Title": "Phishing Threshold Level Aggressive",
-      "Description": "Anti-phishing PhishThresholdLevel is set to 2 (Aggressive) or higher.",
+      "Description": "Anti-phishing PhishThresholdLevel is set to 3 (More aggressive) or higher in every anti-phishing policy in force, the level CIS Microsoft 365 Foundations v7.0.0 2.1.7 requires and Microsoft's Standard preset uses.",
       "BusinessRisk": "Standard threshold misses sophisticated phishing that aggressive scanning catches.",
       "Severity": "Low",
       "Workload": "DEF",
@@ -816,12 +816,12 @@
       "Automated": true,
       "CollectorDependency": "Defender-Policies",
       "EvaluatorFunction": "Test-TPControlDefender",
-      "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -PhishThresholdLevel 2",
+      "Remediation": "Set-AntiPhishPolicy -Identity \"Office365 AntiPhish Default\" -PhishThresholdLevel 3 (and the same on every custom anti-phishing policy in force), or apply the Standard or Strict preset security policy.",
       "References": {
         "CISControls": [
           "9.7"
         ],
-        "CIS": "",
+        "CIS": "2.1.7",
         "NIST": "SI-3, SI-4",
         "CMMC": "SI.L1-3.14.2",
         "MITRE": [
@@ -955,7 +955,7 @@
     {
       "ControlId": "SPO-1.4",
       "Title": "Guest Access Expiration Configured",
-      "Description": "Guest access to SharePoint is configured to expire and require re-authentication.",
+      "Description": "Guest access to SharePoint and OneDrive expires automatically after 30 days (ExternalUserExpirationRequired with ExternalUserExpireInDays 30).",
       "BusinessRisk": "Permanent guest access means departed vendors and compromised external accounts retain access indefinitely.",
       "Severity": "Medium",
       "Workload": "SPO",
@@ -963,13 +963,13 @@
       "Automated": true,
       "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-TPControlSharePoint",
-      "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60",
+      "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 30",
       "References": {
         "CISControls": [
           "6.2",
           "3.4"
         ],
-        "CIS": "",
+        "CIS": "7.2.9",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L1-3.1.1",
         "MITRE": [
@@ -1255,7 +1255,7 @@
     {
       "ControlId": "PVW-1.3",
       "Title": "DLP Policy Active for Sensitive Data",
-      "Description": "At least one active DLP policy protects sensitive information types from unauthorized sharing.",
+      "Description": "At least one enforced DLP policy (Mode Enable) covers Exchange, SharePoint, OneDrive or Teams and protects sensitive information types from unauthorized sharing.",
       "BusinessRisk": "Without DLP, PII, financial data, and PHI can be emailed externally or shared with unauthenticated recipients without detection.",
       "Severity": "High",
       "Workload": "PVW",
@@ -1268,7 +1268,7 @@
         "CISControls": [
           "3.13"
         ],
-        "CIS": "",
+        "CIS": "3.2.1",
         "SCuBA": "",
         "NIST": "SC-28, AC-4",
         "CMMC": "MP.L2-3.8.1",
@@ -2728,7 +2728,7 @@
     {
       "ControlId": "SPO-2.6",
       "Title": "Email Attestation Required for Sharing",
-      "Description": "External users must verify their email address before accessing shared SharePoint content.",
+      "Description": "External users must verify their email address before accessing shared SharePoint content, and re-verify every 15 days or fewer.",
       "BusinessRisk": "Without email attestation, anonymous link recipients have no identity verification — links shared to wrong address are accessed by unintended parties.",
       "Severity": "Medium",
       "Workload": "SPO",
@@ -2736,12 +2736,12 @@
       "Automated": true,
       "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-TPControlSPOEmailAttestation",
-      "Remediation": "Set-SPOTenant -EmailAttestationRequired $true -EmailAttestationReAuthDays 30",
+      "Remediation": "Set-SPOTenant -EmailAttestationRequired $true -EmailAttestationReAuthDays 15",
       "References": {
         "CISControls": [
           "3.3"
         ],
-        "CIS": "",
+        "CIS": "7.2.10",
         "SCuBA": "",
         "NIST": "IA-3, AC-3",
         "CMMC": "IA.L1-3.5.2",
@@ -2758,7 +2758,7 @@
     {
       "ControlId": "SPO-2.7",
       "Title": "Reauthentication Required for Sharing Links",
-      "Description": "Users accessing SharePoint via sharing links must reauthenticate periodically.",
+      "Description": "People who access SharePoint with a verification code must reauthenticate every 15 days or fewer.",
       "BusinessRisk": "Persistent sharing link sessions allow access after the sharing intent has ended or the account has been compromised.",
       "Severity": "Low",
       "Workload": "SPO",
@@ -2766,12 +2766,12 @@
       "Automated": true,
       "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-TPControlSPOReauth",
-      "Remediation": "Set-SPOTenant -EmailAttestationReAuthDays 30",
+      "Remediation": "Set-SPOTenant -EmailAttestationRequired $true -EmailAttestationReAuthDays 15",
       "References": {
         "CISControls": [
           "6.2"
         ],
-        "CIS": "",
+        "CIS": "7.2.10",
         "NIST": "AC-12",
         "CMMC": "AC.L2-3.1.11",
         "MITRE": [
@@ -3974,7 +3974,7 @@
     {
       "ControlId": "SPO-3.4",
       "Title": "SharePoint Guest Access Expiration Required",
-      "Description": "External guest access to SharePoint requires periodic re-authentication and is configured to expire.",
+      "Description": "External guest access to SharePoint expires automatically after 30 days, so standing guest access has to be renewed.",
       "BusinessRisk": "Permanent guest access accumulates over time — departed vendors and ex-clients retain access to organizational data indefinitely.",
       "Severity": "Medium",
       "Workload": "SPO",
@@ -3982,13 +3982,13 @@
       "Automated": true,
       "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-TPControlSPOGuestExpiry",
-      "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 60",
+      "Remediation": "Set-SPOTenant -ExternalUserExpirationRequired $true -ExternalUserExpireInDays 30",
       "References": {
         "CISControls": [
           "6.2",
           "3.4"
         ],
-        "CIS": "",
+        "CIS": "7.2.9",
         "NIST": "AC-2(3)",
         "CMMC": "AC.L1-3.1.1",
         "MITRE": [
@@ -5521,7 +5521,7 @@
     {
       "ControlId": "AAD-12.1",
       "Title": "Users Without MFA — Named List",
-      "Description": "Identifies every enabled user account with no MFA method registered by name and UPN.",
+      "Description": "Identifies by name and UPN every enabled member account that is not MFA capable: no strong method registered, or only one the authentication methods policy does not allow (Microsoft's isMfaCapable).",
       "BusinessRisk": "An account with no MFA method registered can rely on its password alone at sign-in wherever no policy requires more of it, and a phished or reused password may then give an attacker mailbox, Teams and SharePoint access and the ability to run BEC campaigns. A registration count does not show which policies target the account or how its sign-ins were satisfied.",
       "Severity": "Critical",
       "Workload": "AAD",
@@ -5535,7 +5535,7 @@
         "CISControls": [
           "6.3"
         ],
-        "CIS": "",
+        "CIS": "5.2.3.4",
         "SCuBA": "MS.AAD.3.1v1",
         "NIST": "IA-2(1)",
         "CMMC": "IA.L2-3.5.3",

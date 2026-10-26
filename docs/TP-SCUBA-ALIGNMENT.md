@@ -10,8 +10,8 @@ Checked against **ScubaGear 2.0.0** and its official migration file (`PowerShell
 
 | Relation | Meaning | Citations |
 |---|---|---|
-| Equivalent | The NRG evaluator checks the same requirement. | 25 |
-| Partial | The NRG evaluator covers part of the requirement, or a stricter or looser form of it. Read the note. | 41 |
+| Equivalent | The NRG evaluator checks the same requirement. | 24 |
+| Partial | The NRG evaluator covers part of the requirement, or a stricter or looser form of it. Read the note. | 42 |
 | Manual | The NRG control is manual or advisory; it asserts nothing about the rule. | 3 |
 | Unsupported | The NRG control does not establish this requirement. The citation stays only where the current id still exists, flagged; an obsolete id with no equivalent was removed. | 18 |
 
@@ -42,7 +42,6 @@ The old rule id no longer exists and the migrated range does not describe what t
 | AAD-10.2 Privileged Accounts Use Dedicated Cloud-Only Accounts | `MS.AAD.7.3v1` | SHALL | same | Privileged accounts are cloud-only and dedicated. |
 | AAD-11.1 Device Code Authentication Flow Blocked | `MS.AAD.3.9v1` | SHOULD | same | Device code flow blocked (for all users on all applications). |
 | AAD-2.3 Device Compliance Enforced via CA | `MS.AAD.3.7v1` | SHOULD | same | Managed or compliant devices required. |
-| AAD-3.1 Global Administrator Count 2-8, Cloud-Only | `MS.AAD.7.1v1` | SHALL | same | Both require between two and eight Global Administrators. |
 | AAD-3.5 PIM GA Activation Requires Approval | `MS.AAD.7.6v1` | SHALL | same | Global Administrator activation requires approval. |
 | AAD-4.1 Guest Invite Permissions Restricted | `MS.AAD.8.2v1` | SHOULD | same | Only Guest Inviters can invite guests. |
 | AAD-4.3 B2B Guest Default Permissions Restricted | `MS.AAD.8.1v1` | SHOULD | same | Guest directory access limited. |
@@ -67,6 +66,7 @@ The old rule id no longer exists and the migrated range does not describe what t
 
 | NRG control | ScubaGear rule | Strength | Previously cited | Note |
 |---|---|---|---|---|
+| AAD-3.1 Global Administrator Count 2-4, Cloud-Only | `MS.AAD.7.1v1` | SHALL | same | Stricter than the rule: SCuBA allows two to eight Global Administrators, NRG (since baseline v1.1) two to four, as CIS 1.1.3 does. Every NRG pass meets SCuBA; a tenant with five to eight passes SCuBA and fails NRG. |
 | AAD-1.3 Phishing-Resistant MFA Required for Admins | `MS.AAD.3.6v1` | SHALL | same | SCuBA names its highly privileged roles; NRG compares against the privileged roles in this tenant's own role catalog. |
 | AAD-1.4 Sign-in Risk CA Policy | `MS.AAD.2.3v1` | SHALL | same | SCuBA requires high-risk sign-ins to be blocked; NRG accepts a risk policy that blocks or requires remediation at high and medium risk. |
 | AAD-1.5 User Risk CA Policy | `MS.AAD.2.1v1` | SHALL | same | SCuBA requires high-risk users to be blocked; NRG accepts a policy that blocks or requires password change. |

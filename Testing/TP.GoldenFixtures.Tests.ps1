@@ -571,7 +571,7 @@ Describe 'Golden fixtures — privilege escalation attack path' {
 
     Context 'AAD-3.1 — Global Administrator count and origin' {
 
-        It 'Satisfied when 2-8 Global Admins exist and all are cloud-only' {
+        It 'Satisfied when 2-4 Global Admins exist and all are cloud-only' {
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw2 'AAD' @{
                 RoleAssignments = @( (NewGA 'admin1@contoso.com'), (NewGA 'admin2@contoso.com'), (NewGA 'admin3@contoso.com') )
             })
@@ -600,7 +600,7 @@ Describe 'Golden fixtures — privilege escalation attack path' {
                 -Because 'a single GA is a availability risk, not just a security one — losing it locks the client out of their own tenant'
         }
 
-        It 'Gap when more than 8 permanent Global Admins exist (excess attack surface)' {
+        It 'Gap when more than 4 Global Admins exist (excess attack surface)' {
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw2 'AAD' @{
                 RoleAssignments = @( 1..9 | ForEach-Object { NewGA "admin$_@contoso.com" } )
             })

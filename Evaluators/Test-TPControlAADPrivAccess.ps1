@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 #
 # Test-TPControlAADPrivAccess.ps1
-# Evaluates AAD-3.1 "Global Administrator Count 2-8, Cloud-Only" (canonical
+# Evaluates AAD-3.1 "Global Administrator Count 2-4, Cloud-Only" (canonical
 # control per Config/controls.json).
 #
 # v4.6.4: scope-of-emission contracted to AAD-3.1 ONLY. Earlier revisions of
@@ -27,7 +27,7 @@ function Test-TPControlAADPrivAccess {
     if (-not $roleRaw -or -not $roleRaw.Success) {
         $detail = if ($roleRaw) { "Collector failed: $(@(Get-TPObjectField -Item $roleRaw -Key 'Exceptions' -Default @()) -join '; ')" } else { 'AAD-DirectoryRoles collector did not run.' }
         Add-TPFinding -ControlId 'AAD-3.1' -State 'NotApplicable' `
-            -Category 'Identity' -Title 'Global Administrator Count 2-8, Cloud-Only' -Detail $detail
+            -Category 'Identity' -Title 'Global Administrator Count 2-4, Cloud-Only' -Detail $detail
         return
     }
 
@@ -49,7 +49,7 @@ function Test-TPControlAADPrivAccess {
     $roleSection = Get-TPNestedProperty -Object $roleRaw -Path 'Data.SectionStatus.RoleAssignments' -Default $null
     if ($allAssignments.Count -eq 0 -and $null -ne $roleSection -and $roleSection -ne 'Collected') {
         Add-TPFinding -ControlId 'AAD-3.1' -State 'NotApplicable' `
-            -Category 'Identity' -Title 'Global Administrator Count 2-8, Cloud-Only' `
+            -Category 'Identity' -Title 'Global Administrator Count 2-4, Cloud-Only' `
             -Detail 'Role assignment enumeration did not complete (see Exceptions) — Global Administrator count could not be determined.'
         return
     }
@@ -68,29 +68,33 @@ function Test-TPControlAADPrivAccess {
     $gaGroups = @($globalAdmins | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'PrincipalType' -Default '') -match 'group' })
     if ($gaGroups.Count -gt 0) {
         Add-TPFinding -ControlId 'AAD-3.1' -State 'NotApplicable' `
-            -Category 'Identity' -Title 'Global Administrator Count 2-8, Cloud-Only' `
+            -Category 'Identity' -Title 'Global Administrator Count 2-4, Cloud-Only' `
             -FrameworkIds (Get-TPFrameworkCitations -ControlId 'AAD-3.1') `
             -Detail "Global Administrator is assigned to $($gaGroups.Count) group(s) ($(($gaGroups | ForEach-Object { Get-TPObjectField -Item $_ -Key 'PrincipalDisplayName' -Default '?' }) -join ', ')) whose members were not enumerated, so the number of Global Administrators and whether any is synced from on-premises could not be determined. Not assessed."
         return
     }
+    # Two to four, eligible assignments included: CIS Microsoft 365 Foundations
+    # v7.0.0 1.1.3, adopted for the NRG baseline v1.1 (owner's decision,
+    # 2026-10-25). CISA SCuBA MS.AAD.7.1v1 allows eight, so a pass meets both.
+    $maxGa          = 4
     $gaCount        = $globalAdmins.Count
     $syncedGAs      = @($globalAdmins | Where-Object { (Get-TPObjectField -Item $_ -Key 'OnPremisesSyncEnabled') -eq $true })
 
     # Satisfied  = count in [2..8] AND zero on-prem-synced GA
     # Partial    = count in [2..8] but at least one synced GA (correct count, wrong source)
     # Gap        = count outside [2..8]
-    if ($gaCount -ge 2 -and $gaCount -le 8 -and $syncedGAs.Count -eq 0) {
+    if ($gaCount -ge 2 -and $gaCount -le $maxGa -and $syncedGAs.Count -eq 0) {
         Add-TPFinding -ControlId 'AAD-3.1' -State 'Satisfied' `
-            -Category 'Identity' -Title 'Global Administrator Count 2-8, Cloud-Only' `
+            -Category 'Identity' -Title 'Global Administrator Count 2-4, Cloud-Only' `
             -Severity 'High' `
             -CurrentValue "$gaCount Global Administrator(s) (permanent and eligible), all cloud-only." `
-            -RequiredValue 'Between 2 and 8 permanent Global Administrators, all cloud-only (no on-prem sync)' `
+            -RequiredValue 'Between 2 and 4 Global Administrators (permanent and eligible), all cloud-only (no on-prem sync)' `
             -FrameworkIds (Get-TPFrameworkCitations -ControlId 'AAD-3.1')
     }
-    elseif ($gaCount -ge 2 -and $gaCount -le 8 -and $syncedGAs.Count -gt 0) {
+    elseif ($gaCount -ge 2 -and $gaCount -le $maxGa -and $syncedGAs.Count -gt 0) {
         $syncedList = ($syncedGAs | Select-Object -ExpandProperty PrincipalUPN) -join ', '
         Add-TPFinding -ControlId 'AAD-3.1' -State 'Partial' `
-            -Category 'Identity' -Title 'Global Administrator Count 2-8, Cloud-Only' `
+            -Category 'Identity' -Title 'Global Administrator Count 2-4, Cloud-Only' `
             -Severity 'High' `
             -Detail 'GA count is within range but at least one GA is synced from on-prem AD. On-prem AD compromise produces immediate Entra Global Admin access via Entra Connect (T1078.002).' `
             -CurrentValue "$gaCount GA(s); $($syncedGAs.Count) synced from on-prem: $syncedList" `
@@ -100,7 +104,7 @@ function Test-TPControlAADPrivAccess {
     }
     elseif ($gaCount -lt 2) {
         Add-TPFinding -ControlId 'AAD-3.1' -State 'Gap' `
-            -Category 'Identity' -Title 'Global Administrator Count 2-8, Cloud-Only' `
+            -Category 'Identity' -Title 'Global Administrator Count 2-4, Cloud-Only' `
             -Severity 'High' `
             -Detail 'Fewer than 2 Global Administrators creates recovery risk. MFA device loss, account lockout, or Entra outage can produce complete loss of admin access.' `
             -CurrentValue "Permanent Global Administrator count: $gaCount" `
@@ -111,12 +115,12 @@ function Test-TPControlAADPrivAccess {
     else {
         $gaList = ($globalAdmins | Select-Object -ExpandProperty PrincipalUPN) -join ', '
         Add-TPFinding -ControlId 'AAD-3.1' -State 'Gap' `
-            -Category 'Identity' -Title 'Global Administrator Count 2-8, Cloud-Only' `
+            -Category 'Identity' -Title 'Global Administrator Count 2-4, Cloud-Only' `
             -Severity 'High' `
-            -Detail 'More than 8 permanent Global Administrators expands the attack surface. Each additional GA is another account that can be compromised for full tenant takeover.' `
+            -Detail "More than $maxGa Global Administrators (permanent and eligible) expands the attack surface. Each additional GA is another account that can be compromised for full tenant takeover." `
             -CurrentValue "Permanent Global Administrator count: $gaCount. Accounts: $gaList" `
-            -RequiredValue 'Maximum 8 permanent Global Administrator assignments' `
-            -Remediation 'Reduce to 8 or fewer. Reassign excess to scoped roles (Exchange Admin, User Admin, Security Admin, etc.). Migrate remaining to PIM eligible where Entra ID P2 is licensed.' `
+            -RequiredValue 'At most 4 Global Administrators, permanent and eligible together' `
+            -Remediation 'Reduce to 4 or fewer, the break-glass pair included. Reassign excess to scoped roles (Exchange Admin, User Admin, Security Admin, etc.). Migrate remaining to PIM eligible where Entra ID P2 is licensed.' `
             -FrameworkIds (Get-TPFrameworkCitations -ControlId 'AAD-3.1')
     }
 }
