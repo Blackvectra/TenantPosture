@@ -1,0 +1,9 @@
+# CIS Microsoft Intune for Windows 11 Benchmark v5.0.0: the recommendation numbers and titles this repo cites.
+# Source: the benchmark PDF (CIS WorkBench), read 2026-10-26; every one listed is Level 1 (L1).
+# Only the recommendations Config/benchmark-mappings.json cites are listed: the benchmark text is licensed
+# and is not reproduced. Testing/TP.BenchmarkMapping.Tests.ps1 fails on a cited number not in this list.
+37.1	Ensure 'Enable Domain Network Firewall' is set to 'True'
+37.8	Ensure 'Enable Private Network Firewall' is set to 'True'
+37.15	Ensure 'Enable Public Network Firewall' is set to 'True'
+106.1.1	Ensure 'Device Health: BitLocker' is set to 'Require'
+107.1	Ensure 'Backup Directory' is set to 'Backup the password to Azure AD only'

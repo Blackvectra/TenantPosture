@@ -349,6 +349,7 @@ Get-Mailbox -ResultSize Unlimited -RecipientTypeDetails SharedMailbox | ForEach-
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-2, IA-2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 1.2.2 |
 | CIS Controls v8.1 | 5.3 |
 | CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.16, A.8.5 |

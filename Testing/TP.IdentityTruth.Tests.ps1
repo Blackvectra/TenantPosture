@@ -1463,8 +1463,11 @@ Describe 'Security Defaults: Conditional Access controls account for it' {
 # Pins the identity verdicts tightened so each Satisfied is true for what the
 # control (and the benchmark item it is mapped to) claims. Real collectors are
 # driven with raw Graph shapes wherever a collector changed.
-#   AAD-7.1   lockout threshold 10 or fewer AND lockout duration 60 s or more
-#             (CIS 5.2.3.8 / 5.2.3.9); setting values are strings.
+#   AAD-7.1   lockout threshold 10 or fewer (CIS 5.2.3.8); AAD-7.3 lockout
+#             duration 60 s or more (5.2.3.9); AAD-7.4 custom banned list
+#             enforced and non-empty (5.2.3.2, only its count is collected);
+#             AAD-7.5 every verified domain set to never expire (1.3.1).
+#             Setting values are strings.
 #   AAD-11.2  a guest is userType Guest (or #EXT#); a privileged role is the
 #             tool's list or Microsoft's isPrivileged flag (beta); eligible
 #             assignments count; anything unread is not assessed.
@@ -1519,49 +1522,92 @@ Describe 'Benchmark gap fixes (AAD)' {
     AfterEach  { & $script:Mod { param($o) Set-Item -Path 'function:script:Invoke-TPGraphRequest' -Value $o } $script:OrigGraph }
     AfterAll   { Clear-TPState }
 
-    Context 'AAD-7.1 lockout threshold and lockout duration (real collector)' {
+    Context 'AAD-7.1 to AAD-7.5 password settings (real collector)' {
         BeforeAll {
-            function script:Run-Lockout([object[]] $Values, [bool] $Instantiated = $true) {
+            function script:Run-Pwd([object[]] $Values, [bool] $Instantiated = $true, [object[]] $Domains = @(), [bool] $DomainsFail = $false) {
                 Clear-TPState
-                $script:T_Lock = $Values; $script:T_Inst = $Instantiated
+                $script:T_Lock = $Values; $script:T_Inst = $Instantiated; $script:T_Doms = $Domains; $script:T_DomFail = $DomainsFail
                 Set-Graph {
                     param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
                     if ($Uri -match 'groupSettings') {
                         if (-not $script:T_Inst) { return @{ value = @() } }
                         return @{ value = @(@{ templateId = '5cf42378-d67d-4f36-ba46-e8b86229381d'; values = @($script:T_Lock) }) }
                     }
+                    if ($Uri -match '/v1\.0/domains') { if ($script:T_DomFail) { throw 'Graph 403 Forbidden' }; return @{ value = @($script:T_Doms) } }
                     return @{ value = @() }
                 }
                 Invoke-TPCollectAADAuthPolicies 3>$null | Out-Null
-                V 'Test-TPControlAADPasswordProtection' 'AAD-7.1'
             }
             function script:Lk([string] $T, [string] $D) { @(@{ name = 'LockoutThreshold'; value = $T }, @{ name = 'LockoutDurationInSeconds'; value = $D }) }
+            function script:Bp([string] $On, [string] $List) { @(@{ name = 'EnableBannedPasswordCheck'; value = $On }, @{ name = 'BannedPasswordList'; value = $List }) }
+            function script:Dom([string] $Id, $Days, [string] $Auth = 'Managed', [bool] $Verified = $true) { @{ id = $Id; isVerified = $Verified; authenticationType = $Auth; passwordValidityPeriodInDays = $Days } }
         }
-        It 'threshold 10 and duration "60" (strings, as Graph returns them) is Satisfied' {
-            $f = Run-Lockout (Lk '10' '60')
+        It 'AAD-7.1 judges the threshold only; the duration is context, never a second failure' {
+            Run-Pwd (Lk '10' '30')
+            $f = V 'Test-TPControlAADPasswordProtection' 'AAD-7.1'
             $f.State | Should -Be 'Satisfied'
-            $f.CurrentValue | Should -Match 'LockoutDurationInSeconds = 60 s'
+            $f.Detail | Should -Match 'not part of this verdict.*lockout duration 30 seconds'
+            Run-Pwd (Lk '11' '900'); (V 'Test-TPControlAADPasswordProtection' 'AAD-7.1').State | Should -Be 'Gap'
+        }
+        It 'AAD-7.3: 60 seconds (a string, as Graph returns it) is Satisfied, 59 is a Gap, and a value that is not a number is not assessed' {
+            Run-Pwd (Lk '10' '60')
+            (V 'Test-TPControlAADLockoutDuration' 'AAD-7.3').State | Should -Be 'Satisfied'
             (Get-TPRawData -Key 'AAD-AuthPolicies').Data.PasswordProtection.LockoutDurationSeconds | Should -BeExactly 60
+            Run-Pwd (Lk '10' '59'); (V 'Test-TPControlAADLockoutDuration' 'AAD-7.3').State | Should -Be 'Gap'
+            Run-Pwd (Lk '10' 'sixty')
+            (V 'Test-TPControlAADLockoutDuration' 'AAD-7.3').State | Should -Be 'NotApplicable'
+            (V 'Test-TPControlAADPasswordProtection' 'AAD-7.1').State | Should -Be 'Satisfied' -Because 'the rest of the block survives'
         }
-        It 'a duration of 59 seconds is a shortfall beside a met threshold (Partial)' {
-            $f = Run-Lockout (Lk '10' '59')
+        It 'an uninstantiated Password Rule Settings object is Microsoft''s defaults (10, 60): AAD-7.1 and AAD-7.3 Satisfied' {
+            Run-Pwd @() -Instantiated $false
+            (V 'Test-TPControlAADPasswordProtection' 'AAD-7.1').State | Should -Be 'Satisfied'
+            (V 'Test-TPControlAADLockoutDuration' 'AAD-7.3').State | Should -Be 'Satisfied'
+        }
+        It 'AAD-7.4 needs the custom list enforced AND holding entries, and never collects the entries' {
+            Run-Pwd ((Lk '10' '60') + (Bp 'True' "contoso`tcontosoltd`tseattle"))
+            $f = V 'Test-TPControlAADBannedPasswords' 'AAD-7.4'
+            $f.State | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'holds 3 entries'
+            $pp = (Get-TPRawData -Key 'AAD-AuthPolicies').Data.PasswordProtection
+            $pp.BannedPasswordCount | Should -BeExactly 3
+            $pp.Contains('BannedPasswordList') | Should -BeFalse -Because 'the entries are the tenant''s chosen weak passwords'
+            ($pp | ConvertTo-Json -Depth 5) | Should -Not -Match 'contoso'
+            Run-Pwd ((Lk '10' '60') + (Bp 'False' 'contoso')); (V 'Test-TPControlAADBannedPasswords' 'AAD-7.4').State | Should -Be 'Partial'
+            Run-Pwd ((Lk '10' '60') + (Bp 'True' ''));        (V 'Test-TPControlAADBannedPasswords' 'AAD-7.4').State | Should -Be 'Partial'
+            Run-Pwd ((Lk '10' '60') + (Bp 'False' ''));       (V 'Test-TPControlAADBannedPasswords' 'AAD-7.4').State | Should -Be 'Gap'
+            Run-Pwd @() -Instantiated $false;                 (V 'Test-TPControlAADBannedPasswords' 'AAD-7.4').State | Should -Be 'Gap' -Because 'a custom list is off until someone creates the settings object'
+            Run-Pwd ((Lk '10' '60') + (Bp 'maybe' 'x'))
+            (V 'Test-TPControlAADBannedPasswords' 'AAD-7.4').State | Should -Be 'NotApplicable'
+        }
+        It 'AAD-7.4 on an older results file reads only whether the list held entries' {
+            Clear-TPState
+            Set-TPRawData -Key 'AAD-AuthPolicies' -Data @{ Success = $true; Data = @{ PasswordProtection = @{ EnableBannedPasswordCheck = $true; BannedPasswordListPresent = $true } } }
+            (V 'Test-TPControlAADBannedPasswords' 'AAD-7.4').State | Should -Be 'Satisfied'
+        }
+        It 'AAD-7.5 passes only when every verified domain never expires; an unset value is the 90-day default' {
+            Run-Pwd (Lk '10' '60') -Domains @((Dom 'contoso.com' 2147483647), (Dom 'contoso.onmicrosoft.com' 2147483647), (Dom 'pending.example' 90 -Verified $false))
+            (V 'Test-TPControlAADPasswordExpiry' 'AAD-7.5').State | Should -Be 'Satisfied' -Because 'an unverified domain cannot be used to sign in'
+            Run-Pwd (Lk '10' '60') -Domains @((Dom 'contoso.com' 2147483647), (Dom 'contoso.onmicrosoft.com' $null))
+            $f = V 'Test-TPControlAADPasswordExpiry' 'AAD-7.5'
             $f.State | Should -Be 'Partial'
-            $f.Detail | Should -Match 'Lockout duration is 59 seconds'
+            $f.Detail | Should -Match "contoso\.onmicrosoft\.com \(not set: Microsoft's 90-day default\)"
+            Run-Pwd (Lk '10' '60') -Domains @((Dom 'contoso.com' 90))
+            (V 'Test-TPControlAADPasswordExpiry' 'AAD-7.5').State | Should -Be 'Gap'
         }
-        It 'threshold 11 with duration 59 meets nothing (Gap)' {
-            (Run-Lockout (Lk '11' '59')).State | Should -Be 'Gap'
+        It 'AAD-7.5 names a federated domain as governed by the federation provider, without changing the verdict' {
+            Run-Pwd (Lk '10' '60') -Domains @((Dom 'corp.example' 2147483647 -Auth 'Federated'))
+            $f = V 'Test-TPControlAADPasswordExpiry' 'AAD-7.5'
+            $f.State | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'federation provider'
         }
-        It 'threshold 11 with a met duration is Partial' {
-            (Run-Lockout (Lk '11' '900')).State | Should -Be 'Partial'
-        }
-        It 'a value that is not a whole number is not read: not assessed, and the rest of the block survives' {
-            $f = Run-Lockout (Lk '10' 'sixty')
-            $f.State | Should -Be 'NotApplicable'
-            $f.Detail | Should -Match 'lockout duration was not read'
-            (Get-TPRawData -Key 'AAD-AuthPolicies').Data.PasswordProtection.LockoutThreshold | Should -BeExactly 10
-        }
-        It 'an uninstantiated Password Rule Settings object is Microsoft''s defaults (10, 60): Satisfied' {
-            (Run-Lockout @() -Instantiated $false).State | Should -Be 'Satisfied'
+        It 'AAD-7.5 is not assessed when the domains were not read, or the results file predates the read' {
+            Run-Pwd (Lk '10' '60') -DomainsFail $true
+            (V 'Test-TPControlAADPasswordExpiry' 'AAD-7.5').State | Should -Be 'NotApplicable'
+            Clear-TPState
+            Set-TPRawData -Key 'AAD-AuthPolicies' -Data @{ Success = $true; Data = @{ PasswordProtection = @{ LockoutThreshold = 10 } } }
+            $f = V 'Test-TPControlAADPasswordExpiry' 'AAD-7.5'
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'from before this check'
         }
     }
 

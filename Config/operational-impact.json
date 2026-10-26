@@ -425,7 +425,10 @@
     "EXO-9.2": "storage-retention",
     "SPO-4.1": "storage-retention",
     "AAD-15.1": "app-consent-friction",
-    "AAD-15.2": "inventory-only"
+    "AAD-15.2": "inventory-only",
+    "AAD-7.3": "auth-prompt",
+    "AAD-7.4": "auth-prompt",
+    "AAD-7.5": "none-visible"
   },
   "deviceControls": {
     "DEV-1.1": "device-encryption",
@@ -525,6 +528,23 @@
     "SPO-4.1": {
       "Summary": "Extending departed-user OneDrive retention keeps leavers files longer. Costs storage and keeps their data in scope.",
       "Watchouts": "A retained OneDrive still counts toward tenant storage and still contains whatever the leaver had. Pair the change with an offboarding step that reassigns ownership, so retention is a safety net rather than an archive nobody reviews."
+    },
+    "AAD-7.3": {
+      "Summary": "Changes how long a locked account waits before it can try again; nobody is prompted.",
+      "Users": "Only a user who mistypes their password repeatedly notices: they wait the lockout duration before trying again.",
+      "Reversible": "Yes."
+    },
+    "AAD-7.4": {
+      "Summary": "New and changed passwords are checked against the organization's own banned terms.",
+      "Users": "A user changing or resetting a password that contains a banned term is refused and must pick another. Existing passwords keep working until they are next changed.",
+      "Watchouts": "Microsoft scores near-misses, so a list of brand terms also rejects common variants of them; tell the help desk before turning it on.",
+      "Reversible": "Yes."
+    },
+    "AAD-7.5": {
+      "Summary": "Passwords stop expiring; users are no longer forced to change them on a schedule.",
+      "Users": "No more expiry prompts. Nothing else changes.",
+      "Watchouts": "Do it together with MFA for every user: never-expire is safe only when a stolen password alone cannot sign in.",
+      "Reversible": "Yes."
     }
   }
 }

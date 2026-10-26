@@ -5,7 +5,8 @@
 # READ-ONLY. No write operations.
 #
 # Collects: Authentication Methods Policy, Authorization Policy (consent settings,
-# guest invite permissions, SSPR), Password Protection Policy, Security Defaults.
+# guest invite permissions, SSPR), Password Protection Policy, Security Defaults,
+# domain password validity periods (AAD-7.5).
 #
 # Required Graph scopes: Policy.Read.All, Directory.Read.All
 #
@@ -27,6 +28,8 @@ function Invoke-TPCollectAADAuthPolicies {
             ConsentPolicies         = $null
             CrossTenantAccess       = $null
             RiskyServicePrincipals  = $null
+            Domains                 = @()
+            SectionStatus           = @{ Domains = 'NotRun' }
         }
     }
 
@@ -219,7 +222,11 @@ function Invoke-TPCollectAADAuthPolicies {
                     EnableBannedPasswordCheckOnPremises = (& $settingBool $values['EnableBannedPasswordCheckOnPremises'])
                     BannedPasswordCheckOnPremisesMode   = [string]($values['BannedPasswordCheckOnPremisesMode'] ?? 'Audit')
                     EnableBannedPasswordCheck = (& $settingBool $values['EnableBannedPasswordCheck'])
-                    BannedPasswordList       = [string]($values['BannedPasswordList'] ?? '')
+                    # Only whether a custom list exists and how many entries it
+                    # holds: the entries themselves are the tenant's chosen
+                    # weak passwords and never leave this function. Microsoft
+                    # stores the list as one tab-separated string.
+                    BannedPasswordCount      = @(([string]($values['BannedPasswordList'] ?? '')) -split "`t" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count
                     BannedPasswordListPresent= (-not [string]::IsNullOrWhiteSpace($values['BannedPasswordList']))
                 }
             } else {
@@ -232,12 +239,42 @@ function Invoke-TPCollectAADAuthPolicies {
                     LockoutThreshold          = 10
                     LockoutDurationSeconds    = 60
                     EnableBannedPasswordCheck = $false
+                    BannedPasswordCount       = 0
                     BannedPasswordListPresent = $false
                 }
             }
         } catch {
             if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                 Register-TPException -Source 'AAD-PasswordProtection' -Message $_.Exception.Message
+            }
+        }
+
+        # Domains: each verified domain's password validity period (CIS
+        # 1.3.1 audits passwordValidityPeriodInDays from
+        # Get-MgDomain). Microsoft: "If the property isn't set, a default value
+        # of 90 days is used", and 2147483647 is "never expire". Directory.Read.All
+        # already covers /domains, so no new scope.
+        # https://learn.microsoft.com/graph/api/resources/domain
+        try {
+            $domRows = @(Get-TPGraphAllPages -Uri 'https://graph.microsoft.com/v1.0/domains?$select=id,isVerified,authenticationType,passwordValidityPeriodInDays')
+            $result.Data.Domains = @($domRows | Where-Object { $null -ne $_ } | ForEach-Object {
+                $pv = Get-TPObjectField -Item $_ -Key 'passwordValidityPeriodInDays' -Default $null
+                $pvn = $null
+                if ($pv -is [int] -or $pv -is [long]) { $pvn = [long]$pv }
+                elseif ($null -ne $pv) { $tmp = [long]0; if (([string]$pv) -cmatch '\A[0-9]{1,10}\z' -and [long]::TryParse([string]$pv, [ref]$tmp)) { $pvn = $tmp } }
+                [ordered]@{
+                    Id                           = [string](Get-TPObjectField -Item $_ -Key 'id' -Default '')
+                    IsVerified                   = (Get-TPObjectField -Item $_ -Key 'isVerified' -Default $null)
+                    AuthenticationType           = [string](Get-TPObjectField -Item $_ -Key 'authenticationType' -Default '')
+                    PasswordValidityPeriodInDays = $pvn
+                    PasswordValiditySet          = ($null -ne $pv)
+                }
+            })
+            $result.Data.SectionStatus.Domains = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.Domains = 'Failed'
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'AAD-Domains' -Message $_.Exception.Message
             }
         }
 

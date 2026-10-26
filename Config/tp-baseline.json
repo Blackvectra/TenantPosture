@@ -170,25 +170,46 @@
       "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 1.2.2 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
-      "ControlId": "CIS-1.3.1",
-      "Title": "Ensure the 'Password expiration policy' is set to 'Set passwords to never expire (recommended)'",
+      "ControlId": "EXO-2.6",
+      "Title": "Shared Mailboxes Block Direct Sign-In",
+      "Tier": "Minimum",
+      "Cis": "1.2.2",
+      "CisProfile": "E3 Level 1 / E5 Level 1",
+      "CisRelation": "Equivalent",
+      "Owner": "Email",
+      "RawDataKeys": [
+        "EXO-Inventory"
+      ],
+      "EvidenceSource": "Assessment control EXO-2.6 (EXO-Inventory)",
+      "ExpectedState": "CIS 1.2.2: Ensure sign-in to shared mailboxes is blocked. Checked as: accountEnabled was read as false for every shared mailbox's Entra account (a mailbox whose account state was not read leaves the control not assessed).",
+      "SlaClass": "High",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "Shared mailboxes with active accounts can be signed into directly with a password, bypassing MFA. Attackers target shared mailboxes for persistence.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 1.2.2 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
+    },
+    {
+      "ControlId": "AAD-7.5",
+      "Title": "Passwords Set to Never Expire",
       "Tier": "Minimum",
       "Cis": "1.3.1",
       "CisProfile": "E3 Level 1 / E5 Level 1",
-      "CisRelation": "Manual",
+      "CisRelation": "Equivalent",
       "Owner": "Identity",
-      "RawDataKeys": [],
-      "EvidenceSource": "Manual: CIS Microsoft 365 Foundations v7.0.0 1.3.1 audit procedure.",
-      "ExpectedState": "CIS 1.3.1: Ensure the 'Password expiration policy' is set to 'Set passwords to never expire (recommended)', verified by hand against the CIS audit procedure.",
-      "SlaClass": "High",
+      "RawDataKeys": [
+        "AAD-AuthPolicies"
+      ],
+      "EvidenceSource": "Assessment control AAD-7.5 (AAD-AuthPolicies)",
+      "ExpectedState": "CIS 1.3.1: Ensure the 'Password expiration policy' is set to 'Set passwords to never expire (recommended)'. Checked as: passwordValidityPeriodInDays is 2147483647 on every verified domain.",
+      "SlaClass": "Standard",
       "DependsOn": [],
-      "FreshnessClass": "Monthly",
+      "FreshnessClass": "Weekly",
       "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
       "EffectivenessCapability": "NotCollected",
-      "Reason": "Part of the CIS E3 Level 1 / E5 Level 1 profile this tier adopts.",
-      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 1.3.1 (E3 Level 1 / E5 Level 1), the profile this tier adopts.",
-      "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
-      "Automated": false
+      "Reason": "Forced periodic changes push users to predictable passwords without stopping a stolen one.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 1.3.1 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
       "ControlId": "CIS-1.3.4",
@@ -1286,25 +1307,25 @@
       "Automated": false
     },
     {
-      "ControlId": "CIS-5.2.3.2",
-      "Title": "Ensure custom banned passwords lists are used",
+      "ControlId": "AAD-7.4",
+      "Title": "Custom Banned Password List Enforced",
       "Tier": "Minimum",
       "Cis": "5.2.3.2",
       "CisProfile": "E3 Level 1 / E5 Level 1",
-      "CisRelation": "Manual",
+      "CisRelation": "Equivalent",
       "Owner": "Identity",
-      "RawDataKeys": [],
-      "EvidenceSource": "Manual: CIS Microsoft 365 Foundations v7.0.0 5.2.3.2 audit procedure.",
-      "ExpectedState": "CIS 5.2.3.2: Ensure custom banned passwords lists are used, verified by hand against the CIS audit procedure.",
-      "SlaClass": "High",
+      "RawDataKeys": [
+        "AAD-AuthPolicies"
+      ],
+      "EvidenceSource": "Assessment control AAD-7.4 (AAD-AuthPolicies)",
+      "ExpectedState": "CIS 5.2.3.2: Ensure custom banned passwords lists are used. Checked as: EnableBannedPasswordCheck is True and the custom banned password list holds at least one entry (only the count is read).",
+      "SlaClass": "Standard",
       "DependsOn": [],
-      "FreshnessClass": "Monthly",
+      "FreshnessClass": "Weekly",
       "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
       "EffectivenessCapability": "NotCollected",
-      "Reason": "Part of the CIS E3 Level 1 / E5 Level 1 profile this tier adopts.",
-      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.3.2 (E3 Level 1 / E5 Level 1), the profile this tier adopts.",
-      "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
-      "Automated": false
+      "Reason": "Users build passwords from the company's own terms, which attackers try first.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.3.2 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
       "ControlId": "CIS-5.2.3.3",
@@ -1412,25 +1433,25 @@
       "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.3.8 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
-      "ControlId": "CIS-5.2.3.9",
-      "Title": "Ensure that Account 'Lockout duration in seconds' is at least 60 seconds",
+      "ControlId": "AAD-7.3",
+      "Title": "Smart Lockout Duration at Least 60 Seconds",
       "Tier": "Minimum",
       "Cis": "5.2.3.9",
       "CisProfile": "E3 Level 1 / E5 Level 1",
-      "CisRelation": "Manual",
+      "CisRelation": "Equivalent",
       "Owner": "Identity",
-      "RawDataKeys": [],
-      "EvidenceSource": "Manual: CIS Microsoft 365 Foundations v7.0.0 5.2.3.9 audit procedure.",
-      "ExpectedState": "CIS 5.2.3.9: Ensure that Account 'Lockout duration in seconds' is at least 60 seconds, verified by hand against the CIS audit procedure.",
-      "SlaClass": "High",
+      "RawDataKeys": [
+        "AAD-AuthPolicies"
+      ],
+      "EvidenceSource": "Assessment control AAD-7.3 (AAD-AuthPolicies)",
+      "ExpectedState": "CIS 5.2.3.9: Ensure that Account 'Lockout duration in seconds' is at least 60 seconds. Checked as: LockoutDurationInSeconds is 60 or more (Microsoft's default applies when the setting was never customized).",
+      "SlaClass": "Standard",
       "DependsOn": [],
-      "FreshnessClass": "Monthly",
+      "FreshnessClass": "Weekly",
       "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
       "EffectivenessCapability": "NotCollected",
-      "Reason": "Part of the CIS E3 Level 1 / E5 Level 1 profile this tier adopts.",
-      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.3.9 (E3 Level 1 / E5 Level 1), the profile this tier adopts.",
-      "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
-      "Automated": false
+      "Reason": "A short lockout duration lets an attacker resume password guessing almost at once.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.3.9 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
       "ControlId": "CIS-5.2.3.10",

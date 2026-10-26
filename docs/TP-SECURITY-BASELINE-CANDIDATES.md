@@ -6,7 +6,7 @@
 
 ## What the baseline is, and is not
 
-The assessment answers "what is this tenant's posture against 204 controls and ten frameworks". The baseline answers a narrower question: **is this client configured the way the CIS Microsoft 365 Foundations Benchmark says, at the profile NRG assigns it?** It is a desired-state view over the assessment: it reads findings and never changes them, creates none, and moves no framework score. Every control the tool assesses is still assessed and reported; a control with no CIS recommendation is simply not a baseline requirement.
+The assessment answers "what is this tenant's posture against 207 controls and ten frameworks". The baseline answers a narrower question: **is this client configured the way the CIS Microsoft 365 Foundations Benchmark says, at the profile NRG assigns it?** It is a desired-state view over the assessment: it reads findings and never changes them, creates none, and moves no framework score. Every control the tool assesses is still assessed and reported; a control with no CIS recommendation is simply not a baseline requirement.
 
 ## Tiers are CIS profiles
 
@@ -73,12 +73,12 @@ plus a `BaselineCompliance` summary (counts by observed state, constraint and di
 
 | Tier | Rows | Checked by the tool | Manual (CIS-<number>) |
 |---|---|---|---|
-| Minimum | 114 | 47 | 67 |
+| Minimum | 115 | 51 | 64 |
 | Standard | 16 | 3 | 13 |
 | Hardened | 59 | 21 | 38 |
-| Assessment-only controls | 133 | | |
+| Assessment-only controls | 132 | | |
 
-All 160 v7.0.0 recommendations are represented; 71 rows are tool-checked controls and 118 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
+All 160 v7.0.0 recommendations are represented; 75 rows are tool-checked controls and 115 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
 
 ## Every assessment control
 
@@ -140,7 +140,7 @@ One row per control in `controls.json`; the tier column is what the test compare
 | EXO-2.3 | POP3 Access Disabled | Medium | Included (M365 Business Standard+) | — | **Assessment-only** |
 | EXO-2.4 | IMAP Access Disabled | Medium | Included (M365 Business Standard+) | — | **Assessment-only** |
 | EXO-2.5 | Customer Lockbox Enabled | Medium | M365 E5 or E5 Compliance add-on | 1.3.6 | **Hardened** |
-| EXO-2.6 | Shared Mailboxes Block Direct Sign-In | High | Included (M365 Business Standard+) | — | **Assessment-only** |
+| EXO-2.6 | Shared Mailboxes Block Direct Sign-In | High | Included (M365 Business Standard+) | 1.2.2 | **Minimum** |
 | AAD-1.4 | Sign-in Risk CA Policy | High | Entra ID P2 | — | **Assessment-only** |
 | AAD-1.5 | User Risk CA Policy | High | Entra ID P2 | — | **Assessment-only** |
 | AAD-2.2 | Named Locations Defined | Low | M365 Business Premium or Entra ID P1 | 5.2.2.14 | **Hardened** |
@@ -159,6 +159,9 @@ One row per control in `controls.json`; the tier column is what the test compare
 | AAD-6.2 | User Consent to Apps Restricted | Critical | Included (all plans) | — | **Assessment-only** |
 | AAD-6.3 | Admin Consent Workflow Enabled | Medium | Included (all plans) | 5.1.5.2 | **Minimum** |
 | AAD-7.1 | Password Protection Lockout Configured | Medium | Included (all plans) | 5.2.3.8 | **Minimum** |
+| AAD-7.3 | Smart Lockout Duration at Least 60 Seconds | Medium | Included (all plans) | 5.2.3.9 | **Minimum** |
+| AAD-7.4 | Custom Banned Password List Enforced | Medium | M365 Business Premium or Entra ID P1 | 5.2.3.2 | **Minimum** |
+| AAD-7.5 | Passwords Set to Never Expire | Low | Included (all plans) | 1.3.1 | **Minimum** |
 | AAD-7.2 | Break-Glass Accounts Configured | High | Included (all plans) | 1.1.2 | **Minimum** |
 | DEF-2.1 | Preset Security Policies Applied | Low | Defender for Office 365 Plan 1 (M365 Business Premium) | — | **Assessment-only** |
 | DEF-2.2 | Zero-Hour Auto Purge Enabled | High | Included (EOP) | — | **Assessment-only** |
@@ -300,7 +303,6 @@ Required at their tier, always NotVerified until a control checks them.
 | `CIS-1.1.1` | Ensure Administrative accounts are cloud-only | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-1.1.2` | Ensure two emergency access accounts have been defined: the settings AAD-7.2 do not check | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-1.1.4` | Ensure administrative accounts use licenses with a reduced application footprint | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-1.3.1` | Ensure the 'Password expiration policy' is set to 'Set passwords to never expire (recommended)' | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-1.3.4` | Ensure 'User owned apps and services' is restricted | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-1.3.5` | Ensure internal phishing protection for Forms is enabled | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-1.3.9` | Ensure shared bookings pages are restricted to select users | E3 Level 1 / E5 Level 1 | Minimum |
@@ -332,11 +334,9 @@ Required at their tier, always NotVerified until a control checks them.
 | `CIS-5.2.2.13` | Ensure that periodic reauthentication is required for all users | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.2.17` | Ensure authentication transfer is blocked | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.3.1` | Ensure Microsoft Authenticator is configured to protect against MFA fatigue: the settings AAD-9.1 do not check | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-5.2.3.2` | Ensure custom banned passwords lists are used | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.3.3` | Ensure password protection is enabled for on-prem Active Directory | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.3.5` | Ensure weak authentication methods are disabled | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.3.6` | Ensure system-preferred multifactor authentication is enabled | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-5.2.3.9` | Ensure that Account 'Lockout duration in seconds' is at least 60 seconds | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.3.10` | Ensure Microsoft Authenticator on companion applications is disabled | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.4.3` | Ensure SSPR registration and authentication re-confirmation are required | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.4.4` | Ensure that users are notified on password resets | E3 Level 1 / E5 Level 1 | Minimum |

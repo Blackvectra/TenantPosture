@@ -270,7 +270,7 @@ $script:ExportedFunctions = @(
     'Test-TPControlAADGuestPermissions', 'Test-TPControlAADSSPR',
     'Test-TPControlAADSSPRMethods', 'Test-TPControlAADUserAppReg',
     'Test-TPControlAADUserConsent', 'Test-TPControlAADAdminConsentWorkflow',
-    'Test-TPControlAADPasswordProtection', 'Test-TPControlAADBreakGlass',
+    'Test-TPControlAADPasswordProtection', 'Test-TPControlAADLockoutDuration', 'Test-TPControlAADBannedPasswords', 'Test-TPControlAADPasswordExpiry', 'Test-TPControlAADBreakGlass',
     'Test-TPControlAADPIMAlerts', 'Test-TPControlAADAccessReviews',
     'Test-TPControlAADAuthenticatorNumberMatch', 'Test-TPControlAADPasswordless',
     'Test-TPControlAADIdentityProtection', 'Test-TPControlAADPrivCloudOnly',
