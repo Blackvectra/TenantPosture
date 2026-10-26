@@ -353,6 +353,8 @@ Describe 'Intune controls count what enforces something' {
             Set-TPRawData -Key 'Intune-DeviceCompliance' -Data $dc
             Set-TPRawData -Key 'Intune-EndpointSecurity' -Data $es
             (Verdict 'Test-TPControlIntuneWindowsUpdate' 'INT-2.5').State | Should -Be 'Satisfied'
+        }
+    }
     Context 'INT-2.6 judges the assigned Office policies against the approved CIS Intune for Office macro core' {
         BeforeAll {
             $script:OffCat = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config' 'cis-intune-office-macro.json') -Raw | ConvertFrom-Json -Depth 10
@@ -433,11 +435,11 @@ Describe 'Intune controls count what enforces something' {
             $f.State  | Should -Be 'Partial'
             $f.Detail | Should -Match 'Not set by any assigned Office policy, which the benchmark requires: 2\.2\.4\.7\.2\.8 Excel Prevent Excel from running XLM macros \(not configured:'
         }
-        It 'the VBA option is judged by name: a weaker option or the stricter no-notification option is Below, an unknown option is not assessed' {
+        It 'the VBA option is judged by name: a weaker option is Below, the stricter no-notification option is accepted (owner, 2026-10-26), an unknown option is not assessed' {
             (OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList; 'configurationPolicies/o1/settings' = (OfficePayload @{ '2.11.8.7.2.10' = 'vba:Enable all macros (not recommended)' }) }).State | Should -Be 'Partial'
             $f = OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList; 'configurationPolicies/o1/settings' = (OfficePayload @{ '2.11.8.7.2.10' = 'vba:Disable all without notification' }) }
-            $f.State  | Should -Be 'Partial'
-            $f.Detail | Should -Match 'stricter than the benchmark'
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match '27 of 27 settings'
             $f = OfficeVerdict @{ 'configurationPolicies\?' = $script:OffList; 'configurationPolicies/o1/settings' = (OfficePayload @{ '2.11.8.7.2.10' = 'vba:Some future option' }) }
             $f.State  | Should -Be 'NotApplicable'
             $f.Detail | Should -Match 'a value this assessment does not recognize for 2\.11\.8\.7\.2\.10'

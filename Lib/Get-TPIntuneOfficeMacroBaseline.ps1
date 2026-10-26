@@ -179,7 +179,9 @@ function Get-TPOfficeMacroBaselineRows {
                 $more = @(@($option.Stricter)   | ForEach-Object { ConvertTo-TPOfficeSettingKey $_ })
                 $doc  = @(@($option.Documented) | ForEach-Object { ConvertTo-TPOfficeSettingKey $_ })
                 if ($ck -in $ok) { $observed += "$pname ($($childLabels[0]))"; $statuses += 'Met' }
-                elseif ($ck -in $more) { $observed += "$pname ($($childLabels[0]), stricter than the benchmark's audited value)"; $statuses += 'Below' }
+                # Stricter than CIS's audited value (no macro runs at all): accepted as Met by
+                # the owner's decision of 2026-10-26, so these items cite the benchmark as Stricter.
+                elseif ($ck -in $more) { $observed += "$pname ($($childLabels[0]), stricter than the benchmark's audited value; accepted)"; $statuses += 'Met' }
                 elseif ($ck -in $doc) { $observed += "$pname ($($childLabels[0]))"; $statuses += 'Below' }
                 else { $observed += "$pname ($($childLabels[0]))"; $statuses += 'Unrecognized' }
             }

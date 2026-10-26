@@ -420,7 +420,7 @@ PIM > Global Administrator > Settings > Require approval > Add approvers.
 
 ---
 
-### AAD-3.6 — PIM Max Activation Duration 8 Hours or Less
+### AAD-3.6 — PIM Max Activation Duration 4 Hours for High-Impact Roles
 
 **Severity:** Low  |  **Category:** Identity  |  **Automated:** Yes
 
@@ -1070,7 +1070,7 @@ Create a Sentinel or Defender XDR alert rule for sign-in from break-glass accoun
 
 ---
 
-### AAD-10.4 — Sign-in Frequency Session Control Configured
+### AAD-10.4 — Short Sign-in Frequency for Admins and Guests
 
 **Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
 
@@ -1431,7 +1431,7 @@ Entra ID > External Identities > All users > Filter by guest, sort by last sign-
 
 ---
 
-### AAD-12.3 — Stale Licensed Member Accounts — Named List
+### AAD-12.3 — Inactive Member Accounts (35 Days) — Named List
 
 **Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
 

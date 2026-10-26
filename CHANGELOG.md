@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **[Controls] INT-2.6 judges Office macro hardening (208 controls).** The assigned Intune Settings Catalog Office policies
+  are judged against the owner-approved macro and active-content core of the CIS Microsoft Intune for Office Benchmark
+  v1.1.0, Level 1 (27 settings across Word, Excel, PowerPoint and Access: macros from the internet blocked, VBA
+  notification, XLM macros, DDE, Protected View, network trusted locations, signed add-ins). The stricter VBA option
+  "disable all without notification" is accepted. Office settings only in Administrative Templates policies are not
+  assessed. It needs Intune and Microsoft 365 Apps for enterprise, so on Business Premium-only tenants it is an
+  upgrade opportunity, not scored.
+- **[Evaluators] INT-2.5 judges every assigned Windows update ring against CIS Intune for Windows 11 v5.0.0 104.1-104.5**
+  (auto update on, feature updates deferred 180+ days, preview builds off, install every day, pause blocked). Preview
+  builds are credited only from a Settings Catalog policy, so a ring-only tenant meeting the other four is not assessed.
+- **[Evaluators] AAD-10.4, AAD-12.3, AAD-3.6, PVW-2.2 and INT-3.3 judge what their benchmark items require.** AAD-10.4
+  (renamed "Short Sign-in Frequency for Admins and Guests") needs 4 hours or less for every privileged role and 24 hours
+  or less for guests (Zero Trust checks 21825/21824); AAD-12.3 ("Inactive Member Accounts (35 Days)") follows DISA STIG
+  V-270204 across every enabled member; AAD-3.6 holds Microsoft's five high-impact roles to a 4-hour PIM activation and
+  reads whole ISO durations; PVW-2.2 needs communication compliance covering Copilot (Zero Trust check 35039); INT-3.3
+  judges conditional launch against Microsoft's App Protection Framework Level 2 and is not applicable when no mobile
+  devices or policies exist. An unassigned Intune policy (`"assignments": []`) no longer counts as assigned.
+  161 of 208 controls are now mapped to a benchmark.
 - **[Benchmarks] 154 of 207 controls are now mapped.** The CIS Microsoft Intune for Windows 11 Benchmark v5.0.0 (Level 1)
   is cited by INT-1.3 (106.1.1 BitLocker required), INT-2.3 (37.1, 37.8, 37.15 firewall profiles on) and INT-4.1 (107.1
   LAPS backup to Entra ID); SPO-1.5 cites Microsoft's Zero Trust SharePoint unmanaged-device step and SPO-3.3 Microsoft's

@@ -321,7 +321,7 @@ In the Intune admin center, Devices > By platform > Windows > Manage updates > W
 
 **Severity:** High  |  **Category:** Endpoint  |  **Automated:** Yes
 
-**License required:** M365 Business Premium or Intune Plan 1
+**License required:** Intune Plan 1 + Microsoft 365 Apps for enterprise (E3/E5)
 
 **Description:**
 The assigned Intune policies that configure Microsoft 365 Apps (Settings Catalog policies, including the Microsoft 365 Apps security baseline) set the approved standard: the macro and active-content core of the CIS Microsoft Intune for Office Benchmark v1.1.0, Level 1 (Config/cis-intune-office-macro.json) for Word, Excel, PowerPoint and Access. Macros in files from the internet are blocked, VBA macro notification allows digitally signed macros only, Excel XLM macros and DDE server launch and lookup are off, Protected View is kept on for internet files, unsafe locations and Outlook attachments, trusted locations on the network are not allowed, and application add-ins must be signed by a trusted publisher.

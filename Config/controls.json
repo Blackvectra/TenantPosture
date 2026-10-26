@@ -1920,7 +1920,7 @@
     },
     {
       "ControlId": "AAD-3.6",
-      "Title": "PIM Max Activation Duration 8 Hours or Less",
+      "Title": "PIM Max Activation Duration 4 Hours for High-Impact Roles",
       "Description": "PIM role policies set maximum activation duration to 4 hours or less for the high-impact roles (Global, Privileged Role, Security, Exchange and SharePoint Administrator) and 8 hours or less for the other privileged roles.",
       "BusinessRisk": "Longer activation windows increase the time a compromised activation session can be abused.",
       "Severity": "Low",
@@ -3515,7 +3515,7 @@
         "PCIDSS": "Req 2.2",
         "ISO27001": "A.8.7, A.8.9"
       },
-      "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
+      "LicenseRequirement": "Intune Plan 1 + Microsoft 365 Apps for enterprise (E3/E5)"
     },
     {
       "ControlId": "AAD-8.1",
@@ -3730,7 +3730,7 @@
     },
     {
       "ControlId": "AAD-10.4",
-      "Title": "Sign-in Frequency Session Control Configured",
+      "Title": "Short Sign-in Frequency for Admins and Guests",
       "Description": "Enabled CA policies set a sign-in frequency of 4 hours or less for every privileged role (named in the policy's roles) and 24 hours or less (or every time) for guest or external users, limiting the lifetime of stolen session tokens.",
       "BusinessRisk": "Stolen tokens (from AiTM, token theft via malware) remain valid for the full session lifetime. Sign-in frequency limits re-use to the configured window.",
       "Severity": "Medium",
@@ -5705,7 +5705,7 @@
     },
     {
       "ControlId": "AAD-12.3",
-      "Title": "Stale Licensed Member Accounts — Named List",
+      "Title": "Inactive Member Accounts (35 Days) — Named List",
       "Description": "Identifies enabled member accounts (licensed or not) whose last sign-in is more than 35 days old, or that never signed in and were created more than 35 days ago (DISA Microsoft Entra ID STIG V-270204) — likely departed employees.",
       "BusinessRisk": "Active accounts for departed employees are a primary threat vector. Former employees know the organization's structure, workflows, and email conventions — making them highly effective social engineers if accounts are ever used maliciously.",
       "Severity": "High",

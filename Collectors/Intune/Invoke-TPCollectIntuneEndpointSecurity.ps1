@@ -179,77 +179,74 @@ function Invoke-TPCollectIntuneEndpointSecurity {
                     }
                 }
 
-                # A general Settings Catalog policy (template family none) for Windows: read its
-                # settings once and keep it only when it sets a Policy CSP Update node
-                # (./Device/Vendor/MSFT/Policy/Config/Update/*, definition ids containing
-                # "_policy_config_update_"). A failed read is kept as Failed, because it may
-                # set one. Same scope as the reads above (DeviceManagementConfiguration.Read.All).
-                if (-not $bucket -and $tplFamily -in @($null, '', 'none') -and $entry.IsAssigned -ne $false -and $entry.Id -and
-                    ($entry.Platforms -eq '' -or $entry.Platforms -match 'windows')) {
+                # One settings read serves two checks on an assigned Windows policy that has no
+                # endpoint-security bucket (same scope, DeviceManagementConfiguration.Read.All):
+                #  - INT-2.5: a general Settings Catalog policy (template family none) that sets a
+                #    Policy CSP Update node (./Device/Vendor/MSFT/Policy/Config/Update/*, definition
+                #    ids containing "_policy_config_update_"); an update ring has no Manage preview
+                #    builds setting. Kept only when it sets one, or when the read failed or stopped
+                #    at the page cap, because it may set one.
+                #  - INT-2.6: Office macro and active-content settings live in Settings Catalog
+                #    policies (and the Microsoft 365 Apps security baseline). The definitions are
+                #    expanded so each Office setting and option is named; only the Office settings
+                #    are kept. A failed or capped read is recorded: such a policy may configure
+                #    Office, so its settings are not established, never assumed absent.
+                $updateCandidate = (-not $bucket -and $tplFamily -in @($null, '', 'none') -and $entry.IsAssigned -ne $false -and $entry.Id -and
+                    ($entry.Platforms -eq '' -or $entry.Platforms -match 'windows'))
+                $officeFamily = [string]$tplFamily -in @('', 'none', 'baseline')
+                $winPlatform  = (-not $entry.Platforms) -or ($entry.Platforms -match 'windows10')
+                $officeCandidate = (-not $bucket -and $officeFamily -and $winPlatform -and $entry.IsAssigned -ne $false -and $entry.Id)
+                if ($updateCandidate -or $officeCandidate) {
+                    $sAll = @(); $sStatus = 'Read'
                     try {
-                        $sUri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$($entry.Id)/settings"
-                        $sAll = @(); $sPages = 0
+                        $sUri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$($entry.Id)/settings?`$expand=settingDefinitions"
+                        $sPages = 0
                         while ($sUri -and $sPages -lt 20) {
                             $sPage = Invoke-TPGraphRequest -Method GET -Uri $sUri -ErrorAction Stop
                             if ($sPage.value) { $sAll += $sPage.value }
                             $sUri = $sPage['@odata.nextLink']
                             $sPages++
                         }
-                        $vals = Get-TPAvSettingValues -Settings $sAll
-                        $upd = [ordered]@{}
-                        foreach ($k in @($vals.Keys)) { if ([string]$k -match '_policy_config_update_') { $upd[$k] = $vals[$k] } }
-                        if ($upd.Count -gt 0 -or $sUri) {
+                        if ($sUri) { $sStatus = 'Partial' }
+                    } catch {
+                        $sStatus = 'Failed'
+                        if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                            Register-TPException -Source 'Intune-EndpointSecurity-PolicySettings' -Message $_.Exception.Message
+                        }
+                    }
+                    if ($updateCandidate) {
+                        if ($sStatus -eq 'Failed') {
                             $result.Data.UpdateSettingsPolicies += @{
                                 Id = $entry.Id; DisplayName = $entry.DisplayName; Platforms = $entry.Platforms; IsAssigned = $entry.IsAssigned
-                                SettingValues = $upd; SettingsStatus = $(if ($sUri) { 'Partial' } else { 'Read' })
+                                SettingValues = $null; SettingsStatus = 'Failed'
+                            }
+                        } else {
+                            $vals = Get-TPAvSettingValues -Settings $sAll
+                            $upd = [ordered]@{}
+                            foreach ($k in @($vals.Keys)) { if ([string]$k -match '_policy_config_update_') { $upd[$k] = $vals[$k] } }
+                            if ($upd.Count -gt 0 -or $sStatus -eq 'Partial') {
+                                $result.Data.UpdateSettingsPolicies += @{
+                                    Id = $entry.Id; DisplayName = $entry.DisplayName; Platforms = $entry.Platforms; IsAssigned = $entry.IsAssigned
+                                    SettingValues = $upd; SettingsStatus = $sStatus
+                                }
                             }
                         }
-                    } catch {
-                        $result.Data.UpdateSettingsPolicies += @{
-                            Id = $entry.Id; DisplayName = $entry.DisplayName; Platforms = $entry.Platforms; IsAssigned = $entry.IsAssigned
-                            SettingValues = $null; SettingsStatus = 'Failed'
-                        }
-                        if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
-                            Register-TPException -Source 'Intune-EndpointSecurity-UpdateSettings' -Message $_.Exception.Message
-                        }
                     }
-                # INT-2.6: Office macro and active-content settings live in Settings Catalog
-                # policies (and the Microsoft 365 Apps security baseline), which have no
-                # endpoint-security bucket. Every assigned Windows policy of that kind is read
-                # once, with its setting definitions expanded so each Office setting and option
-                # is named, and only the Office settings are kept. A read that fails or stops
-                # at the page cap is recorded on the entry: such a policy may configure Office,
-                # so the settings it holds are not established, never assumed absent.
-                $officeFamily = [string]$tplFamily -in @('', 'none', 'baseline')
-                $winPlatform  = (-not $entry.Platforms) -or ($entry.Platforms -match 'windows10')
-                if (-not $bucket -and $officeFamily -and $winPlatform -and $entry.IsAssigned -ne $false -and $entry.Id) {
-                    $officeEntry = [ordered]@{
-                        Id = $entry.Id; DisplayName = $name; IsAssigned = $entry.IsAssigned
-                        TemplateFamily = $tplFamily; TemplateDisplayName = $tplName
-                        OfficeSettingsStatus = 'NotRun'; OfficeSettingValues = $null; OfficeSettingLabels = $null
-                    }
-                    try {
-                        $oUri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$($entry.Id)/settings?`$expand=settingDefinitions"
-                        $oAll = @(); $oPages = 0
-                        while ($oUri -and $oPages -lt 20) {
-                            $oPage = Invoke-TPGraphRequest -Method GET -Uri $oUri -ErrorAction Stop
-                            if ($oPage.value) { $oAll += $oPage.value }
-                            $oUri = $oPage['@odata.nextLink']
-                            $oPages++
+                    if ($officeCandidate) {
+                        $officeEntry = [ordered]@{
+                            Id = $entry.Id; DisplayName = $name; IsAssigned = $entry.IsAssigned
+                            TemplateFamily = $tplFamily; TemplateDisplayName = $tplName
+                            OfficeSettingsStatus = $sStatus; OfficeSettingValues = $null; OfficeSettingLabels = $null
                         }
-                        $cap = Get-TPOfficeSettingCapture -Settings $oAll
-                        $officeEntry.OfficeSettingsStatus = $(if ($oUri) { 'Partial' } else { 'Read' })
-                        $officeEntry.OfficeSettingValues = $cap.Values
-                        $officeEntry.OfficeSettingLabels = $cap.Labels
-                    } catch {
-                        $officeEntry.OfficeSettingsStatus = 'Failed'
-                        if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
-                            Register-TPException -Source 'Intune-EndpointSecurity-OfficeSettings' -Message $_.Exception.Message
+                        if ($sStatus -ne 'Failed') {
+                            $cap = Get-TPOfficeSettingCapture -Settings $sAll
+                            $officeEntry.OfficeSettingValues = $cap.Values
+                            $officeEntry.OfficeSettingLabels = $cap.Labels
                         }
-                    }
-                    $officeValues = $officeEntry.OfficeSettingValues
-                    if ($officeEntry.OfficeSettingsStatus -ne 'Read' -or ($null -ne $officeValues -and $officeValues.Count -gt 0)) {
-                        $result.Data.OfficePolicies += $officeEntry
+                        $officeValues = $officeEntry.OfficeSettingValues
+                        if ($officeEntry.OfficeSettingsStatus -ne 'Read' -or ($null -ne $officeValues -and $officeValues.Count -gt 0)) {
+                            $result.Data.OfficePolicies += $officeEntry
+                        }
                     }
                 }
 
