@@ -1030,8 +1030,13 @@
       "SlaClass": "High",
       "DependsOn": [],
       "FreshnessClass": "Monthly",
-      "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
-      "EffectivenessCapability": "NotCollected",
+      "EffectivenessCheck": "Sign-in logs (30 days, beta signIns) show no successful interactive single-factor sign-in by a privileged-role holder, outside approved emergency-access accounts.",
+      "EffectivenessCapability": "Collected",
+      "EffectivenessEvidence": {
+        "Type": "SignInLog",
+        "Check": "SingleFactorSuccess",
+        "Scope": "PrivilegedRoles"
+      },
       "Reason": "Part of the CIS E3 Level 1 / E5 Level 1 profile this tier adopts.",
       "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.2.1 (E3 Level 1 / E5 Level 1), the profile this tier adopts.",
       "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
@@ -1054,8 +1059,13 @@
       "SlaClass": "Critical",
       "DependsOn": [],
       "FreshnessClass": "Daily",
-      "EffectivenessCheck": "Sign-in logs show interactive sign-ins completing MFA; no MFA-less success outside the break-glass pair.",
-      "EffectivenessCapability": "NotCollected",
+      "EffectivenessCheck": "Sign-in logs (30 days, beta signIns) show no successful interactive sign-in that needed only one factor, outside approved emergency-access accounts.",
+      "EffectivenessCapability": "Collected",
+      "EffectivenessEvidence": {
+        "Type": "SignInLog",
+        "Check": "SingleFactorSuccess",
+        "Scope": "AllUsers"
+      },
       "Reason": "Password-only sign-in is the root cause of nearly every BEC case.",
       "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.2.2 (E3 Level 1 / E5 Level 1), the profile this tier adopts.",
       "Notes": "Security Defaults counts only as Partial: registration is prompted, not enforced at every sign-in. Legacy-auth block (AAD-1.1) must come first or MFA is bypassable."
@@ -1074,8 +1084,13 @@
       "SlaClass": "High",
       "DependsOn": [],
       "FreshnessClass": "Monthly",
-      "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
-      "EffectivenessCapability": "NotCollected",
+      "EffectivenessCheck": "Sign-in logs (30 days, interactive and non-interactive) show no successful sign-in through a legacy authentication client, outside approved emergency-access accounts.",
+      "EffectivenessCapability": "Collected",
+      "EffectivenessEvidence": {
+        "Type": "SignInLog",
+        "Check": "LegacyAuthSuccess",
+        "Scope": "All"
+      },
       "Reason": "Part of the CIS E3 Level 1 / E5 Level 1 profile this tier adopts.",
       "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.2.3 (E3 Level 1 / E5 Level 1), the profile this tier adopts.",
       "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
@@ -1771,8 +1786,13 @@
       "SlaClass": "High",
       "DependsOn": [],
       "FreshnessClass": "Weekly",
-      "EffectivenessCheck": "Sign-in logs show no basic-auth successes.",
-      "EffectivenessCapability": "NotCollected",
+      "EffectivenessCheck": "Sign-in logs (30 days, interactive and non-interactive) show no successful legacy-client sign-in to Exchange Online.",
+      "EffectivenessCapability": "Collected",
+      "EffectivenessEvidence": {
+        "Type": "SignInLog",
+        "Check": "LegacyAuthSuccess",
+        "Scope": "Exchange"
+      },
       "Reason": "Basic authentication to Exchange has no MFA.",
       "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 6.5.1 (E3 Level 1 / E5 Level 1), the profile this tier adopts.",
       "Notes": "Microsoft has retired basic auth; this should always pass and a failure is a red flag."
@@ -1836,8 +1856,13 @@
       "SlaClass": "High",
       "DependsOn": [],
       "FreshnessClass": "Weekly",
-      "EffectivenessCheck": "No legacy-auth SharePoint sign-ins in sign-in logs.",
-      "EffectivenessCapability": "NotCollected",
+      "EffectivenessCheck": "Sign-in logs (30 days, interactive and non-interactive) show no successful legacy-client sign-in to SharePoint Online.",
+      "EffectivenessCapability": "Collected",
+      "EffectivenessEvidence": {
+        "Type": "SignInLog",
+        "Check": "LegacyAuthSuccess",
+        "Scope": "SharePoint"
+      },
       "Reason": "Legacy auth to SharePoint bypasses MFA the same way it does for mail.",
       "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 7.2.1 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },

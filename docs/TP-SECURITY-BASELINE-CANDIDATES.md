@@ -78,7 +78,7 @@ plus a `BaselineCompliance` summary (counts by observed state, constraint and di
 | Hardened | 59 | 21 | 38 |
 | Assessment-only controls | 134 | | |
 
-All 160 v7.0.0 recommendations are represented; 70 rows are tool-checked controls and 119 are manual. Effectiveness is read for none of the rows today: every row's `EffectivenessCapability` is `NotCollected`.
+All 160 v7.0.0 recommendations are represented; 70 rows are tool-checked controls and 119 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
 
 ## Every assessment control
 
