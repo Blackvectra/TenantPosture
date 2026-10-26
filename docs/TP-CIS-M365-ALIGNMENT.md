@@ -12,11 +12,11 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 
 | Relation | Meaning | Controls |
 |---|---|---|
-| Equivalent | The evaluator checks what R audits, and every pass meets R. | 51 |
+| Equivalent | The evaluator checks what R audits, and every pass meets R. | 52 |
 | Subset | The evaluator checks some of the settings R lists, and every pass meets R for those settings. R can still fail on a setting the tool does not read. | 19 |
-| Not cited | No v7.0.0 recommendation describes the check, or the evaluator passes something R fails. | 134 |
+| Not cited | No v7.0.0 recommendation describes the check, or the evaluator passes something R fails. | 133 |
 
-70 controls cite 52 of the 160 recommendations. The CIS card in the report scores only those controls, so it is a narrower number than before, and an honest one: it covers what the tool verified against this benchmark.
+71 controls cite 53 of the 160 recommendations. The CIS card in the report scores only those controls, so it is a narrower number than before, and an honest one: it covers what the tool verified against this benchmark.
 
 **Scope differences kept as citations.** EXO-1.3, EXO-5.3, EXO-8.2 and DEF-2.3 judge the policies and rules in force (`Get-TPInForcePolicies`; enabled transport rules), while the CIS audit reads every policy, or only the Default malware policy. A disabled rule or a policy no recipient falls under changes nothing about what happens to mail, so the judgment is the same requirement; it is recorded here because a CIS audit run by hand can disagree with the tool on such a tenant.
 
@@ -62,6 +62,7 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 | EXO-1.7 Honor DMARC Policy Enabled | 2.1.7 | Ensure that an anti-phishing policy has been created (Automated) | Subset | Satisfied requires HonorDmarcPolicy = True in every anti-phishing policy in force, which meets 2.1.7's HonorDmarcPolicy True; 2.1.7's other anti-phishing settings are not judged here. |
 | EXO-2.5 Customer Lockbox Enabled | 1.3.6 | Ensure the customer lockbox feature is enabled (Automated) | Equivalent | Satisfied requires Get-OrganizationConfig CustomerLockBoxEnabled = True, exactly 1.3.6's audit. |
 | EXO-3.1 Connection Filter Safe List Bypass Disabled | 2.1.13 | Ensure the connection filter safe list is off (Automated) | Equivalent | Satisfied requires EnableSafeList = False on the default connection filter policy, exactly 2.1.13's audit (Get-HostedConnectionFilterPolicy -Identity Default EnableSafeList False). |
+| EXO-3.2 Outbound Spam Sending Limits Configured | 2.1.15 | Ensure outbound anti-spam message limits are in place (Automated) | Equivalent | Satisfied requires every outbound spam policy in force to set RecipientLimitExternalPerHour 1-500, RecipientLimitInternalPerHour 1-1000, RecipientLimitPerDay 1-1000 and ActionWhenThresholdReached BlockUser; 2.1.15 audits the same four settings and accepts lower limits. |
 | EXO-3.5 Transport Rules Changes Audited | 3.1.1 | Ensure Microsoft 365 audit log search is Enabled (Automated) | Equivalent | Satisfied requires Get-AdminAuditLogConfig UnifiedAuditLogIngestionEnabled = True (read from the Exchange Online session) and AdminAuditLogEnabled not False, which meets 3.1.1 (UnifiedAuditLogIngestionEnabled True). |
 | EXO-4.3 Safe Attachments for SharePoint OneDrive Teams Enabled | 2.1.5 | Ensure Safe Attachments for SharePoint, OneDrive, and Microsoft Teams is Enabled (Automated) | Subset | Satisfied requires Get-AtpPolicyForO365 EnableATPForSPOTeamsODB = True, one of 2.1.5's three settings; EnableSafeDocs True and AllowSafeDocsOpen False are not judged. |
 | EXO-5.1 Per-User Mailbox Audit Logging Enabled for All Mailboxes | 6.1.1 | Ensure 'AuditDisabled' organizationally is set to 'False' (Automated) | Equivalent | Satisfied requires OrganizationConfig.AuditDisabled = False, exactly 6.1.1; it does not read per-mailbox audit actions or AuditEnabled, so 6.1.2 (the draft's id) is not met. |
@@ -108,7 +109,7 @@ The reasons are in `Config/cis-m365-uncited-controls.json`. Several are one chan
 
 ## Recommendations no control checks
 
-108 of the 160 recommendations have no citing control. Some are settings the collectors already read and no evaluator scores (5.2.3.2 banned passwords, 5.2.3.3 on-premises password protection, 5.2.3.9 lockout duration, 2.1.12 the connection filter IP allow list); the rest need a new read. Section 9 (Microsoft Fabric) is outside what the tool assesses.
+107 of the 160 recommendations have no citing control. Some are settings the collectors already read and no evaluator scores (5.2.3.2 banned passwords, 5.2.3.3 on-premises password protection, 5.2.3.9 lockout duration, 2.1.12 the connection filter IP allow list); the rest need a new read. Section 9 (Microsoft Fabric) is outside what the tool assesses.
 
 **1. Microsoft 365 admin center** (11)
 
@@ -131,7 +132,6 @@ The reasons are in `Config/cis-m365-uncited-controls.json`. Several are one chan
 - 2.1.10 Ensure DMARC records for all Exchange Online domains are published (Automated)
 - 2.1.11 Ensure comprehensive attachment filtering is applied (Automated)
 - 2.1.12 Ensure the connection filter IP allow list is not used (Automated)
-- 2.1.15 Ensure outbound anti-spam message limits are in place (Automated)
 - 2.4.2 Ensure Priority accounts have 'Strict protection' presets applied (Automated)
 - 2.4.4 Ensure Zero-hour auto purge for Microsoft Teams is on (Automated)
 - 2.4.5 Ensure 'AIR' remediation is enabled (Manual)

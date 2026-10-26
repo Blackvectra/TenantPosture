@@ -10,8 +10,8 @@ Checked against **ScubaGear 2.0.0** and its official migration file (`PowerShell
 
 | Relation | Meaning | Citations |
 |---|---|---|
-| Equivalent | The NRG evaluator checks the same requirement. | 23 |
-| Partial | The NRG evaluator covers part of the requirement, or a stricter or looser form of it. Read the note. | 46 |
+| Equivalent | The NRG evaluator checks the same requirement. | 24 |
+| Partial | The NRG evaluator covers part of the requirement, or a stricter or looser form of it. Read the note. | 47 |
 | Manual | The NRG control is manual or advisory; it asserts nothing about the rule. | 3 |
 | Unsupported | The NRG control does not establish this requirement. The citation stays only where the current id still exists, flagged; an obsolete id with no equivalent was removed. | 18 |
 
@@ -29,7 +29,6 @@ The old rule id no longer exists and the migrated range does not describe what t
 | DEF-4.3 Risky OAuth Application Alerts Configured | `MS.DEFENDER.5.1v1` | Risky OAuth alerts are not among the alerts SCuBA 4.1 requires. Obsolete reference removed; the NRG control stays. |
 | DEF-4.4 Priority Accounts Tagged in Defender | `MS.DEFENDER.2.1v1` | A priority-account tag is not impersonation protection (SCuBA 2.1). Obsolete reference removed; the NRG control stays (manual). |
 | EXO-3.5 Transport Rules Changes Audited | `MS.DEFENDER.6.1v1` | Transport-rule change auditing is not unified audit logging (5.1). Obsolete reference removed; the NRG control stays. |
-| EXO-4.1 Mailbox Audit Log Age Limit Sufficient | `MS.DEFENDER.6.3v1` | The mailbox audit log age limit no longer governs retention (Purview does). Obsolete reference removed; the NRG control stays. |
 | EXO-4.4 Anti-Spam Inbound Policy Properly Configured | `MS.DEFENDER.1.2v1` | SCuBA 2.0 has no rule for the anti-spam inbound policy settings NRG checks. Obsolete reference removed; the NRG control stays. |
 
 ## Equivalent
@@ -59,6 +58,7 @@ The old rule id no longer exists and the migrated range does not describe what t
 | TMS-2.8 PSTN Users Cannot Bypass Lobby | `MS.TEAMS.1.5v1` | SHOULD | same | Dial-in users cannot bypass the lobby. |
 | TMS-4.2 Anonymous Users Cannot Start Meetings | `MS.TEAMS.1.2v2` | SHALL | same | Anonymous users cannot start meetings. |
 | TMS-4.3 Teams External Domain Federation Restricted to Allowlist | `MS.TEAMS.2.1v2` | SHALL | same | External federation restricted to allowed domains. |
+| AAD-14.1 Application Credentials Current and Short-Lived | `MS.AAD.5.6v1` | SHOULD | added 2026-10-26 | Satisfied requires the enabled default application management policy to restrict application password lifetime to 180 days or less, with no exempted actors. It also holds certificates to 180 days, stricter than `MS.AAD.5.7v1` (365), which is met but not cited. |
 
 ## Partial
 
@@ -110,6 +110,7 @@ The old rule id no longer exists and the migrated range does not describe what t
 | TMS-3.2 Auto-Admit Only Authenticated Organization Users | `MS.TEAMS.1.3v1` | SHOULD | same | SCuBA: anonymous and dial-in callers not admitted automatically; NRG: auto-admit only organization users. |
 | DEF-4.1 DLP Policy Covers All Key Workloads | `MS.SECURITYSUITE.3.2v1` | SHOULD | `MS.DEFENDER.4.2v1` (migrated) | ScubaGear 3.2 is met only when ONE enabled rule, in an Enable-mode policy, matches all three of SSN, ITIN and Credit Card Number, and that policy's location is All for each of Exchange, OneDrive, SharePoint, Teams and Devices. NRG judges workload coverage: enforcing policies with whole-workload scope whose rules match sensitive information types, whatever the types. Policies can cover every workload and still fail 3.2 when no single rule matches all three named types. |
 | EXO-1.4 DKIM Signing Enabled for All Domains | `MS.EXO.3.1v1` | SHOULD | same | NRG is stricter. SCuBA 3.1 passes when DKIM signing is enabled; NRG also requires a 2048-bit key and reports a domain with a 1024-bit key as Partial. A pass here with an NRG Partial is expected, not a disagreement. |
+| EXO-4.1 Mailbox Audit Log Age Limit Sufficient | `MS.SECURITYSUITE.5.2v1` | SHALL | `MS.DEFENDER.6.3v1` (removed 2026-09-30, re-cited 2026-10-26) | Covers the "searchable for 3 months" half for Exchange record types: every Exchange-scoped custom audit retention policy must be read and none may shorten retention below 90 days. Twelve-month retrievability and other record types are not checked here. |
 
 ## Manual
 
@@ -133,7 +134,7 @@ The old rule id no longer exists and the migrated range does not describe what t
 | EXO-7.1 No Mailbox Forwarding to External Addresses | `MS.EXO.1.1v2` | SHALL | same | Mailbox forwarding is not the remote-domain forwarding setting SCuBA reads. |
 | EXO-7.2 No Inbox Rules Forwarding Externally | `MS.EXO.1.1v2` | SHALL | same | Inbox-rule forwarding is not the remote-domain forwarding setting SCuBA reads. |
 
-## ScubaGear 2.0.0 rules no NRG control is aligned to (55)
+## ScubaGear 2.0.0 rules no NRG control is aligned to (54)
 
 These are **not assessed by NRG** under a SCuBA reference. Some are Power BI and Security Suite rules ScubaGear marks as manual (its `Warning` and `N/A` results). Listing them is not a claim that NRG should adopt them.
 
@@ -144,7 +145,6 @@ These are **not assessed by NRG** under a SCuBA reference. Some are Power BI and
 | `MS.AAD.3.8v1` | SHOULD | Managed Devices SHOULD be required to register MFA. |
 | `MS.AAD.4.1v1` | SHALL | Security logs SHALL be sent to the agency's security operations center for monitoring. |
 | `MS.AAD.5.5v1` | SHOULD | Application Password Addition SHOULD be blocked. |
-| `MS.AAD.5.6v1` | SHOULD | Application password lifetime SHOULD be restricted to 180 days or less. |
 | `MS.AAD.5.7v1` | SHOULD | Application certificate lifetime SHOULD be restricted to 365 days or less. |
 | `MS.AAD.6.1v1` | SHALL | User passwords SHALL NOT expire. |
 | `MS.AAD.7.2v1` | SHALL | Privileged users SHALL be provisioned with finer-grained roles instead of Global Administrator. |

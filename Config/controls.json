@@ -2468,7 +2468,7 @@
         "CISControls": [
           "9.7"
         ],
-        "CIS": "",
+        "CIS": "2.1.15",
         "SCuBA": "",
         "NIST": "SI-8, AU-12",
         "CMMC": "SI.L2-3.14.7",
@@ -3654,7 +3654,8 @@
           "8.10"
         ],
         "CIS": "",
-        "NIST": "AU-11",
+        "SCuBA": "MS.SECURITYSUITE.5.2v1",
+    "NIST": "AU-11",
         "CMMC": "AU.L2-3.3.2",
         "MITRE": [
           "T1070.008"
@@ -5998,6 +5999,7 @@
           "5.4",
           "6.2"
         ],
+        "SCuBA": "MS.AAD.5.6v1",
         "NIST": "IA-5, IA-5(1), AC-2",
         "CMMC": "IA.L2-3.5.10, AC.L1-3.1.1",
         "MITRE": [

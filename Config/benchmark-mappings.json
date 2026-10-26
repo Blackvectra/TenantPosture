@@ -44,6 +44,13 @@
       "Publisher": "DISA",
       "Kind": "Government configuration benchmark",
       "Url": "https://public.cyber.mil/stigs/"
+    },
+    "MS-WINDOWS-SECURITY-BASELINE": {
+      "Name": "Microsoft Security Baseline for Windows (Intune MDM security baseline)",
+      "Version": "Security Baseline for Windows, version 24H2 (same values in 25H2)",
+      "Publisher": "Microsoft",
+      "Kind": "Vendor security baseline",
+      "Url": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-windows-mdm-settings"
     }
   },
   "controls": {
@@ -138,8 +145,8 @@
         "ItemTitle": "Receiving domains should implement protocols to signal TLS usage to clients. Receivers should implement DANE, MTA-STS (or both) for all mail servers listed in the domain's MX Resource Record set.",
         "Url": "https://doi.org/10.6028/NIST.SP.800-177r1",
         "Relation": "Subset",
-        "Why": "A published MTA-STS record with a retrievable policy in enforce mode is MTA-STS implemented for the domain; enforce is the mode in which, per Section 5.2.5 Table 5-2, a client rejects the connection on a TLS validation or MX matching failure.",
-        "Unchecked": "That the policy's mx: entries cover every host in the domain's MX RR set and that each MX host presents a certificate matching them; max_age; domains not in the assessed DNS domain list. (DANE alone also passes the recommendation, where DNS-1.4 would report a Gap.)"
+        "Why": "A published MTA-STS record with a retrievable policy in enforce mode is MTA-STS implemented for the domain; enforce is the mode in which, per Section 5.2.5 Table 5-2, a client rejects the connection on a TLS validation or MX matching failure. The policy's mx: patterns must also cover every host in the domain's MX RR set (RFC 8461 wildcard matching), the recommendation's 'for all mail servers listed' part.",
+        "Unchecked": "That each MX host presents a certificate matching the policy; max_age; domains not in the assessed DNS domain list. (DANE alone also passes the recommendation, where DNS-1.4 would report a Gap.)"
       }
     ],
     "DNS-1.6": [
@@ -159,9 +166,8 @@
         "ItemId": "Section 4.5.3, Table 4-3 'Recommended Cryptographic Key Parameters' (RSA/SHA-256 row)",
         "ItemTitle": "RSA/SHA-256 | Approved for Government Use: YES | Recommended Length: 2048 bits | Recommended Lifetime: 1-2 years",
         "Url": "https://doi.org/10.6028/NIST.SP.800-177r1",
-        "Relation": "Subset",
-        "Why": "On the lifetime column, DNS-2.1's 365-day limit is within the 1-2 year recommended lifetime, so every Satisfied key passes it (stricter on that part).",
-        "Unchecked": "The recommended 2048-bit length (judged by EXO-1.4 and shown here only as context) and the RSA/SHA-256 algorithm (Security Recommendation 4-3)."
+        "Relation": "Stricter",
+        "Why": "Satisfied requires a key of at least 2048 bits rotated within 365 days, inside the row's recommended length and its 1-2 year lifetime. When the key size could not be read, the rotation verdict stands and the Detail says the size was not judged."
       }
     ],
     "EXO-4.4": [
@@ -182,6 +188,15 @@
         "Relation": "Subset",
         "Why": "Satisfied accepts MoveToJmf (the Standard value) or Quarantine (the Strict value) in the default policy; every other action fails.",
         "Unchecked": "Custom and preset anti-spam policies in force."
+      },
+      {
+        "Benchmark": "MS-EOP-MDO-RECOMMENDED",
+        "ItemId": "Anti-spam policy settings > Zero-hour auto purge for spam (SpamZapEnabled) and phishing (PhishZapEnabled)",
+        "ItemTitle": "SpamZapEnabled: On; PhishZapEnabled: On (Default, Standard and Strict)",
+        "Url": "https://learn.microsoft.com/en-us/defender-office-365/recommended-settings-for-eop-and-office365#anti-spam-policy-settings",
+        "Relation": "Subset",
+        "Why": "Satisfied requires SpamZapEnabled and PhishZapEnabled on in the default anti-spam policy, the recommended value; the deprecated ZapEnabled is no longer read.",
+        "Unchecked": "Anti-spam policies other than the default policy."
       }
     ],
     "INT-1.1": [
@@ -645,6 +660,150 @@
         "Relation": "Stricter",
         "Why": "The recommendation is that audit logging (Turn auditing on or off) stays on; PVW-4.1's Satisfied requires UnifiedAuditLogIngestionEnabled = True plus per-user Audit (Premium) licensing, so it always meets the recommendation while the recommendation can be met where PVW-4.1 fails. (The ZTA test id behind this section was not located; the Learn section is cited.)"
       }
+    ],
+    "INT-1.3": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Recommended compliance settings for Windows 10 and later > Device health > Require BitLocker",
+        "ItemTitle": "Require BitLocker: Require",
+        "Url": "https://learn.microsoft.com/security/zero-trust/zero-trust-identity-device-access-policies-common#device-compliance-policies",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires bitLockerEnabled = true (Require BitLocker) in every assigned Windows compliance policy, the Device health rule the Zero Trust table sets to Require."
+      }
+    ],
+    "INT-2.3": [
+      {
+        "Benchmark": "MS-WINDOWS-SECURITY-BASELINE",
+        "ItemId": "Firewall > Enable Domain / Private / Public Network Firewall",
+        "ItemTitle": "Enable Domain, Private and Public Network Firewall: True",
+        "Url": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-windows-mdm-settings#security-baseline-for-windows,-version-24h2",
+        "Relation": "Subset",
+        "Why": "Satisfied requires the domain, private and public Enable Firewall settings on in the assigned Firewall policies, the three rows the baseline sets to True.",
+        "Unchecked": "Default inbound action (Block), logging, notifications and the other Firewall rows of the baseline."
+      }
+    ],
+    "INT-4.1": [
+      {
+        "Benchmark": "MS-WINDOWS-SECURITY-BASELINE",
+        "ItemId": "LAPS > Backup Directory",
+        "ItemTitle": "Backup Directory: Backup the password to Microsoft Entra ID only",
+        "Url": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-windows-mdm-settings#security-baseline-for-windows,-version-24h2",
+        "Relation": "Subset",
+        "Why": "Satisfied requires every assigned LAPS policy's Backup Directory to be Microsoft Entra ID, the baseline value; Disabled, not set or Active Directory is a shortfall.",
+        "Unchecked": "The other LAPS settings the policy can carry (password age, complexity, post-authentication actions), which the baseline leaves at their defaults."
+      }
+    ],
+    "PVW-2.5": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Email retention policies are configured (Zero Trust Assessment test 35028)",
+        "ItemTitle": "Email retention policies are configured",
+        "Url": "https://learn.microsoft.com/purview/zero-trust-purview-protect-data#email-retention-policies-are-configured",
+        "Relation": "Stricter",
+        "Why": "35028 passes on an enabled retention policy with a non-empty ExchangeLocation read with -DistributionDetail. PVW-2.5's Satisfied requires enabled policies whose locations (read the same way) cover Exchange, SharePoint, OneDrive and Teams, so 35028 passes wherever PVW-2.5 does."
+      }
+    ],
+    "PVW-2.6": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Auto-labeling policies are in enforcement mode (Zero Trust Assessment test 35020)",
+        "ItemTitle": "Auto-labeling policies are in enforcement mode",
+        "Url": "https://learn.microsoft.com/purview/zero-trust-purview-protect-data#auto-labeling-policies-are-in-enforcement-mode",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires an auto-labeling policy with Enabled = True and Mode = Enable, the condition 35020 checks."
+      }
+    ],
+    "PPL-3.2": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Data loss prevention policies are enabled (Zero Trust Assessment test 35030)",
+        "ItemTitle": "Data loss prevention policies are enabled",
+        "Url": "https://learn.microsoft.com/purview/zero-trust-purview-protect-data#data-loss-prevention-policies-are-enabled",
+        "Relation": "Stricter",
+        "Why": "35030 passes on an enabled DLP policy. PPL-3.2's Satisfied requires an enforcing (Mode Enable) DLP policy whose enforcement planes include CopilotExperiences and that has an enabled rule, so 35030 passes wherever PPL-3.2 does. No benchmark item names the Copilot location itself."
+      }
+    ],
+    "EXO-3.2": [
+      {
+        "Benchmark": "MS-EOP-MDO-RECOMMENDED",
+        "ItemId": "Outbound spam policy settings > RecipientLimitExternalPerHour, RecipientLimitInternalPerHour, RecipientLimitPerDay, ActionWhenThresholdReached",
+        "ItemTitle": "Standard: 500 external per hour, 1000 internal per hour, 1000 per day, BlockUser (Strict: 400, 800, 800, BlockUser)",
+        "Url": "https://learn.microsoft.com/en-us/defender-office-365/recommended-settings-for-eop-and-office365#outbound-spam-policy-settings",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires every outbound spam policy in force to set the three limits within 1-500, 1-1000 and 1-1000 (0, the service default, fails) and ActionWhenThresholdReached BlockUser: the Standard column, which the Strict values also meet."
+      }
+    ],
+    "DEF-2.1": [
+      {
+        "Benchmark": "MS-EOP-MDO-RECOMMENDED",
+        "ItemId": "Introduction: use the Standard and/or Strict preset security policies",
+        "ItemTitle": "Microsoft recommends the Standard and/or Strict preset security policies",
+        "Url": "https://learn.microsoft.com/en-us/defender-office-365/recommended-settings-for-eop-and-office365",
+        "Relation": "Subset",
+        "Why": "Satisfied requires a Standard or Strict preset whose Exchange Online Protection and Defender for Office 365 rules are both enabled and whose recipient scope is not narrowed, which is applying the preset the page recommends.",
+        "Unchecked": "Impersonation protection entries (users and domains to protect), which a preset leaves for the administrator to fill in, and the outbound and Teams settings outside the presets."
+      }
+    ],
+    "AAD-3.3": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Phase 1 - Secure the identity control plane, Step 6: Configure activation settings > Require MFA on activation",
+        "ItemTitle": "For each privileged role: Require MFA on activation",
+        "Url": "https://learn.microsoft.com/security/zero-trust/adopt/implement-privileged-access-identity#configure-activation-settings",
+        "Relation": "Subset",
+        "Why": "Satisfied requires each privileged role's PIM activation to need MFA, either the MultiFactorAuthentication rule or an authentication context whose enabled Conditional Access policy requires MFA or an authentication strength of everyone.",
+        "Unchecked": "Roles the organization treats as privileged beyond the tool's 17-role list."
+      }
+    ],
+    "AAD-11.2": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Guests are not assigned high privileged directory roles (Zero Trust Assessment test 22128)",
+        "ItemTitle": "Guests are not assigned high privileged directory roles",
+        "Url": "https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-tenants#guests-are-not-assigned-high-privileged-directory-roles",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires that no principal with userType Guest holds, permanently or eligibly, a role Microsoft flags isPrivileged, the condition 22128 checks; the tool also flags #EXT# members, which is stricter."
+      }
+    ],
+    "AAD-11.4": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Token protection policies are configured (Zero Trust Assessment test 21941)",
+        "ItemTitle": "Token protection policies are configured",
+        "Url": "https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-identities#token-protection-policies-are-configured",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires an enabled token protection policy that includes the Windows platform (or all platforms without Windows excluded), includes users, and targets all resources or both Exchange Online and SharePoint Online, the scope the check requires."
+      }
+    ],
+    "AAD-11.7": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Conditional Access policies for Privileged Access Workstations are configured (Zero Trust Assessment test 21830)",
+        "ItemTitle": "Conditional Access policies for Privileged Access Workstations are configured",
+        "Url": "https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-engineering-systems#conditional-access-policies-for-privileged-access-workstations-are-configured",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires both policies the check names, an enabled policy for a privileged role that requires a compliant device and an enabled policy for a privileged role with an exclude-mode device filter and a block grant; the tool also requires the compliant device as a requirement, not an OR alternative, and rejects narrowed policies."
+      }
+    ],
+    "AAD-11.9": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Workload Identities are configured with risk-based policies (Zero Trust Assessment test 21883)",
+        "ItemTitle": "Workload Identities are configured with risk-based policies",
+        "Url": "https://learn.microsoft.com/entra/fundamentals/zero-trust-response-remediation#workload-identities-are-configured-with-risk-based-policies",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires an enabled Conditional Access policy that includes service principals, selects a service principal risk level and blocks: a risk-based workload identity policy, as the recommendation asks."
+      }
+    ],
+    "AAD-12.2": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Inactive guest identities are disabled or removed from the tenant (Zero Trust Assessment test 21858)",
+        "ItemTitle": "Inactive guest identities are disabled or removed from the tenant",
+        "Url": "https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-tenants#inactive-guest-identities-are-disabled-or-removed-from-the-tenant",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires no enabled guest whose last successful sign-in (or creation date when none) is more than 90 days ago, the condition 21858 checks."
+      }
     ]
   },
   "unmapped": {
@@ -652,35 +811,15 @@
       "Reason": "The evaluator accepts any enabled policy with any interval and any scope. Near-misses that fail the rule: Zero Trust Assessment checks 'Privileged users have short-lived sign-in sessions' (test 21825: every privileged role covered by an enabled policy with sign-in frequency 4 hours or less) and 'Guests don't have long lived sign-in sessions' (test 21824: a policy targeting guests or external users at 24 hours or less, 1 day, or every time) - a 30-day frequency on one group is Satisfied here and fails both. DISA STIG V-270200 (session lock after 15 minutes of inactivity) is a different setting (idle session timeout), not sign-in frequency. ScubaGear 2.0.0 has no sign-in frequency rule.",
       "EarnBy": "Add a per-population judgment: for each privileged role, an enabled policy including that role with signInFrequency type hours and value 4 or less (cite ZTA 21825), and for guests an enabled policy with includeGuestsOrExternalUsers and 24 hours or less (cite ZTA 21824). The collector would need to store signInFrequency.type and .value."
     },
-    "AAD-11.2": {
-      "Reason": "Closest item: Microsoft Zero Trust check 'Guests are not assigned high privileged directory roles' (https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-tenants#guests-are-not-assigned-high-privileged-directory-roles; Zero Trust Assessment test 22128, which fails on any user with userType 'Guest' holding a role whose roleDefinition.isPrivileged is true, active or eligible). It fails the rule on two counts: the evaluator identifies guests by '#EXT#' in the UPN, not by userType, so a userType=Guest account without '#EXT#' (a member converted to guest, or one created as Guest through Graph) holding Global Administrator is Satisfied here and fails the check; and the tool's fixed 18-role list is narrower than Microsoft's isPrivileged set (for example Hybrid Identity Administrator, Domain Name Administrator, External Identity Provider Administrator, Password Administrator), so a guest in one of those roles is Satisfied here and fails the check. ScubaGear 2.0.0 and the DISA Entra ID STIG V1R1 have no guest-in-role rule.",
-      "EarnBy": "Have the roles collector add userType to the principal read and the role definitions' isPrivileged property (Graph v1.0 unifiedRoleDefinition), then flag any principal with userType 'Guest' (keep '#EXT#' as an additional signal) in any role with isPrivileged true, permanent or eligible. That makes it Equivalent to ZTA 22128 (stricter where '#EXT#' members are also flagged)."
-    },
-    "AAD-11.4": {
-      "Reason": "Closest item: Microsoft Zero Trust check 'Token protection policies are configured' (https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-identities#token-protection-policies-are-configured; test 21941). That check passes only on an enabled policy that includes the Windows platform, has secureSignInSession.isEnabled true, includes users (not None), and targets All resources or both Office 365 Exchange Online and the Graph/SharePoint app. The evaluator checks none of the scope conditions, so a token-protection policy on one unrelated app, or without the Windows platform, is Satisfied here and fails the check. ScubaGear 2.0.0 and the DISA STIG have no token-protection rule.",
-      "EarnBy": "Store conditions.platforms.includePlatforms, includeUsers and includeApplications (most already collected) and require, on the matching enabled policy: platform includes windows, includeUsers non-empty and not None, and includeApplications All or both 00000002-0000-0ff1-ce00-000000000000 and 00000003-0000-0ff1-ce00-000000000000. Then cite test 21941 as Equivalent."
-    },
     "AAD-11.5": {
       "Reason": "No configuration benchmark recommends CAE strict enforcement as a value. ScubaGear 2.0.0 and the DISA Entra ID STIG V1R1 have no CAE rule; the Learn 'Configure Microsoft Entra for increased security' checks have only 'Network validation is configured through Universal Continuous Access Evaluation', a Global Secure Access feature (Entra Internet/Private Access) that is a different setting. Microsoft's CAE documentation describes strict location enforcement as an option, not a recommended baseline value."
     },
     "AAD-11.6": {
       "Reason": "ScubaGear 2.0.0 section 8 covers guest access, invitations and allowed domains, not inbound trust; the DISA Entra ID STIG V1R1 has no cross-tenant rule; the Zero Trust checks include only 'Outbound cross-tenant access settings are configured' (outbound B2B collaboration blocked by default), a different setting, and 'Guest access is protected by strong authentication methods', which suggests accepting the MFA claim for vetted partners rather than recommending it off. No benchmark states the default inbound-trust value the evaluator requires."
     },
-    "AAD-11.7": {
-      "Reason": "Closest item: Microsoft Zero Trust check 'Conditional Access policies for Privileged Access Workstations are configured' (https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-engineering-systems#conditional-access-policies-for-privileged-access-workstations-are-configured; test 21830). It passes only when BOTH an enabled policy targeting an isPrivileged role requires compliantDevice AND an enabled policy targeting an isPrivileged role uses a device filter in exclude mode with a block grant. The evaluator passes on either one alone, on a hybrid-join requirement, on a device filter of any mode or grant, and on a policy including any one role (privileged or not), so Satisfied can fail the check. Microsoft's CA template 'Require compliant or hybrid joined device for administrators' is also narrower than the match. ScubaGear and the DISA STIG have no rule.",
-      "EarnBy": "Require both policies the check names: enabled, includeRoles containing a privileged role, grant containing compliantDevice; and enabled, includeRoles containing a privileged role, deviceFilter mode 'exclude', grant block. The collector needs to keep the device filter mode."
-    },
     "AAD-11.8": {
       "Reason": "ScubaGear 2.0.0 and the Zero Trust checks have no Terms of Use item. Near-miss: DISA STIG V-270209 (ENTR-ID-000150) requires the DOD Notice and Consent banner in the company branding sign-in page text, a different setting (organizational branding signInPageText), not a CA Terms of Use grant; a tenant with a ToU policy and no banner passes here and fails the STIG.",
       "EarnBy": "Not this control: V-270209 would need a separate check of /organization/{id}/branding signInPageText for the banner text (DoD tenants only)."
-    },
-    "AAD-11.9": {
-      "Reason": "Closest item: Microsoft Zero Trust check 'Workload Identities are configured with risk-based policies' (https://learn.microsoft.com/entra/fundamentals/zero-trust-response-remediation#workload-identities-are-configured-with-risk-based-policies), whose remediation is 'Create a risk-based Conditional Access policy for workload identities'. Microsoft's automated test 21883 passes on any enabled block policy that includes service principals, which the evaluator's Satisfied state meets, but the published recommendation is a risk-based policy and the evaluator does not read the service-principal risk condition: a location-only workload identity policy is Satisfied here and is not what the recommendation asks for. Because the risk condition is the substance of the item, it is not cited. ScubaGear and the DISA STIG have no rule.",
-      "EarnBy": "Store conditions.servicePrincipalRiskLevels and require a non-empty value on the matching enabled policy (grant block); then cite the check as Equivalent."
-    },
-    "AAD-12.2": {
-      "Reason": "Closest item: Microsoft Zero Trust check 'Inactive guest identities are disabled or removed from the tenant' (https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-tenants#inactive-guest-identities-are-disabled-or-removed-from-the-tenant; test 21858: fails on any enabled guest whose lastSuccessfulSignInDateTime, or creation date when none, is more than 90 days ago). It fails the rule because the evaluator uses lastSignInDateTime, the last interactive attempt successful or not, so a guest with a failed interactive attempt last week and no successful sign-in for a year is Satisfied here and fails the check. DISA STIG V-270204 (disable accounts after 35 days of inactivity) is stricter than the 90-day threshold, so Satisfied can fail it. ScubaGear 2.0.0 has no inactive-guest rule.",
-      "EarnBy": "In the guest read, compute staleness from signInActivity.lastSuccessfulSignInDateTime (as the member read already does), fall back to createdDateTime for never-signed-in guests, and judge enabled guests only (disabled guests can be reported but not scored). That makes it Equivalent to ZTA 21858. A 35-day threshold over enabled members and guests would be needed for V-270204."
     },
     "AAD-12.3": {
       "Reason": "Near-miss: DISA STIG V-270204 (ENTR-ID-000090) audits enabled users whose last sign-in is older than 35 days (or never signed in and created more than 35 days ago). The evaluator's 90-day threshold is looser and it ignores unlicensed members, so an account idle for 60 days is Satisfied here and a finding under the STIG. The Zero Trust checks cover inactive guests and stale privileged identities, not all members; ScubaGear 2.0.0 has no inactive-account rule.",
@@ -689,10 +828,6 @@
     "AAD-13.1": {
       "Reason": "Secure Score is Microsoft's own scoring of many settings, not a configuration setting, and no benchmark sets a Secure Score threshold. ScubaGear 2.0.0, the DISA STIGs and the Zero Trust checks have no such item; 'All Microsoft Entra recommendations are addressed' is a different signal (Entra recommendations, not Secure Score)."
     },
-    "AAD-3.3": {
-      "Reason": "ScubaGear 2.0.0 section 7 (MS.AAD.7.1-7.9) has no rule on MFA at PIM activation; the DISA Entra ID STIG V1R1 rules list none (V-270255 is PIM notifications, V-270335 is permanent assignments); the Microsoft Zero Trust Assessment checks on Learn ('Configure Microsoft Entra for increased security') have no activation-MFA check. Near-miss: Microsoft Zero Trust 'Phase 1 - Secure the identity control plane', Step 6 'Configure activation settings' (https://learn.microsoft.com/security/zero-trust/adopt/implement-privileged-access-identity#configure-activation-settings) says to set 'Require MFA on activation' for each privileged role. It fails the rule because the evaluator also scores Satisfied when only a Conditional Access authentication context is required on activation (collector: RequiresMFA = mfaViaEnablement -or mfaViaAuthCtx), and the CA policy behind that context is never read, so it may require only terms of use or a compliant device, not MFA. The PIM deployment plan's table is labeled 'example settings', not a recommendation.",
-      "EarnBy": "Credit the authentication-context path only when an enabled CA policy targeting that context (conditions.applications.includeAuthenticationContextClassReferences) requires mfa or an authentication strength, or score Satisfied only from 'MultiFactorAuthentication' in enabledRules. Then cite the Zero Trust Phase 1 Step 6 'Require MFA on activation' item as Subset (unchecked: privileged roles the organization identifies beyond the tool's 17-role list)."
-    },
     "AAD-3.6": {
       "Reason": "No benchmark states a firm maximum PIM activation duration that 8 hours meets. ScubaGear 2.0.0 and the DISA Entra ID STIG V1R1 have no activation-duration rule, and the Zero Trust Assessment checks have none. Near-misses: Zero Trust Phase 1 Step 6 says 'Set maximum activation duration (for example: 1-4 hours for high-impact roles)', an example, and looser than the evaluator's 8-hour threshold would need to be to pass it (a 6-hour setting is Satisfied here and outside 1-4 hours); the PIM deployment plan shows 'example settings' (Global Administrator one hour, Exchange Admin two hours). Neither is a stated recommended value the 8-hour Satisfied state always meets.",
       "EarnBy": "Not a small change: Microsoft gives only examples. If the owner adopts the Zero Trust 1-4 hour range as the requirement for the high-impact roles, tighten the threshold to 4 hours for those roles and cite Zero Trust Phase 1 Step 6 as Subset; note the collector's 'PT(\\d+)H' parse returns null for minute-only durations such as PT30M, which the evaluator then reports as not assessed."
@@ -700,10 +835,6 @@
     "AAD-8.2": {
       "Reason": "ScubaGear 2.0.0 has no access-review rule; the DISA Entra ID STIG V1R1 has none; the Learn 'Configure Microsoft Entra for increased security' checks have none for role reviews. The Zero Trust Assessment repository has a test 21855 'Privileged roles have access reviews' but it is unimplemented ('Planned for future release', skipped as UnderConstruction) and is not published on the Learn page, so it has no audit to match. The ID Governance deployment guide says 'Create access reviews for Global Administrators' without a configuration value, and the evaluator would pass on a review of any single role, not necessarily Global Administrator.",
       "EarnBy": "If Microsoft publishes 21855 with criteria, read each review's scope (role definition ids) and recurrence (settings.recurrence) and require that every privileged role, at minimum Global Administrator, is covered by a recurring review."
-    },
-    "DEF-2.1": {
-      "Reason": "Not cited: the only candidate (Microsoft preset security policies) is a statement that presets apply the Standard or Strict settings, not a setting row, and the evaluator credits a preset whose Defender for Office 365 rule is off.",
-      "EarnBy": "Require both the EOP and the ATP rule of the same preset to be Enabled (when Defender for Office 365 is licensed) so that the Safe Links and Safe Attachments rows are covered too."
     },
     "DEF-4.3": {
       "Reason": "ScubaGear MS.SECURITYSUITE.4.1v1 lists seven required alerts (suspicious email sending patterns, suspicious connector activity, suspicious email forwarding, messages delayed, tenant restricted from sending unprovisioned email, tenant restricted from sending email, potentially malicious URL click); none concerns OAuth consent (confirmed in the 2026-09-30 review; respected). Microsoft's default alert policy list (https://learn.microsoft.com/defender-xdr/alert-policies) contains no consent or OAuth alert, and the recommended-settings page has no alert rows. The match is also by name, so a citation would rest on wording rather than a setting.",
@@ -738,12 +869,8 @@
       "EarnBy": "None in the evaluator; the obstacle is the source's scope."
     },
     "EXO-2.6": {
-      "Reason": "Near-miss: Microsoft 'About shared mailboxes in Microsoft 365' (https://learn.microsoft.com/microsoft-365/admin/email/about-shared-mailboxes, Before creating a shared mailbox > Access and permissions, item 'Signing in': 'Always block sign-in for the shared mailbox account and keep it blocked.'), also stated in 'Block sign-in for shared mailbox accounts in Microsoft 365 Lighthouse'. The setting matches (accountEnabled false), but Satisfied can fail it: when AAD-Users is unavailable, or a mailbox UPN is not in AAD-Users, the collector falls back to the LicenseReconciliationNeeded/SkuAssigned heuristic and a mailbox whose account is enabled but unlicensed is never flagged, so the control can report Satisfied with sign-in enabled. No ScubaGear 2.0.0 rule covers shared mailboxes.",
-      "EarnBy": "Report Satisfied only when every shared mailbox's account state was read from AAD-Users (accountEnabled false for each); when any mailbox fell back to the license heuristic or was not found in AAD-Users and nothing was flagged, report NotApplicable. Then it can cite the 'About shared mailboxes' Signing-in recommendation as Equivalent."
-    },
-    "EXO-3.2": {
-      "Reason": "The Microsoft recommended-settings page, Outbound spam policy settings table, recommends RecipientLimitExternalPerHour 500 (Standard) / 400 (Strict), RecipientLimitInternalPerHour 1000/800, RecipientLimitPerDay 1000/800, ActionWhenThresholdReached BlockUser; the evaluator reads none of them. Its row 'Notify these users and groups if a sender is blocked due to sending outbound spam (NotifyOutboundSpam and NotifyOutboundSpamRecipients)' recommends Not selected for Standard and Strict and says to rely on the default alert policy 'User restricted from sending email' instead; the evaluator's NotifyOutboundSpam branch scores Satisfied on the value Microsoft recommends against, so the row cannot be cited (the alert-policy branch matches the comment, but a comment is not a recommended value). ScubaGear MS.SECURITYSUITE.4.1v1 lists seven required alerts, and 'User restricted from sending email' is not among them ('Tenant restricted from sending email' is a different, tenant-level alert).",
-      "EarnBy": "Judge every in-force outbound spam policy for RecipientLimitExternalPerHour 1..500, RecipientLimitInternalPerHour 1..1000, RecipientLimitPerDay 1..1000 (0 means service default and fails) and ActionWhenThresholdReached = BlockUser; keep the notification half as context. Then cite those four rows of the Outbound spam policy settings table as Equivalent at the Standard column."
+      "Reason": "The evaluator now passes only when accountEnabled was read for every shared mailbox (2026-10-26), which meets Microsoft's 'About shared mailboxes' guidance ('Always block sign-in for the shared mailbox account') and CIS M365 v7.0.0 1.2.2. That guidance is product documentation rather than a configuration benchmark the map uses, and CIS 1.2.2 is cited by EXO-6.2, which judges the same setting per mailbox.",
+      "EarnBy": "Cite CIS 1.2.2 on EXO-2.6 as well as EXO-6.2 if the owner wants both controls on the CIS card."
     },
     "EXO-4.1": {
       "Reason": "Near-miss: ScubaGear MS.SECURITYSUITE.5.2v1 'Audit logs SHALL be retained and searchable for a minimum of 3 months and retrievable for a minimum of 12 months.' Two problems: the control never establishes 12-month retrievability, and Satisfied is emitted even when custom audit retention policies were not read, in which case a policy could shorten Exchange records below 3 months and the item fails. The control also covers Exchange record types only. The 2026-09-30 SCuBA review removed the old MS.DEFENDER.6.3v1 reference because the evaluator read AuditLogAgeLimit; the evaluator has since changed, but it still does not earn 5.2. No Microsoft recommended-settings row; Microsoft documents default retention (180 days / 1 year) as behavior, not a recommendation.",
@@ -761,17 +888,9 @@
       "Reason": "Microsoft Learn ('Change how long permanently deleted items are kept for an Exchange Online mailbox', 'Exchange Online limits', 'Mailbox plans in Exchange Online') documents 14 days as the default and 30 as the maximum, and uses 30 in examples, but never recommends it. No ScubaGear 2.0.0 rule.",
       "EarnBy": "None known."
     },
-    "INT-1.3": {
-      "Reason": "Searched Microsoft's Zero Trust 'Recommended compliance settings for Windows 10 and later' table, the Windows MDM security baseline (BitLocker section), and DISA Windows 11 STIG. The Zero Trust table recommends BOTH 'Require BitLocker = Require' and 'Require encryption of data storage on device = Require'; INT-1.3 is Satisfied with either one, so a policy setting only storage encryption passes INT-1.3 and fails the 'Require BitLocker' row (and vice versa). The Windows security baseline and the DISA Windows 11 STIG BitLocker rule audit the encryption configuration or state on the device, not a compliance-policy rule, which is a different setting.",
-      "EarnBy": "Require BitLockerEnabled = true in every assigned Windows compliance policy (report storageRequireEncryption as context only). That would allow a Subset/Equivalent citation of the Zero Trust row 'Device health > Windows Health Attestation Service evaluation rules > Require BitLocker: Require'; requiring both flags would also earn the 'Require encryption of data storage on device: Require' row."
-    },
     "INT-2.1": {
       "Reason": "Searched the Microsoft Defender for Endpoint security baseline and Windows MDM security baseline settings lists, the CIS Intune Defender AV benchmark (Config/cis-intune-defender-av.json), and Microsoft's Zero Trust common policies. No item audits that an EDR onboarding policy is assigned; the Defender for Endpoint baseline audits specific Defender settings (for example sample sharing, telemetry reporting frequency) that INT-2.1 does not read. The Zero Trust Windows compliance row 'Require the device to be at or under the machine-risk score: Medium' is a compliance-policy setting, a different setting.",
       "EarnBy": "Read the EDR policy's settings (sample sharing, onboarding blob type) or the onboarded-device state; even then the matching baseline rows would be value checks on the Defender for Endpoint baseline, which would need encoding like the AV catalog."
-    },
-    "INT-2.3": {
-      "Reason": "The Windows MDM security baseline (Firewall section: Enable Domain/Private/Public Network Firewall = True, default inbound action Block, and so on) audits setting values; INT-2.3 reads none, so a Firewall policy that turns the firewall off is Satisfied. The Zero Trust Windows compliance row 'Firewall: Require' is a compliance-policy rule, a different setting.",
-      "EarnBy": "Read the assigned Firewall policy's settings (Settings Catalog vendor_msft_firewall_mdmstore_{domain,private,public}profile_enablefirewall and default inbound action) and require them enabled/Block; that would allow Subset citations of the Windows MDM security baseline Firewall rows."
     },
     "INT-2.4": {
       "Reason": "Microsoft's Zero Trust common policies page gives recommended compliance settings for Windows, iOS/iPadOS and Android only, not macOS; no Microsoft-published macOS compliance baseline with a FileVault value was found, and ScubaGear has no Intune baseline. CIS Apple macOS and DISA macOS STIG FileVault rules audit the device's FileVault state, not an Intune compliance-policy rule, so they are a different setting."
@@ -789,10 +908,6 @@
       "Reason": "Near-miss: Microsoft's App Protection Data Protection Framework, Level 2 Conditional launch, 'Device conditions | Min OS version | Format: Major.Minor.Build / Block access' (iOS/iPadOS) and 'Format: Major.Minor / Block access' (Android), with the note recommending the N-1 major version. INT-3.3 accepts any version (for example 9.0 on iOS), so a Satisfied verdict can fail the item's recommended value. Level 1 does not list Min OS version at all.",
       "EarnBy": "Compare MinimumRequiredOsVersion per platform with an approved minimum (current major minus one) held in Config/tp-standards.json; with that, a Subset citation of the Level 2 Min OS version rows for iOS/iPadOS and Android would hold."
     },
-    "INT-4.1": {
-      "Reason": "Near-miss: the Windows MDM security baseline (version 24H2) LAPS row 'Backup Directory' = 'Backup the password to Azure AD only'. INT-4.1 does not read the backup directory, so a LAPS policy set to Disabled backup or Active Directory is Satisfied and fails that row.",
-      "EarnBy": "Read the assigned LAPS policy's BackupDirectory (LAPS CSP Policies/BackupDirectory) and require Microsoft Entra ID (1); then a Subset citation of the Windows security baseline 'Backup Directory' row holds."
-    },
     "INT-4.2": {
       "Reason": "The Windows MDM security baseline's Windows Hello for Business section lists only 'Facial Features Use Enhanced Anti Spoofing' = true, which INT-4.2 does not read. Microsoft's Configure Windows Hello for Business page explains the tenant-wide policy is usually disabled and recommends no state for it. No allowed benchmark audits the tenant-wide enrollment policy state."
     },
@@ -802,10 +917,6 @@
     "INT-4.4": {
       "Reason": "Microsoft's iOS/iPadOS and Android security configuration framework pages set 'Require a password' in DEVICE RESTRICTION profiles (for example iOS personal Level 1, Password > Require a password = Yes), a different setting from a compliance-policy passcode rule. The Zero Trust page's compliance table covers Windows only ('Require a password to unlock mobile devices: Require' is in the Windows table). In addition, platforms are taken from the policies, not the enrolled devices, so a tenant with enrolled iOS devices and only Android policies is Satisfied.",
       "EarnBy": "Derive the platforms from enrolled-device counts (as INT-1.1 does) so every enrolled mobile platform needs a passcode-requiring compliance policy; even then a citation would need a Microsoft item that audits the compliance rule rather than the device restriction."
-    },
-    "PPL-3.2": {
-      "Reason": "ScubaGear 2.0.0 MS.SECURITYSUITE.3.2v1 lists Exchange, OneDrive, SharePoint, Teams chat and Devices, not the Copilot location. Zero Trust Assessment 35030 'Data loss prevention policies are enabled' needs an enabled policy, but PPL-3.2 counts disabled and test-mode policies (the collector records Enabled but the evaluator never filters on it), so its Satisfied can fail 35030. Microsoft's Copilot pages ('Configure a secure and governed foundation for Microsoft Copilot', 'Learn about using Microsoft Purview DLP to protect interactions with Microsoft 365 Copilot') describe when to create a Copilot-location DLP policy ('If yes, setup...'), conditionally, with no recommended value. Not cited.",
-      "EarnBy": "Count only Copilot-location policies with Mode = 'Enable' (drop the name-only match and the broad 'Applications' match unless the location is confirmed as Microsoft 365 Copilot) and require an enabled rule; that would make PPL-3.2 Stricter than ZTA 35030. No benchmark item specific to the Copilot DLP location was found."
     },
     "PPL-3.3": {
       "Reason": "The 95% threshold is the tool's own heuristic. No ScubaGear 2.0.0 item, DISA STIG rule or Microsoft-published recommended configuration sets a limit on the share of users licensed for Microsoft 365 Copilot; Microsoft's Copilot deployment guidance describes per-user licensing, not a recommended scope. Not cited."
@@ -823,14 +934,6 @@
     "PVW-2.4": {
       "Reason": "The control never reaches a verdict, so no item can be audited by it. Near-miss: Zero Trust Assessment test 35038 'Insider Risk Management policies are enabled for risky AI usage' passes when Get-InsiderRiskPolicy returns a policy with Enabled = $true and OptInDrpForDlp = $true (Adaptive Protection). ScubaGear 2.0.0 has no insider-risk item.",
       "EarnBy": "Microsoft's own Zero Trust Assessment reads Get-InsiderRiskPolicy from Security & Compliance PowerShell, so the evaluator's claim that IRM policies are 'not exposed to the APIs this assessment uses' is out of date (CLAUDE.md lists this as untried). Add a Purview section reading Get-InsiderRiskPolicy (Name, Enabled, OptInDrpForDlp) with SectionStatus; Satisfied when an enabled policy opts in to Adaptive Protection would be Equivalent to ZTA 35038; 'an enabled policy exists' alone would not earn it."
-    },
-    "PVW-2.5": {
-      "Reason": "Near-miss: Zero Trust Assessment test 35028 'Email retention policies are configured' passes only when a retention policy has Enabled = $true AND a non-empty ExchangeLocation read with Get-RetentionCompliancePolicy -DistributionDetail. PVW-2.5 counts disabled policies and judges the Workload property, which the ZTA test's own comment says 'always shows all workloads regardless of actual scope'. So PVW-2.5 can be Satisfied by a disabled policy, or by a policy not actually scoped to Exchange, and fail 35028. ScubaGear 2.0.0 has no content-retention item (5.2 is audit-log retention). Not cited.",
-      "EarnBy": "Collect with -DistributionDetail, count only policies with Enabled = $true, and judge coverage from the ExchangeLocation / SharePointLocation / OneDriveLocation / TeamsChannelLocation (or TeamsChatLocation) properties rather than Workload; then PVW-2.5's Exchange component would be Stricter than ZTA 35028. Also worth verifying independently: if Workload really lists every workload regardless of scope, PVW-2.5 can pass today on a tenant whose only retention policy covers one workload."
-    },
-    "PVW-2.6": {
-      "Reason": "Near-miss: Zero Trust Assessment test 35020 'Auto-labeling policies are in enforcement mode' (Learn: 'turn on at least one auto-labeling policy') passes only when a policy has Enabled = $true AND Mode = 'Enable'. Set-AutoSensitivityLabelPolicy documents -Enabled and -Mode as separate parameters, and the Purview collector stores only Name and Mode, so PVW-2.6 can be Satisfied by a Mode-Enable policy whose Enabled is False and fail 35020. ScubaGear 2.0.0 has no auto-labeling item. Not cited.",
-      "EarnBy": "Store Enabled from Get-AutoSensitivityLabelPolicy (through Get-TPObjectField, null when absent) and require Enabled = $true with Mode = 'Enable' for Satisfied (an absent Enabled from older results: not assessed). PVW-2.6 would then be Equivalent to ZTA 35020."
     },
     "PVW-3.2": {
       "Reason": "Manual control with no verdict. No allowed benchmark prescribes eDiscovery role assignment or case readiness: ScubaGear 2.0.0 has no eDiscovery item, and the Zero Trust Assessment Purview tests (35001-35041) include none. Not cited."
