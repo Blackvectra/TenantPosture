@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[Baseline effectiveness] The sign-in log now says whether MFA and the legacy-authentication block held.** A new
+  collector, `AAD-SignInEvidence` (no new Graph scope; Microsoft requires Entra ID P1 or P2 to read sign-in logs through
+  Graph), reads the last 30 days through the beta sign-in endpoint with server-side filters: successful sign-ins through
+  any of the 13 legacy authentication clients Microsoft lists, interactive and non-interactive, and successful interactive
+  sign-ins that needed only one factor. Five baseline rows now report effectiveness instead of Unknown: AAD-1.2 and
+  CIS-5.2.2.1 (MFA for all users, for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (legacy authentication
+  tenant-wide, to Exchange Online, to SharePoint Online). One bypass is Ineffective, naming up to five accounts; Effective
+  needs a complete read with none; a truncated, failed or unlicensed read is Unknown with the reason. Approved
+  emergency-access users are set aside and named. It changes no finding, no score and no row's observed state, and it
+  keeps no IP address, location or device detail. The filters are documented by Microsoft but not yet run against a live
+  tenant; device-code sign-ins cannot be filtered server-side and are not read.
+
 - **[Baseline v2.0] The NRG Security Baseline is the CIS Microsoft 365 Foundations Benchmark v7.0.0 (owner's
   decision, 2026-10-25).** Minimum is the E3 Level 1 profile, Standard adds the E5-only Level 1 recommendations,
   Hardened adds Level 2; every recommendation sits at its own profile's tier. A control that cites a recommendation is

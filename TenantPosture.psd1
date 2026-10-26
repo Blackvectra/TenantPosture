@@ -55,6 +55,7 @@
         'Get-TPMaturityTier',
         'Get-TPCoverageScore',
         'Invoke-TPCollectAADAppPermissions',
+        'Invoke-TPCollectAADSignInEvidence',
         'Test-TPControlAppPermTenantTakeover',
         'Test-TPControlAppPermDataAccess',
         'Get-TPAppPermissionRiskCatalog',

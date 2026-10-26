@@ -1121,6 +1121,7 @@ if (-not $skipCollection) {
         Invoke-TPCollectorStep 'PIM schedules and access reviews'       'Invoke-TPCollectAADPIM', 'Invoke-TPCollectAADIdentityGovernance'
         Invoke-TPCollectorStep 'Guests, stale accounts, OAuth, licenses' 'Invoke-TPCollectAADInventory'
         Invoke-TPCollectorStep 'Application (app-only) permissions'     'Invoke-TPCollectAADAppPermissions'
+        Invoke-TPCollectorStep 'Sign-in evidence (30 days)'             'Invoke-TPCollectAADSignInEvidence'
 
         if (-not $SkipSharePoint) {
             Write-TPCollectorGroup 'SharePoint and OneDrive'

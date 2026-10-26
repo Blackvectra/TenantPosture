@@ -618,6 +618,18 @@ function Get-TPBaselineCompliance {
                 } else {
                     $r.EffectivenessState = 'Unknown'; $r.EffectivenessDetail = "Endpoint checks $($devIds -join ', ') did not all reach a verdict."
                 }
+            } elseif ($evType -eq 'SignInLog') {
+                # Sign-in events read this run (AAD-SignInEvidence): a bypass
+                # recorded in the log, or none in a complete read.
+                $ea = if ($exc -and $exc.EmergencyAccess) { $exc.EmergencyAccess } else { @{} }
+                try {
+                    $se = Get-TPSignInEffectiveness -Check ([string](Get-TPObjectField -Item $ev -Key 'Check' -Default '')) `
+                        -Scope ([string](Get-TPObjectField -Item $ev -Key 'Scope' -Default '')) -RawData $raw -EmergencyAccess $ea
+                    $r.EffectivenessState = $se.State; $r.EffectivenessDetail = $se.Detail
+                } catch {
+                    $r.EffectivenessState = 'Unknown'
+                    $r.EffectivenessDetail = "The sign-in evidence could not be judged: $($_.Exception.Message)"
+                }
             } else {
                 $r.EffectivenessState = 'Unknown'
                 $r.EffectivenessDetail = "Evidence type '$evType' is not evaluated by this version; it needs a comparison with a prior run."

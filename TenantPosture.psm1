@@ -181,6 +181,7 @@ $script:ExportedFunctions = @(
     'Get-TPMaturityTier',
     'Get-TPCoverageScore',
     'Invoke-TPCollectAADAppPermissions',
+    'Invoke-TPCollectAADSignInEvidence',
     'Test-TPControlAppPermTenantTakeover', 'Test-TPControlAppPermDataAccess',
     'Get-TPAppPermissionRiskCatalog', 'Get-TPAppPermissionContext', 'Get-TPAppPermissionTierMap',
     'Get-TPAssessmentScope',
