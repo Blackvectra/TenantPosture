@@ -244,6 +244,9 @@ return @{ value = @() }
             $j.Detail | Should -Match 'show MFA in their authentication steps'
             $push = @(@{ Method = 'Password'; Step = 'Primary authentication'; Succeeded = $true; Result = '' }, @{ Method = 'Mobile app notification'; Step = 'MFA'; Succeeded = $true; Result = 'MFA successfully completed' })
             (Judge 'SingleFactorSuccess' 'AllUsers' (Evidence -Single @(Ev 'alice@contoso.test' 'a1' 'Browser' -Auth $push))).State | Should -Be 'Effective'
+            # A reused FIRST factor is not MFA, whatever the method is called.
+            $first = @(@{ Method = 'Previously satisfied'; Step = 'Primary authentication'; Succeeded = $true; Result = 'First factor requirement satisfied by claim in the token' })
+            (Judge 'SingleFactorSuccess' 'AllUsers' (Evidence -Single @(Ev 'alice@contoso.test' 'a1' 'Browser' -Auth $first))).State | Should -Be 'Ineffective'
             # A second factor that failed is not MFA.
             $denied = @(@{ Method = 'Password'; Step = 'Primary authentication'; Succeeded = $true; Result = '' }, @{ Method = 'Text message'; Step = 'MFA'; Succeeded = $false; Result = 'Invalid authentication' })
             (Judge 'SingleFactorSuccess' 'AllUsers' (Evidence -Single @(Ev 'alice@contoso.test' 'a1' 'Browser' -Auth $denied))).State | Should -Be 'Ineffective'

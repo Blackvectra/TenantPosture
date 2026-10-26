@@ -181,14 +181,17 @@ function Get-TPSignInMfaEvidence {
         The method names and result details are the ones Microsoft lists for
         the Authentication Details of a sign-in (howto-mfa-reporting). A step
         whose requirement is multifactor and that succeeded is MFA whatever
-        its method is called.
+        its method is called. 'Previously satisfied' is not in the method list:
+        it says a claim was reused, not which requirement it met, so it counts
+        only beside a multifactor step requirement or an MFA result detail
+        (a reused first factor reads 'First factor requirement satisfied').
     #>
     [CmdletBinding()]
     [OutputType([string])]
     param([Parameter(Mandatory)] [AllowNull()] [object] $SignIn)
     $rows = @(Get-TPObjectField -Item $SignIn -Key 'AuthDetails' -Default $null | Where-Object { $null -ne $_ })
     if ($rows.Count -eq 0) { return 'Unknown' }
-    $mfaMethod = '^(Mobile app notification|OATH verification code|Text message|Phone call|FIDO2 security key|Passkey|Windows Hello for Business|Passwordless phone sign-in|Microsoft Authenticator|Temporary Access Pass|Previously satisfied)'
+    $mfaMethod = '^(Mobile app notification|OATH verification code|Text message|Phone call|FIDO2 security key|Passkey|Windows Hello for Business|Passwordless phone sign-in|Microsoft Authenticator|Temporary Access Pass)'
     $mfaResult = '(?i)\bMFA\b.*\b(satisfied|completed|successfully)\b'
     foreach ($d in $rows) {
         $ok = Get-TPObjectField -Item $d -Key 'Succeeded' -Default $null
