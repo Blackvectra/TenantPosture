@@ -872,10 +872,6 @@
       "Reason": "The evaluator now passes only when accountEnabled was read for every shared mailbox (2026-10-26), which meets Microsoft's 'About shared mailboxes' guidance ('Always block sign-in for the shared mailbox account') and CIS M365 v7.0.0 1.2.2. That guidance is product documentation rather than a configuration benchmark the map uses, and CIS 1.2.2 is cited by EXO-6.2, which judges the same setting per mailbox.",
       "EarnBy": "Cite CIS 1.2.2 on EXO-2.6 as well as EXO-6.2 if the owner wants both controls on the CIS card."
     },
-    "EXO-4.1": {
-      "Reason": "Near-miss: ScubaGear MS.SECURITYSUITE.5.2v1 'Audit logs SHALL be retained and searchable for a minimum of 3 months and retrievable for a minimum of 12 months.' Two problems: the control never establishes 12-month retrievability, and Satisfied is emitted even when custom audit retention policies were not read, in which case a policy could shorten Exchange records below 3 months and the item fails. The control also covers Exchange record types only. The 2026-09-30 SCuBA review removed the old MS.DEFENDER.6.3v1 reference because the evaluator read AuditLogAgeLimit; the evaluator has since changed, but it still does not earn 5.2. No Microsoft recommended-settings row; Microsoft documents default retention (180 days / 1 year) as behavior, not a recommendation.",
-      "EarnBy": "Return NotApplicable when Purview AuditRetentionPolicies were not read. That would allow a Subset citation of MS.SECURITYSUITE.5.2v1 for the 'searchable for 3 months' half for Exchange record types only (12-month retrievability and other record types unchecked)."
-    },
     "EXO-8.1": {
       "Reason": "ScubaGear 2.0.0 EXO and SECURITYSUITE baselines have no connector rule (MS.SECURITYSUITE.8.1v1 is the connection-filter IP allow list, a different object). The Microsoft recommended-settings page has no connector rows; the Learn connector articles describe configuration options without recommended values. No allowed benchmark states a TLS or scoping requirement for Exchange Online connectors.",
       "EarnBy": "None known."
