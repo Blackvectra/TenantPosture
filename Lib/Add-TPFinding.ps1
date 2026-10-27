@@ -155,6 +155,9 @@ function Clear-TPState {
     $script:TPRawData.Clear()
     $script:TPCoverage.Clear()
     $script:TPExceptions.Clear()
+    # A partial run's control selection (Lib/Resolve-TPControlSelection.ps1) is
+    # run state too: the next client or run in this session starts unselected.
+    $script:TPControlSelection = $null
 }
 
 # ── Exception state ───────────────────────────────────────────────────────────

@@ -48,6 +48,9 @@
 #                           verification. Honest by
 #                           design (see "advisory controls never claim
 #                           compliance"), but it must be visible, not implied.
+#   NotSelected           — a partial run (-ControlId / -ExcludeControlId)
+#                           did not select it. An operator choice, like
+#                           -Quick: neither a pass nor a failure.
 #   NoResult              — the control is in controls.json and NOTHING was
 #                           emitted for it. Worse than any of the above,
 #                           because even the NotApplicable row is missing: the
@@ -98,7 +101,17 @@ function Get-TPAssessmentScope {
         # explanation. When omitted, every no-finding control under -Quick is
         # filed under NotEvaluatedThisMode as before (unknown execution set).
         [AllowNull()]
-        [string[]] $ExecutedEvaluators
+        [string[]] $ExecutedEvaluators,
+
+        # The ControlIds selected for a partial run (-ControlId /
+        # -ExcludeControlId). A control outside the selection is filed under
+        # NotSelected ("Not assessed: not selected for this run"), never under
+        # NoResult and never under CollectionIncomplete: the operator chose not
+        # to assess it. $null (the default, and every full run) means every
+        # control was selected; when the parameter is not given the run's
+        # selection is read from module state (Get-TPSelectedControlIds).
+        [AllowNull()]
+        [string[]] $SelectedControls
     )
 
     Set-StrictMode -Version Latest
@@ -117,12 +130,24 @@ function Get-TPAssessmentScope {
         StandardNotApproved  = @()
         NotApplicableToTenant = @()
         NotEvaluatedThisMode = @()
+        NotSelected          = @()
         SkippedByOperator    = @()
         NoResult             = @()
         Errors               = @()
         CoverageIssues       = @()
         ByWorkload           = @()
         Limitations          = @()
+        PartialRun           = $false
+        SelectedControls     = 0
+    }
+
+    # The selection of a partial run. Not given: the run's own, from module state.
+    $selectedSet = $null
+    $selIds = if ($PSBoundParameters.ContainsKey('SelectedControls')) { $SelectedControls }
+              elseif (Get-Command Get-TPSelectedControlIds -ErrorAction SilentlyContinue) { Get-TPSelectedControlIds }
+              else { $null }
+    if ($null -ne $selIds -and @($selIds).Count -gt 0) {
+        $selectedSet = [System.Collections.Generic.HashSet[string]]::new([string[]]@($selIds), [System.StringComparer]::OrdinalIgnoreCase)
     }
 
     $controls = $null
@@ -258,6 +283,7 @@ function Get-TPAssessmentScope {
     $advisory       = [System.Collections.Generic.List[object]]::new()
     $notForTenant   = [System.Collections.Generic.List[object]]::new()
     $notThisMode    = [System.Collections.Generic.List[object]]::new()
+    $notSelected    = [System.Collections.Generic.List[object]]::new()
     $skippedByOp    = [System.Collections.Generic.List[object]]::new()
     $noResult       = [System.Collections.Generic.List[object]]::new()
     $errored        = [System.Collections.Generic.List[object]]::new()
@@ -282,6 +308,16 @@ function Get-TPAssessmentScope {
             Collector = [string](Get-TPObjectField -Item $c -Key 'CollectorDependency' -Default '')
             Licence   = [string](Get-TPObjectField -Item $c -Key 'LicenseRequirement' -Default '')
             Reason    = ''
+        }
+
+        # A partial run: a control the operator did not select is not assessed,
+        # whatever else is true of it (its collector was not run, so the
+        # hard-evidence step would otherwise call it a collection failure).
+        if ($null -ne $selectedSet -and -not $selectedSet.Contains($cid)) {
+            $workload[$wl].Unscored++
+            $row.Reason = 'Not assessed: not selected for this run (-ControlId / -ExcludeControlId). Neither a pass nor a failure.'
+            $notSelected.Add([pscustomobject]$row)
+            continue
         }
 
         if (-not $byId.ContainsKey($cid)) {
@@ -481,6 +517,9 @@ function Get-TPAssessmentScope {
     if ($notThisMode.Count -gt 0) {
         $limitations.Add("$($notThisMode.Count) control(s) were not evaluated because this was a quick scan. They are neither passes nor failures. Run a full assessment to cover them.")
     }
+    if ($notSelected.Count -gt 0) {
+        $limitations.Add("This was a partial run: $($notSelected.Count) of $(@($controls).Count) control(s) were not selected (-ControlId / -ExcludeControlId) and were not assessed. They are neither passes nor failures, and the score covers the selected controls only. Run without a selection to assess them.")
+    }
     if ($noResult.Count -gt 0) {
         $limitations.Add("$($noResult.Count) control(s) produced no result at all this run and do not appear elsewhere in this report. Treat this as a tool fault to investigate, not as a tenant finding.")
     }
@@ -535,11 +574,14 @@ function Get-TPAssessmentScope {
         StandardNotApproved  = @($stdNotApproved)
         NotApplicableToTenant = @($notForTenant)
         NotEvaluatedThisMode = @($notThisMode)
+        NotSelected          = @($notSelected)
         SkippedByOperator    = @($skippedByOp)
         NoResult             = @($noResult)
         Errors               = @($errored)
         CoverageIssues       = @($covIssues)
         ByWorkload           = @($workload.Values | ForEach-Object { [pscustomobject]$_ })
         Limitations          = @($limitations)
+        PartialRun           = ($null -ne $selectedSet)
+        SelectedControls     = $(if ($null -ne $selectedSet) { $total - $notSelected.Count } else { $total })
     }
 }

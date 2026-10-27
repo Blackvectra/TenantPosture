@@ -206,7 +206,10 @@ function Connect-TPServices {
 
         [switch] $SkipPurview,
         [switch] $SkipTeams,
-        [switch] $SkipSharePoint
+        [switch] $SkipSharePoint,
+        # A partial run (-ControlId) whose selected controls read nothing from
+        # Exchange Online does not sign in to it. EXO stays $false in the result.
+        [switch] $SkipExchange
     )
 
     # Defense in depth — Microsoft endpoints already require TLS 1.2+
@@ -488,78 +491,82 @@ function Connect-TPServices {
     # from https://outlook.office365.com/AdminApi/.../EXOModuleFile?Version=... at
     # connection time and loads it into the session. Download is HTTPS and signed
     # (v3.2.0+). See docs/security/THREAT-MODEL.md.
-    Write-Host "  [*] Exchange Online..." -ForegroundColor Cyan
-    try {
-        # ── Reuse an existing EXO session if the caller already established one ──
-        # The GDAP batch runner connects EXO with -DelegatedOrganization <client>
-        # AND verifies the session tenant before invoking the orchestrator. This
-        # interactive branch has NO -DelegatedOrganization, so reconnecting here
-        # would open a session against the OPERATOR's own tenant and collect the
-        # wrong mailboxes. So if a Connected EXO session already exists, reuse it.
-        $reuseExoSession = $false
-        if (-not $isAppOnly -and (Get-Command Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
-            try {
-                $exoConn = @(Get-ConnectionInformation -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Connected' })
-                # As with Graph above, a caller-supplied ExpectedTenantId
-                # narrows reuse to a session actually connected to that
-                # tenant — a leftover session for a different tenant must
-                # not be silently treated as this run's mailbox data.
-                if ($ExpectedTenantId) {
-                    $exoConn = @($exoConn | Where-Object { "$($_.TenantId)" -eq $ExpectedTenantId })
-                }
-                if ($exoConn.Count -gt 0) { $reuseExoSession = $true }
-            } catch { $reuseExoSession = $false }
-        }
+    if ($SkipExchange) {
+        Write-Host "  [-] Exchange Online not needed by the selected controls; not connected." -ForegroundColor DarkGray
+    } else {
+        Write-Host "  [*] Exchange Online..." -ForegroundColor Cyan
+        try {
+            # ── Reuse an existing EXO session if the caller already established one ──
+            # The GDAP batch runner connects EXO with -DelegatedOrganization <client>
+            # AND verifies the session tenant before invoking the orchestrator. This
+            # interactive branch has NO -DelegatedOrganization, so reconnecting here
+            # would open a session against the OPERATOR's own tenant and collect the
+            # wrong mailboxes. So if a Connected EXO session already exists, reuse it.
+            $reuseExoSession = $false
+            if (-not $isAppOnly -and (Get-Command Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+                try {
+                    $exoConn = @(Get-ConnectionInformation -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Connected' })
+                    # As with Graph above, a caller-supplied ExpectedTenantId
+                    # narrows reuse to a session actually connected to that
+                    # tenant — a leftover session for a different tenant must
+                    # not be silently treated as this run's mailbox data.
+                    if ($ExpectedTenantId) {
+                        $exoConn = @($exoConn | Where-Object { "$($_.TenantId)" -eq $ExpectedTenantId })
+                    }
+                    if ($exoConn.Count -gt 0) { $reuseExoSession = $true }
+                } catch { $reuseExoSession = $false }
+            }
 
-        if ($reuseExoSession) {
-            $result['EXO'] = $true
-            Write-Host "  [+] Exchange Online (reusing the caller's existing session)" -ForegroundColor Green
-        }
-        elseif ($isAppOnly) {
-            $orgDomain = if ($OrganizationDomain) {
-                $OrganizationDomain
-            } elseif ($result.TenantDomain -match '\.onmicrosoft\.com$') {
-                $result.TenantDomain
-            } else {
-                throw "App-only EXO requires the .onmicrosoft.com routing domain via -OrganizationDomain."
+            if ($reuseExoSession) {
+                $result['EXO'] = $true
+                Write-Host "  [+] Exchange Online (reusing the caller's existing session)" -ForegroundColor Green
             }
-            $exoAppParams = @{ AppId = $AppId; CertificateThumbprint = $CertificateThumbprint; Organization = $orgDomain; ShowBanner = $false; ErrorAction = 'Stop' }
-            if ($exoDisableWam) { $exoAppParams['DisableWAM'] = $true }
-            Connect-ExchangeOnline @exoAppParams | Out-Null
-            $result['EXO'] = $true
-            Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
-        } else {
-            # Interactive browser MFA (matches ScubaGear). The WAM broker is disabled
-            # at the top of this function, so modern-auth sign-in uses the system
-            # browser without the RuntimeBroker crash the old device-code /
-            # UseRPSSession paths worked around.
-            $exoParams = @{ ShowBanner = $false; ErrorAction = 'Stop' }
-            if ($exoDisableWam) { $exoParams['DisableWAM'] = $true }
-            if ($UserPrincipalName) { $exoParams['UserPrincipalName'] = $UserPrincipalName }
-            # GDAP: without -DelegatedOrganization Exchange connects to the
-            # signed-in operator's OWN organization, not the client's.
-            if ($DelegatedOrganization) { $exoParams['DelegatedOrganization'] = $DelegatedOrganization }
-            Connect-ExchangeOnline @exoParams | Out-Null
-            if ($ExpectedTenantId -and (Get-Command Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
-                $exoNow = @(Get-ConnectionInformation -ErrorAction SilentlyContinue |
-                    Where-Object { $_.State -eq 'Connected' -and -not (Test-TPEopConnection -Connection $_) }) |
-                    Select-Object -Last 1
-                $exoTid = [string](Get-TPObjectField -Item $exoNow -Key 'TenantID' -Default '')
-                if ($exoTid -and $exoTid -ne $ExpectedTenantId) {
-                    throw "Exchange Online session is for tenant $exoTid, not the requested tenant $ExpectedTenantId."
+            elseif ($isAppOnly) {
+                $orgDomain = if ($OrganizationDomain) {
+                    $OrganizationDomain
+                } elseif ($result.TenantDomain -match '\.onmicrosoft\.com$') {
+                    $result.TenantDomain
+                } else {
+                    throw "App-only EXO requires the .onmicrosoft.com routing domain via -OrganizationDomain."
                 }
+                $exoAppParams = @{ AppId = $AppId; CertificateThumbprint = $CertificateThumbprint; Organization = $orgDomain; ShowBanner = $false; ErrorAction = 'Stop' }
+                if ($exoDisableWam) { $exoAppParams['DisableWAM'] = $true }
+                Connect-ExchangeOnline @exoAppParams | Out-Null
+                $result['EXO'] = $true
+                Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
+            } else {
+                # Interactive browser MFA (matches ScubaGear). The WAM broker is disabled
+                # at the top of this function, so modern-auth sign-in uses the system
+                # browser without the RuntimeBroker crash the old device-code /
+                # UseRPSSession paths worked around.
+                $exoParams = @{ ShowBanner = $false; ErrorAction = 'Stop' }
+                if ($exoDisableWam) { $exoParams['DisableWAM'] = $true }
+                if ($UserPrincipalName) { $exoParams['UserPrincipalName'] = $UserPrincipalName }
+                # GDAP: without -DelegatedOrganization Exchange connects to the
+                # signed-in operator's OWN organization, not the client's.
+                if ($DelegatedOrganization) { $exoParams['DelegatedOrganization'] = $DelegatedOrganization }
+                Connect-ExchangeOnline @exoParams | Out-Null
+                if ($ExpectedTenantId -and (Get-Command Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+                    $exoNow = @(Get-ConnectionInformation -ErrorAction SilentlyContinue |
+                        Where-Object { $_.State -eq 'Connected' -and -not (Test-TPEopConnection -Connection $_) }) |
+                        Select-Object -Last 1
+                    $exoTid = [string](Get-TPObjectField -Item $exoNow -Key 'TenantID' -Default '')
+                    if ($exoTid -and $exoTid -ne $ExpectedTenantId) {
+                        throw "Exchange Online session is for tenant $exoTid, not the requested tenant $ExpectedTenantId."
+                    }
+                }
+                $result['EXO'] = $true
+                Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
             }
-            $result['EXO'] = $true
-            Write-Host "  [+] Exchange Online connected" -ForegroundColor Green
-        }
-    } catch {
-        Write-Host "  [!] EXO: $($_.Exception.Message)" -ForegroundColor Yellow
-        $msalHintExo = Get-TPMsalConflictHint -Message $_.Exception.Message
-        if ($msalHintExo) { Write-Host "      $msalHintExo" -ForegroundColor Yellow }
-        $exoHint = Get-TPExoConnectHint -Message $_.Exception.Message
-        if ($exoHint) { Write-Host "      $exoHint" -ForegroundColor Yellow }
-        if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
-            Register-TPException -Source 'Connect-EXO' -Message (Get-TPConnectErrorText -ErrorRecord $_)
+        } catch {
+            Write-Host "  [!] EXO: $($_.Exception.Message)" -ForegroundColor Yellow
+            $msalHintExo = Get-TPMsalConflictHint -Message $_.Exception.Message
+            if ($msalHintExo) { Write-Host "      $msalHintExo" -ForegroundColor Yellow }
+            $exoHint = Get-TPExoConnectHint -Message $_.Exception.Message
+            if ($exoHint) { Write-Host "      $exoHint" -ForegroundColor Yellow }
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'Connect-EXO' -Message (Get-TPConnectErrorText -ErrorRecord $_)
+            }
         }
     }
 

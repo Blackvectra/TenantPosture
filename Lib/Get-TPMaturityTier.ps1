@@ -59,7 +59,15 @@ function Get-TPMaturityTier {
         [Parameter(Mandatory = $true)]
         [AllowNull()]
         [AllowEmptyCollection()]
-        [object[]] $Findings
+        [object[]] $Findings,
+
+        # The run's control selection (Metadata.ControlSelection) when it was a
+        # partial run (-ControlId / -ExcludeControlId). A partial run is never an
+        # unqualified tier: the label and the qualification say how many controls
+        # were selected, because a three-control run that passes is not a tenant
+        # at "Optimizing".
+        [AllowNull()]
+        [object] $Selection
     )
 
     Set-StrictMode -Version Latest
@@ -112,7 +120,18 @@ function Get-TPMaturityTier {
     $evidenceComplete = ($unverified -eq 0 -and [int]$cov.Scored -gt 0)
     $observedLabel = $label
     $qualification = ''
-    if (-not $evidenceComplete) {
+    $partialRun = $false; $selectedCount = 0; $totalControls = 0
+    if ($null -ne $Selection -and [bool](Get-TPObjectField -Item $Selection -Key 'Partial' -Default $true)) {
+        $partialRun    = $true
+        $selectedCount = [int](Get-TPObjectField -Item $Selection -Key 'SelectedCount' -Default 0)
+        $totalControls = [int](Get-TPObjectField -Item $Selection -Key 'TotalControls' -Default 0)
+    }
+    $partialSentence = if ($partialRun) {
+        "Partial run: $selectedCount of $totalControls controls were selected. The score and the tier describe those controls only and claim nothing about the other $([math]::Max(0, $totalControls - $selectedCount))."
+    } else { '' }
+    if (-not $evidenceComplete -or $partialRun) {
+        $evidenceIncomplete = -not $evidenceComplete
+        $evidenceComplete = $false
         $counted = [int]$cov.Scored + $unverified
         $qualification = if ([int]$cov.Scored -eq 0) {
             if ($counted -eq 0) { 'No control was scored, so the tier is a default, not a measurement of this tenant.' }
@@ -120,7 +139,14 @@ function Get-TPMaturityTier {
         } else {
             "$unverified of $counted finding(s) produced no verdict ($($cov.Error) errored, $($cov.Unknown) with an unrecognized state). The score and the tier are computed over the $($cov.Scored) scored control(s) only and claim nothing about the rest; the Assessment Scope section names them. Not-applicable findings are excluded by design (license-gated, advisory, or not collected) and are listed there as well."
         }
-        $label = "$observedLabel (provisional: evidence incomplete)"
+        if (-not $evidenceIncomplete) { $qualification = '' }
+        if ($partialRun) {
+            $qualification = (@($partialSentence, $qualification) | Where-Object { $_ }) -join ' '
+            $label = if ($evidenceIncomplete) { "$observedLabel (provisional: partial run, $selectedCount of $totalControls controls; evidence incomplete)" }
+                     else { "$observedLabel (provisional: partial run, $selectedCount of $totalControls controls)" }
+        } else {
+            $label = "$observedLabel (provisional: evidence incomplete)"
+        }
     }
 
     [ordered]@{
@@ -140,6 +166,10 @@ function Get-TPMaturityTier {
         EvidenceComplete   = $evidenceComplete
         UnverifiedFindings = $unverified
         Qualification      = $qualification
+        # A partial run (-ControlId): how many controls the tier covers.
+        PartialRun         = $partialRun
+        SelectedControls   = $selectedCount
+        TotalControls      = $totalControls
         # v4.10.1 — per-state counts pulled through from the coverage helper
         # so the orchestrator's summary banner and any future caller reads
         # from one source instead of re-deriving with Where-Object.

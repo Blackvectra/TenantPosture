@@ -40,6 +40,14 @@
 .PARAMETER JsonOnly
     Write JSON findings only — no HTML or Markdown.
 
+.PARAMETER ControlId
+    Assess only the controls matching these wildcard patterns (passed to every client's
+    Invoke-TPAssessment.ps1 -ControlId). Each pattern must match a control in Config\controls.json;
+    one that matches nothing stops the batch (exit 4) before any sign-in.
+
+.PARAMETER ExcludeControlId
+    Leave these controls out of every client's run (Invoke-TPAssessment.ps1 -ExcludeControlId).
+
 .PARAMETER WhatIf
     Show which clients would be assessed without running.
 
@@ -88,6 +96,14 @@ param(
     # which matters even more across a full batch.
     [switch] $AllFiles,
 
+    # A partial run for every client: see Invoke-TPAssessment.ps1 -ControlId. The pattern rule is
+    # Get-TPControlIdPatternRule; this is a copy (it binds before anything loads), pinned equal by a test.
+    [ValidatePattern('\A[A-Za-z0-9.*?-]{1,40}\z', Options = 'None')]
+    [string[]] $ControlId,
+
+    [ValidatePattern('\A[A-Za-z0-9.*?-]{1,40}\z', Options = 'None')]
+    [string[]] $ExcludeControlId,
+
     [switch] $WhatIf
 )
 
@@ -107,6 +123,21 @@ $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 # The one Markdown escape, for the batch summary; dot-sourced so the summary never
 # depends on what state the module is in after the last client.
 . (Join-Path $scriptDir 'Lib' 'ConvertTo-TPMarkdownSafe.ps1')
+
+# A selection (-ControlId / -ExcludeControlId) is judged once, before the first sign-in, by the
+# same resolver each client's run uses: a pattern that matches no control stops the batch here.
+if ($ControlId -or $ExcludeControlId) {
+    . (Join-Path $scriptDir 'Lib' 'Get-TPObjectField.ps1')
+    . (Join-Path $scriptDir 'Lib' 'Resolve-TPControlSelection.ps1')
+    $selCatalog = @((Get-Content -LiteralPath (Join-Path $scriptDir 'Config' 'controls.json') -Raw -Encoding utf8 | ConvertFrom-Json -Depth 30).controls)
+    $batchSelection = Resolve-TPControlSelection -Include $ControlId -Exclude $ExcludeControlId -Controls $selCatalog -SkipKeyDerivation
+    if (-not $batchSelection.Valid) {
+        foreach ($e in @($batchSelection.Errors)) { Write-Host "  [!] $e" -ForegroundColor Red }
+        Write-Host "      Nothing was run." -ForegroundColor Red
+        exit 4
+    }
+    Write-Host "Partial run for every client: $($batchSelection.SelectedCount) of $($batchSelection.TotalControls) controls selected." -ForegroundColor Yellow
+}
 
 if (-not $ClientsFile) { $ClientsFile = Join-Path $scriptDir 'Config' 'clients.json' }
 if (-not $OutputRoot)  { $OutputRoot  = Join-Path $scriptDir 'output' }
@@ -367,6 +398,8 @@ foreach ($client in $clients) {
             if ($client.PSObject.Properties['Collectors'] -and $client.Collectors -and $client.Collectors.PSObject.Properties['SharePointShell'] -and [bool]$client.Collectors.SharePointShell) { $params['IncludeSharePointShell'] = $true }
             if ($JsonOnly)                 { $params['JsonOnly']           = $true }
             if ($AllFiles)                 { $params['AllFiles']           = $true }
+            if ($ControlId)                { $params['ControlId']          = @($ControlId) }
+            if ($ExcludeControlId)         { $params['ExcludeControlId']   = @($ExcludeControlId) }
             if ($client.DnsDomains -and @($client.DnsDomains).Count -gt 0) {
                 $params['DnsDomains'] = @($client.DnsDomains)
             }

@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **[Assessment] Control selection: `-ControlId` / `-ExcludeControlId` run only chosen controls.** Wildcard patterns over
+  ControlId (`EXO-1.6`, `'AAD-*'`, `AAD-1.2,AAD-1.3,'SPO-5.*'`) on `Invoke-TPAssessment.ps1` and, passed through, on
+  `Invoke-TPBatchAssessment.ps1`. `Lib/Resolve-TPControlSelection.ps1` derives what the run needs from the code: the
+  selected controls' evaluators, every raw-data key those evaluators and their helpers read (AST, transitive, beyond
+  `CollectorDependency`: TMS-5.6 reads Defender data), the collectors' own prerequisites, and the services to sign in
+  to; a read it cannot resolve runs every collector. A run that needs no Exchange data never signs in to Exchange
+  (`Connect-TPServices -SkipExchange`), Purview or Teams. A pattern that matches nothing, an empty selection, or a
+  combination with `-Quick`, `-FromResults`, `-DeviceResults`, `-SSPQuestionnaire` or `-MonthlyReport` stops the run
+  (exit 4) before any sign-in. The results JSON records `Metadata.ControlSelection`; the console, the HTML report, the
+  Markdown summary and the report site say "Partial run: N of 243 controls selected"; unselected controls go to the
+  scope bucket `NotSelected` and the new baseline reason code `NotSelected` (after `SkippedByOperator`; counted as
+  evidence not obtained); the maturity label reads `(provisional: partial run, N of 243 controls)`; baseline
+  regressions and the delta report list unselected controls as not compared, never as regressions or resolutions,
+  and the delta report reads no configuration drift from a collector that did not run in both runs (it used to
+  report every prior Conditional Access policy as removed). A republish of a partial results file stays partial.
+  Also fixed: the remediation script publisher threw on a run with no Gap.
+
 - **[Controls] 34 new controls for CIS Microsoft 365 v7.0.0 recommendations no control read (243 controls; 119
   controls cite 99 recommendations).** AAD-16.1-16.8 (group creation and device registration, 5.1.3.x / 5.1.4.x, new
   `AAD-DirectorySettings` collector), AAD-17.1-17.6 (application password restrictions and authentication methods,

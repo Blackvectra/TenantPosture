@@ -40,6 +40,9 @@ Describe 'Baseline reason contract — catalog' {
         $order = @($script:Codes.Keys)
         $idx = { param([string] $c) [array]::IndexOf($order, $c) }
         (& $idx 'SkippedByOperator')        | Should -BeLessThan (& $idx 'LicenseBlocked')
+        # A partial run's NotSelected sits directly after the -Skip flag: both are the operator's choice.
+        (& $idx 'NotSelected')              | Should -Be ((& $idx 'SkippedByOperator') + 1)
+        $script:Codes['NotSelected'].Scope  | Should -Be 'Both'
         (& $idx 'ThirdPartyHandled')        | Should -BeLessThan (& $idx 'LicenseBlocked')
         (& $idx 'ManualVerificationRequired') | Should -BeLessThan (& $idx 'ThirdPartyHandled')
         (& $idx 'OptionalCollectorRequired') | Should -BeLessThan (& $idx 'LicenseBlocked')
@@ -51,7 +54,7 @@ Describe 'Baseline reason contract — catalog' {
     }
 
     It 'every plan Expected bucket maps to a catalog code' {
-        foreach ($e in 'Manual', 'SkippedByOperator', 'ThirdPartyHandled', 'OptionalCollectorRequired', 'LicenseBlockedExpected', 'LicensingUnknown', 'Automatic') {
+        foreach ($e in 'Manual', 'SkippedByOperator', 'NotSelected', 'ThirdPartyHandled', 'OptionalCollectorRequired', 'LicenseBlockedExpected', 'LicensingUnknown', 'Automatic') {
             $script:Codes.Contains((ConvertTo-TPBaselineReasonCode -Expected $e)) | Should -BeTrue -Because "$e must map to a code"
         }
     }

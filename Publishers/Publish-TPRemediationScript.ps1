@@ -100,8 +100,10 @@ function Publish-TPRemediationScript {
     } else { $null }
 
     $sevOrder = @{ 'Critical'=0; 'High'=1; 'Medium'=2; 'Low'=3; 'Informational'=4 }
-    $gaps = @($Findings | Where-Object { $_.State -eq 'Gap' }) |
-            Sort-Object { $sevOrder[$_.Severity] ?? 99 }, ControlId
+    # @() around the whole pipeline: with no Gap at all (a partial run of passing
+    # controls) the sort emits nothing and $gaps.Count threw under StrictMode.
+    $gaps = @(@($Findings | Where-Object { $_.State -eq 'Gap' }) |
+            Sort-Object { $sevOrder[$_.Severity] ?? 99 }, ControlId)
 
     $sb = [System.Text.StringBuilder]::new()
 
