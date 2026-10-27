@@ -147,11 +147,11 @@ Describe 'Report theme: builders' {
     It 'a section id is a plain token' {
         { & $script:Mod { New-TPThemeSection -Id 'x" onload="y' -Title 't' -BodyHtml '' } } | Should -Throw
     }
-    It 'a sparkline of no values is empty, of one value a dot, and clamps out-of-range values' {
+    It 'a sparkline of no values is empty, of one value a note (one point is not a trend), and clamps out-of-range values' {
         (& $script:Mod { New-TPThemeSparkline -Values @() -Label 'x' }) | Should -BeNullOrEmpty
         $one = & $script:Mod { New-TPThemeSparkline -Values 50 -Label 'x' }
-        $one | Should -Not -Match '<polyline'
-        $one | Should -Match '<circle'
+        $one | Should -Not -Match '<svg'
+        $one | Should -Match 'Trend after the next full run'
         $clamped = & $script:Mod { New-TPThemeSparkline -Values -20, 400 -Label 'x' }
         $clamped | Should -Match 'points="3,31 117,3"'
     }

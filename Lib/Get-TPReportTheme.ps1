@@ -305,6 +305,8 @@ function New-TPThemeSparkline {
     )
     $vals = @($Values | Where-Object { $null -ne $_ })
     if ($vals.Count -eq 0 -or $Max -le 0) { return '' }
+    # One point is not a trend: say when one will appear rather than draw a lone dot.
+    if ($vals.Count -eq 1) { return '<span class="tp-small tp-muted tp-spark-none">Trend after the next full run</span>' }
     $w = 120.0; $h = 34.0; $pad = 3.0
     $inv = [cultureinfo]::InvariantCulture
     $pts = [System.Collections.Generic.List[string]]::new()
