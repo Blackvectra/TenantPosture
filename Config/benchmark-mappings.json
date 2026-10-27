@@ -1377,6 +1377,10 @@
     },
     "TMS-4.4": {
       "Reason": "CISA ScubaGear 2.0.0 Teams and SharePoint/OneDrive baselines (v2.0.0 tag, every MS.TEAMS.* and MS.SHAREPOINT.* statement read); docs/TP-SCUBA-ALIGNMENT.md; DISA Entra ID STIG summary (no rule on this topic; DISA publishes no SharePoint Online, OneDrive or Teams service STIG, only Office 365 ProPlus client and on-premises SharePoint 2013 STIGs, per stigviewer's STIG list); Microsoft Learn. No ScubaGear 2.0.0 rule covers event attendee access (MS.TEAMS.1.7v2 is event recording; MS.TEAMS.1.2v2 is anonymous users starting meetings). No Microsoft recommended-settings page states a value for EventAccessType or TownhallEventAttendeeAccess."
+    },
+    "AAD-6.4": {
+      "Reason": "No configuration benchmark covers agent identity blueprints yet: CIS Microsoft 365 v7.0.0, ScubaGear 2.0.0, the DISA Entra ID STIG and the Zero Trust Assessment checks predate Microsoft Entra Agent ID. Microsoft documents the setting and how to turn it off but states no recommended value; the open-source Maester test MT.1225 checks the same property, but it is a test suite, not a benchmark.",
+      "EarnBy": ""
     }
   }
 }

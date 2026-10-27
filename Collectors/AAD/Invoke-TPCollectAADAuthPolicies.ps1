@@ -29,7 +29,8 @@ function Invoke-TPCollectAADAuthPolicies {
             CrossTenantAccess       = $null
             RiskyServicePrincipals  = $null
             Domains                 = @()
-            SectionStatus           = @{ Domains = 'NotRun' }
+            AgentBlueprintCreation  = $null
+            SectionStatus           = @{ Domains = 'NotRun'; AgentBlueprintCreation = 'NotRun' }
         }
     }
 
@@ -132,6 +133,28 @@ function Invoke-TPCollectAADAuthPolicies {
         } catch {
             if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                 Register-TPException -Source 'AAD-AuthorizationPolicy' -Message $_.Exception.Message
+            }
+        }
+
+        # Whether ordinary users can create agent identity blueprints (AAD-6.4). The
+        # setting ("Users can create agent blueprints", Entra ID > Users > User settings)
+        # is defaultUserRolePermissions.allowedToCreateAgentIdentityBlueprints, returned
+        # only by the beta authorization policy and on by default from Microsoft's
+        # November 2026 rollout. A tenant that does not return it yet is $null, never a
+        # value: the evaluator reports it not assessed. Same scope (Policy.Read.All).
+        # https://learn.microsoft.com/entra/identity/role-based-access-control/delegate-app-roles#restrict-who-can-create-applications-and-agents
+        try {
+            $authPolBeta = Invoke-TPGraphRequest -Method GET `
+                -Uri 'https://graph.microsoft.com/beta/policies/authorizationPolicy' `
+                -ErrorAction Stop
+            $durp = Get-TPObjectField -Item $authPolBeta -Key 'defaultUserRolePermissions' -Default $null
+            $abp  = if ($null -ne $durp) { Get-TPObjectField -Item $durp -Key 'allowedToCreateAgentIdentityBlueprints' -Default $null } else { $null }
+            $result.Data.AgentBlueprintCreation = $(if ($abp -is [bool]) { $abp } elseif ([string]$abp -eq 'True') { $true } elseif ([string]$abp -eq 'False') { $false } else { $null })
+            $result.Data.SectionStatus.AgentBlueprintCreation = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.AgentBlueprintCreation = 'Failed'
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'AAD-AgentBlueprintCreation' -Message $_.Exception.Message
             }
         }
 

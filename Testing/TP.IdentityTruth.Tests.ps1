@@ -1611,6 +1611,53 @@ Describe 'Benchmark gap fixes (AAD)' {
         }
     }
 
+    Context 'AAD-6.4 agent identity blueprint creation (real collector)' {
+        BeforeAll {
+            function script:Run-Abp($Durp, [bool] $Fail = $false) {
+                Clear-TPState
+                $script:T_Durp = $Durp; $script:T_AbpFail = $Fail
+                Set-Graph {
+                    param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                    if ($Uri -match '/beta/policies/authorizationPolicy') {
+                        if ($script:T_AbpFail) { throw 'Graph 403 Forbidden' }
+                        $pol = @{ id = 'authorizationPolicy' }
+                        if ($null -ne $script:T_Durp) { $pol.defaultUserRolePermissions = $script:T_Durp }
+                        return $pol
+                    }
+                    if ($Uri -match '/v1\.0/policies/authorizationPolicy') { return @{ id = 'authorizationPolicy'; defaultUserRolePermissions = @{ allowedToCreateApps = $false } } }
+                    return @{ value = @() }
+                }
+                Invoke-TPCollectAADAuthPolicies 3>$null | Out-Null
+                V 'Test-TPControlAADAgentBlueprintCreation' 'AAD-6.4'
+            }
+        }
+        It 'False is Satisfied and True a Gap, judged apart from app registration' {
+            (Run-Abp @{ allowedToCreateApps = $false; allowedToCreateAgentIdentityBlueprints = $false }).State | Should -Be 'Satisfied'
+            $f = Run-Abp @{ allowedToCreateApps = $false; allowedToCreateAgentIdentityBlueprints = $true }
+            $f.State  | Should -Be 'Gap' -Because 'Microsoft documents that the app-registration restriction does not cover agent blueprints'
+            $f.Detail | Should -Match 'outside the app-registration restriction'
+        }
+        It 'a tenant that does not return the property yet is not assessed, never a pass or a Gap' {
+            $f = Run-Abp @{ allowedToCreateApps = $false }
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'did not return defaultUserRolePermissions\.allowedToCreateAgentIdentityBlueprints'
+            (Get-TPRawData -Key 'AAD-AuthPolicies').Data.SectionStatus.AgentBlueprintCreation | Should -Be 'Collected'
+        }
+        It 'a string value is parsed, and anything else is not read' {
+            (Run-Abp @{ allowedToCreateAgentIdentityBlueprints = 'False' }).State | Should -Be 'Satisfied'
+            (Run-Abp @{ allowedToCreateAgentIdentityBlueprints = 'maybe' }).State | Should -Be 'NotApplicable'
+        }
+        It 'a failed beta read or an older results file is not assessed' {
+            $f = Run-Abp $null -Fail $true
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'section Failed'
+            (Get-TPRawData -Key 'AAD-AuthPolicies').Data.AuthorizationPolicy | Should -Not -BeNullOrEmpty -Because 'the v1.0 read is independent'
+            Clear-TPState
+            Set-TPRawData -Key 'AAD-AuthPolicies' -Data @{ Success = $true; Data = @{ PasswordProtection = @{ LockoutThreshold = 10 } } }
+            (V 'Test-TPControlAADAgentBlueprintCreation' 'AAD-6.4').Detail | Should -Match 'from before this check'
+        }
+    }
+
     Context 'AAD-11.2 guests in privileged roles (real roles collector)' {
         BeforeAll {
             function script:Run-Roles([object[]] $Assign, [object[]] $Elig = @(), [object[]] $Flags = @(), [bool] $FlagsFail = $false) {

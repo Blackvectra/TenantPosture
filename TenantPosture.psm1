@@ -268,7 +268,7 @@ $script:ExportedFunctions = @(
     'Test-TPControlAADPIMApproval', 'Test-TPControlAADPIMDuration',
     'Test-TPControlAADGuestInvite', 'Test-TPControlAADExternalCollab',
     'Test-TPControlAADGuestPermissions', 'Test-TPControlAADSSPR',
-    'Test-TPControlAADSSPRMethods', 'Test-TPControlAADUserAppReg',
+    'Test-TPControlAADSSPRMethods', 'Test-TPControlAADUserAppReg', 'Test-TPControlAADAgentBlueprintCreation',
     'Test-TPControlAADUserConsent', 'Test-TPControlAADAdminConsentWorkflow',
     'Test-TPControlAADPasswordProtection', 'Test-TPControlAADLockoutDuration', 'Test-TPControlAADBannedPasswords', 'Test-TPControlAADPasswordExpiry', 'Test-TPControlAADBreakGlass',
     'Test-TPControlAADPIMAlerts', 'Test-TPControlAADAccessReviews',

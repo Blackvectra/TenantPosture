@@ -6,7 +6,7 @@
 
 ## What the baseline is, and is not
 
-The assessment answers "what is this tenant's posture against 208 controls and ten frameworks". The baseline answers a narrower question: **is this client configured the way the CIS Microsoft 365 Foundations Benchmark says, at the profile NRG assigns it?** It is a desired-state view over the assessment: it reads findings and never changes them, creates none, and moves no framework score. Every control the tool assesses is still assessed and reported; a control with no CIS recommendation is simply not a baseline requirement.
+The assessment answers "what is this tenant's posture against 209 controls and ten frameworks". The baseline answers a narrower question: **is this client configured the way the CIS Microsoft 365 Foundations Benchmark says, at the profile NRG assigns it?** It is a desired-state view over the assessment: it reads findings and never changes them, creates none, and moves no framework score. Every control the tool assesses is still assessed and reported; a control with no CIS recommendation is simply not a baseline requirement.
 
 ## Tiers are CIS profiles
 
@@ -76,7 +76,7 @@ plus a `BaselineCompliance` summary (counts by observed state, constraint and di
 | Minimum | 115 | 51 | 64 |
 | Standard | 16 | 3 | 13 |
 | Hardened | 59 | 21 | 38 |
-| Assessment-only controls | 133 | | |
+| Assessment-only controls | 134 | | |
 
 All 160 v7.0.0 recommendations are represented; 75 rows are tool-checked controls and 115 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
 
@@ -158,6 +158,7 @@ One row per control in `controls.json`; the tier column is what the test compare
 | AAD-6.1 | User App Registration Disabled | High | Included (all plans) | 5.1.2.2 | **Minimum** |
 | AAD-6.2 | User Consent to Apps Restricted | Critical | Included (all plans) | — | **Assessment-only** |
 | AAD-6.3 | Admin Consent Workflow Enabled | Medium | Included (all plans) | 5.1.5.2 | **Minimum** |
+| AAD-6.4 | Users Cannot Create Agent Identity Blueprints | High | Included (all plans) | — | **Assessment-only** |
 | AAD-7.1 | Password Protection Lockout Configured | Medium | Included (all plans) | 5.2.3.8 | **Minimum** |
 | AAD-7.3 | Smart Lockout Duration at Least 60 Seconds | Medium | Included (all plans) | 5.2.3.9 | **Minimum** |
 | AAD-7.4 | Custom Banned Password List Enforced | Medium | M365 Business Premium or Entra ID P1 | 5.2.3.2 | **Minimum** |

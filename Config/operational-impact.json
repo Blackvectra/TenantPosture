@@ -429,7 +429,8 @@
     "AAD-15.2": "inventory-only",
     "AAD-7.3": "auth-prompt",
     "AAD-7.4": "auth-prompt",
-    "AAD-7.5": "none-visible"
+    "AAD-7.5": "none-visible",
+    "AAD-6.4": "app-consent-friction"
   },
   "deviceControls": {
     "DEV-1.1": "device-encryption",
@@ -550,6 +551,11 @@
     "INT-2.6": {
       "Users": "Unsigned macros stop running, macros in files downloaded or received by email are blocked, Excel stops launching DDE servers, and workbooks or templates on a network share are no longer trusted. Teams that run macro-based reports or line-of-business add-ins notice first.",
       "Watchouts": "Find the macros the business depends on before rollout and sign them with a code-signing certificate deployed as a Trusted Publisher; moving them to a network trusted location is the opening this setting closes."
+    },
+    "AAD-6.4": {
+      "Summary": "People who build agents need the Agent ID Developer role to create agent blueprints; nobody else is prompted.",
+      "Watchouts": "Check first who has already created blueprints (Entra ID > Agents > Agent blueprints) and give those builders the role before switching it off.",
+      "Reversible": "Yes."
     }
   }
 }
