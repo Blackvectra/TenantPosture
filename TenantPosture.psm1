@@ -282,6 +282,7 @@ $script:ExportedFunctions = @(
     'Test-TPControlAADContinuousAccess', 'Test-TPControlAADCrossTenantAccess',
     'Test-TPControlAADPrivilegedWorkstation', 'Test-TPControlAADTermsOfUse',
     'Test-TPControlAADWorkloadIdentityCA',
+    'Test-TPControlAADAppPasswordAdditionBlocked', 'Test-TPControlAADAppCustomPasswordBlocked', 'Test-TPControlAADWeakAuthMethodsDisabled', 'Test-TPControlAADSystemPreferredMfa', 'Test-TPControlAADEmailOtpDisabled', 'Test-TPControlAADAuthenticatorCompanionAppsDisabled',
 
     # ── Evaluators — DNS ──────────────────────────────────────────────────────
     'Test-TPControlDNSSPF', 'Test-TPControlDNSDKIM', 'Test-TPControlDNSDMARC',

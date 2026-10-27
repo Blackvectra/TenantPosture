@@ -438,7 +438,13 @@
     "AAD-16.5": "admin-elevation-friction",
     "AAD-16.6": "admin-elevation-friction",
     "AAD-16.7": "none-visible",
-    "AAD-16.8": "admin-review-workload"
+    "AAD-16.8": "admin-review-workload",
+    "AAD-17.1": "legacy-client-break",
+    "AAD-17.2": "legacy-client-break",
+    "AAD-17.3": "auth-prompt",
+    "AAD-17.4": "auth-prompt",
+    "AAD-17.5": "external-collab-friction",
+    "AAD-17.6": "auth-prompt"
   },
   "deviceControls": {
     "DEV-1.1": "device-encryption",
@@ -610,6 +616,36 @@
       "Summary": "Users can no longer read their own BitLocker recovery keys; recovery goes through the help desk.",
       "Users": "A user locked out at the BitLocker recovery screen has to call support instead of reading the key from My Account.",
       "Admins": "Help desk staff need a role that can read recovery keys (Cloud Device Administrator, Helpdesk Administrator, Intune Administrator, Security Administrator or Security Reader) and a process for verifying the caller.",
+      "Reversible": "Yes."
+    },
+    "AAD-17.1": {
+      "Summary": "No new client secret can be added to any application or service principal; existing secrets keep working until they expire.",
+      "Watchouts": "Pipelines and scripts that rotate secrets by adding a new one fail at their next rotation. Find them in the audit log (Update application, certificates and secrets management) and move them to certificates or workload identity federation before switching it on.",
+      "Reversible": "Yes."
+    },
+    "AAD-17.2": {
+      "Summary": "A client secret can still be added, but only with a value Microsoft Entra ID generates.",
+      "Watchouts": "Automation that supplies its own secret value fails; the admin center, Azure CLI and Azure PowerShell already let Microsoft generate it.",
+      "Reversible": "Yes."
+    },
+    "AAD-17.3": {
+      "Summary": "Users can no longer use a text message or phone call to sign in or complete MFA.",
+      "Watchouts": "Users whose only registered method is a phone number are locked out of MFA at the next prompt. Run the registration details report first and move them to Microsoft Authenticator or a passkey.",
+      "Reversible": "Yes."
+    },
+    "AAD-17.4": {
+      "Summary": "Users are prompted first for the strongest method they have registered; they can still choose another.",
+      "Users": "People who usually approve by text message are offered Microsoft Authenticator or a passkey instead, if they have one registered.",
+      "Reversible": "Yes."
+    },
+    "AAD-17.5": {
+      "Summary": "Guests can no longer redeem invitations or sign in with a passcode sent to their email.",
+      "Watchouts": "Guests without a Microsoft Entra account, Microsoft account or federated or social identity provider lose access. Check which active guests sign in with email one-time passcodes before switching it off.",
+      "Reversible": "Yes."
+    },
+    "AAD-17.6": {
+      "Summary": "Sign-ins can no longer be approved from Outlook mobile or another companion application; only the Microsoft Authenticator app approves.",
+      "Watchouts": "Users who registered only Authenticator Lite in Outlook need the Microsoft Authenticator app registered first, or they lose their MFA method.",
       "Reversible": "Yes."
     }
   }
