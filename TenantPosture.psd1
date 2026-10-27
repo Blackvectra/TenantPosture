@@ -239,6 +239,7 @@
         'Test-TPControlAADSSPR',
         'Test-TPControlAADSSPRMethods',
         'Test-TPControlAADUserAppReg',
+        'Test-TPControlAADAgentBlueprintCreation',
         'Test-TPControlAADUserConsent',
         'Test-TPControlAADAdminConsentWorkflow',
         'Test-TPControlAADPasswordProtection',

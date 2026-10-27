@@ -14,7 +14,7 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 |---|---|---|
 | Equivalent | The evaluator checks what R audits, and every pass meets R. | 56 |
 | Subset | The evaluator checks some of the settings R lists, and every pass meets R for those settings. R can still fail on a setting the tool does not read. | 19 |
-| Not cited | No v7.0.0 recommendation describes the check, or the evaluator passes something R fails. | 133 |
+| Not cited | No v7.0.0 recommendation describes the check, or the evaluator passes something R fails. | 134 |
 
 75 controls cite 56 of the 160 recommendations. The CIS card in the report scores only those controls, so it is a narrower number than before, and an honest one: it covers what the tool verified against this benchmark.
 

@@ -700,6 +700,36 @@ Entra ID > Enterprise apps > Consent and permissions > Admin consent requests > 
 
 ---
 
+### AAD-6.4 — Users Cannot Create Agent Identity Blueprints
+
+**Severity:** High  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Ordinary users cannot create Microsoft Entra Agent ID agent identity blueprints (Users can create agent blueprints: No), so only administrators and the Agent ID Developer and Agent ID Administrator roles can. Read from the beta authorization policy; a tenant that does not return the setting yet is not assessed.
+
+**Business risk:**
+A user who creates a blueprint owns it and can create agent identities from it, add credentials and request permissions, building non-human identities that act in the tenant outside the app-registration restriction (AAD-6.1), which does not cover agents.
+
+**Remediation:**
+Entra ID > Users > User settings > Users can create agent blueprints = No, then assign the Agent ID Developer role to the people who build agents.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | CM-5, AC-6 |
+| CIS Controls v8.1 | 6.8 |
+| CMMC 2.0 | CM.L2-3.4.5 |
+| ISO/IEC 27001:2022 | A.8.19 |
+| SOC 2 | CC6.3, CC8.1 |
+| HIPAA | §164.308(a)(4)(ii)(B) |
+| PCI DSS | Req 6.5.4 |
+| MITRE ATT&CK | T1136.003, T1098.001 |
+
+---
+
 ### AAD-7.1 — Password Protection Lockout Configured
 
 **Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes

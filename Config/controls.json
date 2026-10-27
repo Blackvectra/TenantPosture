@@ -2186,6 +2186,37 @@
       "LicenseRequirement": "Included (all plans)"
     },
     {
+      "ControlId": "AAD-6.4",
+      "Title": "Users Cannot Create Agent Identity Blueprints",
+      "Description": "Ordinary users cannot create Microsoft Entra Agent ID agent identity blueprints (Users can create agent blueprints: No), so only administrators and the Agent ID Developer and Agent ID Administrator roles can. Read from the beta authorization policy; a tenant that does not return the setting yet is not assessed.",
+      "BusinessRisk": "A user who creates a blueprint owns it and can create agent identities from it, add credentials and request permissions, building non-human identities that act in the tenant outside the app-registration restriction (AAD-6.1), which does not cover agents.",
+      "Severity": "High",
+      "Workload": "AAD",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "AAD-AuthPolicies",
+      "EvaluatorFunction": "Test-TPControlAADAgentBlueprintCreation",
+      "Remediation": "Entra ID > Users > User settings > Users can create agent blueprints = No, then assign the Agent ID Developer role to the people who build agents.",
+      "References": {
+        "CISControls": [
+          "6.8"
+        ],
+        "CIS": "",
+        "SCuBA": "",
+        "NIST": "CM-5, AC-6",
+        "CMMC": "CM.L2-3.4.5",
+        "MITRE": [
+          "T1136.003",
+          "T1098.001"
+        ],
+        "ISO27001": "A.8.19",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3, CC8.1",
+        "PCIDSS": "Req 6.5.4"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
       "ControlId": "AAD-7.1",
       "Title": "Password Protection Lockout Configured",
       "Description": "Account lockout threshold is configured at 10 or fewer failed attempts (the lockout duration is AAD-7.3).",

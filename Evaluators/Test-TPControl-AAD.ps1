@@ -1308,6 +1308,39 @@ function Test-TPControlAADUserAppReg {
     }
 }
 
+# ── AAD-6.4 Users Cannot Create Agent Identity Blueprints ───────────────────
+function Test-TPControlAADAgentBlueprintCreation {
+    [CmdletBinding()] param()
+    $cid = 'AAD-6.4'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
+    $cit = Get-TPFrameworkCitations -ControlId $cid
+    $auth = Get-TPRawData -Key 'AAD-AuthPolicies'
+    if (-not $auth -or -not $auth.Success) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'AAD-AuthPolicies collector did not run; not assessed.'; return
+    }
+    # Microsoft: by default users can create agent identity blueprints, and restricting
+    # app registration (AAD-6.1) does not restrict them; "Users can create agent
+    # blueprints" = No limits creation to administrators and the Agent ID Developer and
+    # Agent ID Administrator roles. A blueprint's creator owns it and can create agent
+    # identities from it without any Agent ID role.
+    $status = Get-TPNestedProperty -Object $auth -Path 'Data.SectionStatus.AgentBlueprintCreation' -Default $null
+    if ([string]$status -ne 'Collected') {
+        $why = if ($null -eq $status) { 'was not read (a results file from before this check)' } else { "was not read (section $status)" }
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail "The agent blueprint creation setting $why; not assessed."; return
+    }
+    $allowed = Get-TPNestedProperty -Object $auth -Path 'Data.AgentBlueprintCreation' -Default $null
+    if ($null -eq $allowed) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'The tenant did not return defaultUserRolePermissions.allowedToCreateAgentIdentityBlueprints (Microsoft Graph beta authorization policy). Microsoft is rolling the setting out from November 2026, on by default; until the tenant returns it, check Entra ID > Users > User settings > Users can create agent blueprints by hand. Not assessed.'
+    } elseif ($allowed -eq $false) {
+        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail 'Users cannot create agent identity blueprints: only administrators and holders of the Agent ID Developer or Agent ID Administrator role can.' -CurrentValue 'allowedToCreateAgentIdentityBlueprints = False'
+    } else {
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
+            -Detail 'Any user can create an agent identity blueprint, becomes its owner, and can then create agent identities from it and give them credentials and permissions, outside the app-registration restriction.' `
+            -CurrentValue 'allowedToCreateAgentIdentityBlueprints = True' -RequiredValue 'allowedToCreateAgentIdentityBlueprints = False (Users can create agent blueprints: No)' -Remediation $ctrl.Remediation
+    }
+}
+
 # ── AAD-6.2 User Consent to Apps Restricted ───────────────────────────────────
 function Test-TPControlAADUserConsent {
     [CmdletBinding()] param()

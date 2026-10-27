@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **[Controls] AAD-6.4: users cannot create agent identity blueprints (209 controls).** Microsoft Entra Agent ID lets any
+  user create agent identity blueprints by default from November 2026, and the app-registration restriction (AAD-6.1)
+  does not cover them. AAD-6.4 reads `allowedToCreateAgentIdentityBlueprints` from the beta authorization policy: False
+  passes, True is a Gap, and a tenant that does not return the setting yet is not assessed. No new Graph scope.
 - **[Controls] INT-2.6 judges Office macro hardening (208 controls).** The assigned Intune Settings Catalog Office policies
   are judged against the owner-approved macro and active-content core of the CIS Microsoft Intune for Office Benchmark
   v1.1.0, Level 1 (27 settings across Word, Excel, PowerPoint and Access: macros from the internet blocked, VBA
