@@ -7,11 +7,11 @@
 
 ## Introduction
 
-This baseline lists the 17 SharePoint Online and OneDrive controls evaluated by TenantPosture. Each control produces a finding of **Satisfied**, **Partial**, **Gap**, **Not Applicable** or **Error**.
+This baseline lists the 25 SharePoint Online and OneDrive controls evaluated by TenantPosture. Each control produces a finding of **Satisfied**, **Partial**, **Gap**, **Not Applicable** or **Error**.
 
 This file is generated from `Config/controls.json`, which is the single source of truth for control IDs, titles, severities, remediation and framework citations. Do not edit it by hand — change the control definition and regenerate, or the two will disagree. `Testing/*.BaselineDocs.Tests.ps1` fails the build if they do.
 
-**Severity breakdown:** 6 High · 8 Medium · 3 Low
+**Severity breakdown:** 6 High · 15 Medium · 4 Low
 
 ---
 
@@ -563,6 +563,223 @@ Set-SPOTenant -DeletedUserPersonalSiteRetentionPeriodInDays 365 (maximum 3650). 
 | SOC 2 | A1.2 |
 | HIPAA | §164.308(a)(7)(ii)(A) |
 | PCI DSS v4.0 | Req 10.5 |
+
+---
+
+### SPO-5.1 — SharePoint Infected Files Cannot Be Downloaded
+
+**Severity:** Medium  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+A file SharePoint, OneDrive or Teams has detected as infected cannot be downloaded from the Virus Found page (Set-SPOTenant DisallowInfectedFileDownload = True).
+
+**Business risk:**
+By default users can still download a file detected as malicious, so a single click reintroduces malware the platform already caught onto an endpoint.
+
+**Remediation:**
+Set-SPOTenant -DisallowInfectedFileDownload $true
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | SI-3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.3.1 |
+| CIS Controls v8.1 | 10.1 |
+| CMMC 2.0 | SI.L1-3.14.2 |
+| ISO/IEC 27001:2022 | A.8.7 |
+| SOC 2 | CC6.8 |
+| HIPAA | §164.308(a)(5)(ii)(B) |
+| PCI DSS | Req 5.2 |
+| MITRE ATT&CK | T1204.002, T1105 |
+
+---
+
+### SPO-5.2 — SharePoint and OneDrive Integration With Entra B2B Enabled
+
+**Severity:** Medium  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+Sharing a SharePoint or OneDrive file or folder with an external person creates a Microsoft Entra guest account (Set-SPOTenant EnableAzureADB2BIntegration = True), so Entra guest settings, access reviews and Conditional Access apply.
+
+**Business risk:**
+Without the integration, files are shared through SharePoint's own one-time passcodes with no guest account, so external recipients sit outside Entra access policies, MFA and access reviews and are hard to audit.
+
+**Remediation:**
+Set-SPOTenant -EnableAzureADB2BIntegration $true
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-2, AC-20 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.2 |
+| CIS Controls v8.1 | 6.7 |
+| CMMC 2.0 | AC.L1-3.1.1 |
+| ISO/IEC 27001:2022 | A.5.16, A.5.19 |
+| SOC 2 | CC6.2 |
+| HIPAA | §164.312(a)(1) |
+| PCI DSS | Req 8.2 |
+| MITRE ATT&CK | T1078.004 |
+
+---
+
+### SPO-5.3 — OneDrive Content Sharing Restricted
+
+**Severity:** Medium  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+OneDrive content can be shared only with people in the organization (OneDriveSharingCapability = Disabled), or SharePoint external sharing is off, which OneDrive cannot exceed.
+
+**Business risk:**
+Open OneDrive sharing lets users send personal and work files to anyone outside the organization, often without the file owner noticing, through links that are hard to track.
+
+**Remediation:**
+Set-SPOTenant -OneDriveSharingCapability Disabled. SharePoint admin center > Policies > Sharing > External sharing: set OneDrive to Only people in your organization; move external collaboration to governed SharePoint sites.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-3, AC-4 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.4 |
+| CIS Controls v8.1 | 3.3 |
+| CMMC 2.0 | AC.L1-3.1.1 |
+| ISO/IEC 27001:2022 | A.5.14, A.8.12 |
+| SOC 2 | CC6.7 |
+| HIPAA | §164.312(e)(1) |
+| PCI DSS | Req 7.2 |
+| MITRE ATT&CK | T1567.002, T1530 |
+
+---
+
+### SPO-5.4 — SharePoint Guests Cannot Share Items They Do Not Own
+
+**Severity:** Medium  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+Guests cannot reshare files, folders or sites they do not own (Set-SPOTenant PreventExternalUsersFromResharing = True, read from Graph isResharingByExternalUsersEnabled = False).
+
+**Business risk:**
+When guests can reshare, content reaches people its owner never chose, and the organization loses control of who outside it holds access.
+
+**Remediation:**
+Set-SPOTenant -PreventExternalUsersFromResharing $true. SharePoint admin center > Policies > Sharing > More external sharing settings: clear "Allow guests to share items they don't own".
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.5 |
+| CIS Controls v8.1 | 3.3 |
+| CMMC 2.0 | AC.L1-3.1.1 |
+| ISO/IEC 27001:2022 | A.5.14, A.5.15 |
+| SOC 2 | CC6.2 |
+| HIPAA | §164.312(a)(1) |
+| PCI DSS | Req 7.2 |
+| MITRE ATT&CK | T1213.002, T1530 |
+
+---
+
+### SPO-5.5 — SharePoint External Sharing Limited to Allowed Domains
+
+**Severity:** Medium  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+External sharing in SharePoint and OneDrive is limited to an allow list naming at least one approved domain (SharingDomainRestrictionMode = AllowList), or external sharing is off.
+
+**Business risk:**
+Without a domain allow list, a user can share content with any external domain, including one an attacker controls, an easy route for sending data out of the tenant.
+
+**Remediation:**
+Set-SPOTenant -SharingDomainRestrictionMode AllowList -SharingAllowedDomainList "partner1.com partner2.com". SharePoint admin center > Policies > Sharing > More external sharing settings > Limit external sharing by domain > Allow only specific domains.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-4, SC-7 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.6 |
+| CIS Controls v8.1 | 3.3 |
+| CMMC 2.0 | AC.L1-3.1.20 |
+| ISO/IEC 27001:2022 | A.5.14, A.8.12 |
+| SOC 2 | CC6.7 |
+| HIPAA | §164.312(e)(1) |
+| PCI DSS | Req 1.4 |
+| MITRE ATT&CK | T1567.002, T1537 |
+
+---
+
+### SPO-5.6 — SharePoint External Sharing Restricted by Security Group
+
+**Severity:** Medium  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+Only members of named security groups can share SharePoint and OneDrive content externally, with authenticated guests only (Get-SPOTenant WhoCanShareAuthenticatedGuestAllowList names at least one group), or external sharing is off.
+
+**Business risk:**
+When every user can share externally, one compromised account can send files to any outside address; limiting external sharing to a group keeps that right with the people who need it.
+
+**Remediation:**
+SharePoint admin center > Policies > Sharing > More external sharing settings: select "Allow only users in specific security groups to share externally", add the security group, and keep "Can share with" at Authenticated guests only.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-3, AC-6 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.8 |
+| CIS Controls v8.1 | 6.8 |
+| CMMC 2.0 | AC.L2-3.1.5 |
+| ISO/IEC 27001:2022 | A.5.15, A.8.2 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.312(a)(1) |
+| PCI DSS | Req 7.2 |
+| MITRE ATT&CK | T1567.002, T1530 |
+
+---
+
+### SPO-5.7 — SharePoint Default Sharing Link Permission Is View
+
+**Severity:** Low  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+Sharing links default to view-only (Set-SPOTenant DefaultLinkPermission = View), so a user must deliberately choose edit.
+
+**Business risk:**
+With edit as the default, a link shared without changing the option lets every recipient change or delete the content, granting more access than the share usually needs.
+
+**Remediation:**
+Set-SPOTenant -DefaultLinkPermission View. SharePoint admin center > Policies > Sharing > File and folder links: set the default permission to View.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-6 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.11 |
+| CIS Controls v8.1 | 3.3 |
+| CMMC 2.0 | AC.L2-3.1.5 |
+| ISO/IEC 27001:2022 | A.5.15, A.8.2 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.312(c)(1) |
+| PCI DSS | Req 7.2 |
+| MITRE ATT&CK | T1565.001 |
 
 ---
 

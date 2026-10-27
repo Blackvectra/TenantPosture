@@ -6233,6 +6233,248 @@
       }
     },
     {
+      "ControlId": "AAD-16.1",
+      "Title": "Users Cannot Create Security Groups",
+      "Description": "Ordinary users cannot create security groups in the Microsoft Entra admin centers, the API or PowerShell (authorization policy defaultUserRolePermissions.allowedToCreateSecurityGroups = False). A tenant that does not return the setting is not assessed.",
+      "BusinessRisk": "A user who creates a security group owns it. A compromised account can create groups with names such as Accounting or Break-glass that an administrator later grants access to, adds to a role or excludes from Conditional Access by mistake.",
+      "Severity": "Medium",
+      "Workload": "AAD",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraSecurityGroupCreation",
+      "Remediation": "Entra ID > Groups > General > Users can create security groups in Azure portals, API or PowerShell = No (or Entra ID > Users > User settings > Users can create security groups = No).",
+      "References": {
+        "CISControls": [
+          "6.8"
+        ],
+        "CIS": "5.1.3.1",
+        "SCuBA": "",
+        "NIST": "AC-2, AC-6",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1098"
+        ],
+        "ISO27001": "A.5.18",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.1"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.2",
+      "Title": "Users Cannot Create Microsoft 365 Groups",
+      "Description": "Non-admin users cannot create Microsoft 365 groups in Azure portals, the API or PowerShell: the Group.Unified directory setting exists with EnableGroupCreation = False. Without a Group.Unified object Microsoft's template default (True) applies, which is a Gap. Members of the GroupCreationAllowedGroupId group may still create groups, as Microsoft documents.",
+      "BusinessRisk": "Every Microsoft 365 group a user creates brings a mailbox, a SharePoint site and often a team that the creator owns and can open to guests, so data spreads into containers nobody governs.",
+      "Severity": "Low",
+      "Workload": "AAD",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraM365GroupCreation",
+      "Remediation": "Entra ID > Groups > General > Users can create Microsoft 365 groups in Azure portals, API or PowerShell = No. To let a named team keep creating groups, set GroupCreationAllowedGroupId on the Group.Unified setting to their security group.",
+      "References": {
+        "CISControls": [
+          "6.8"
+        ],
+        "CIS": "5.1.3.4",
+        "SCuBA": "",
+        "NIST": "AC-2, AC-6",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1098"
+        ],
+        "ISO27001": "A.5.18",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.1"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.3",
+      "Title": "Joining Devices to Microsoft Entra Restricted",
+      "Description": "Users may join devices to Microsoft Entra is set to Selected or None (device registration policy azureADJoin.allowedToJoin is an enumerated or no-membership type, not all users). Microsoft applies the setting to user-driven Microsoft Entra join on Windows 10 or later, not to hybrid join, Azure VMs or Autopilot self-deploying mode.",
+      "BusinessRisk": "Microsoft Incident Response has seen attackers join their own devices with a compromised standard account; the device can inherit management policies, look compliant and give the attacker persistent access without another MFA prompt.",
+      "Severity": "Medium",
+      "Workload": "AAD",
+      "Category": "Endpoint",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraDeviceJoinRestricted",
+      "Remediation": "Entra ID > Devices > Device settings > Users may join devices to Microsoft Entra = Selected (add the provisioning staff or group) or None.",
+      "References": {
+        "CISControls": [
+          "1.2"
+        ],
+        "CIS": "5.1.4.1",
+        "SCuBA": "",
+        "NIST": "IA-3, AC-3",
+        "CMMC": "IA.L1-3.5.2",
+        "MITRE": [
+          "T1098.005"
+        ],
+        "ISO27001": "A.8.1",
+        "HIPAA": "§164.312(a)(1)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 12.5.1"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.4",
+      "Title": "Maximum Devices per User Limited",
+      "Description": "The maximum number of Microsoft Entra joined or registered devices a user can have (device registration policy userDeviceQuota) is 10 or less. Microsoft's default is 50.",
+      "BusinessRisk": "A high quota lets one compromised account register many devices that look legitimate, and lets unmanaged devices accumulate unnoticed.",
+      "Severity": "Low",
+      "Workload": "AAD",
+      "Category": "Endpoint",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraDeviceQuota",
+      "Remediation": "Entra ID > Devices > Device settings > Maximum number of devices per user = 10 or less. Staff who enroll devices on the organization's behalf use a Device Enrollment Manager account in Intune instead.",
+      "References": {
+        "CISControls": [
+          "1.2"
+        ],
+        "CIS": "5.1.4.2",
+        "SCuBA": "",
+        "NIST": "CM-8, IA-3",
+        "CMMC": "CM.L2-3.4.1",
+        "MITRE": [
+          "T1098.005"
+        ],
+        "ISO27001": "A.5.9",
+        "HIPAA": "§164.310(d)(1)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 12.5.1"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.5",
+      "Title": "Global Administrators Not Local Admins on Joined Devices",
+      "Description": "Global administrator role is added as local administrator on the device during Microsoft Entra join is No (device registration policy azureADJoin.localAdmins.enableGlobalAdmins = False). Microsoft applies the setting to future registrations only.",
+      "BusinessRisk": "When Global Administrators are local administrators everywhere, using one to work on an endpoint is easy, and signing in to a compromised endpoint with the tenant's most privileged account exposes it to credential theft.",
+      "Severity": "Medium",
+      "Workload": "AAD",
+      "Category": "Endpoint",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraJoinGlobalAdminLocalAdmin",
+      "Remediation": "Entra ID > Devices > Device settings > Global administrator role is added as local administrator on the device during Microsoft Entra join = No; use the Microsoft Entra Joined Device Local Administrator role for device administration.",
+      "References": {
+        "CISControls": [
+          "5.4"
+        ],
+        "CIS": "5.1.4.3",
+        "SCuBA": "",
+        "NIST": "AC-6, AC-6(5)",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1078.004",
+          "T1003"
+        ],
+        "ISO27001": "A.8.2",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.2"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.6",
+      "Title": "Registering Users Not Local Admins on Joined Devices",
+      "Description": "Registering user is added as local administrator on the device during Microsoft Entra join is Selected or None (device registration policy azureADJoin.localAdmins.registeringUsers is an enumerated or no-membership type, not all users).",
+      "BusinessRisk": "By default everyone who joins a device becomes its local administrator, so ordinary users run with administrative rights and malware they launch can disable protections and persist.",
+      "Severity": "High",
+      "Workload": "AAD",
+      "Category": "Endpoint",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraJoinRegisteringUserLocalAdmin",
+      "Remediation": "Entra ID > Devices > Device settings > Registering user is added as local administrator on the device during Microsoft Entra join = Selected (add the provisioning staff) or None; manage local administrators through Intune or the Microsoft Entra Joined Device Local Administrator role.",
+      "References": {
+        "CISControls": [
+          "5.4"
+        ],
+        "CIS": "5.1.4.4",
+        "SCuBA": "",
+        "NIST": "AC-6, AC-6(5)",
+        "CMMC": "AC.L2-3.1.6",
+        "MITRE": [
+          "T1078.003"
+        ],
+        "ISO27001": "A.8.2",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.2"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.7",
+      "Title": "Microsoft Entra LAPS Enabled",
+      "Description": "Enable Microsoft Entra Local Administrator Password Solution (LAPS) is Yes (device registration policy localAdminPassword.isEnabled = True). The tenant switch is a prerequisite and rotates nothing by itself: the Intune LAPS policy that does is judged by INT-4.1.",
+      "BusinessRisk": "Without LAPS in Microsoft Entra ID, devices cannot back up a unique, rotated local administrator password, and organizations fall back to the same password on every machine, so one compromised device opens all of them.",
+      "Severity": "Medium",
+      "Workload": "AAD",
+      "Category": "Endpoint",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraLapsEnabled",
+      "Remediation": "Entra ID > Devices > Device settings > Enable Microsoft Entra Local Administrator Password Solution (LAPS) = Yes, then deploy an Intune Windows LAPS policy that backs the password up to Microsoft Entra ID (INT-4.1).",
+      "References": {
+        "CISControls": [
+          "5.2"
+        ],
+        "CIS": "5.1.4.5",
+        "SCuBA": "",
+        "NIST": "AC-2, IA-5",
+        "CMMC": "IA.L1-3.5.2",
+        "MITRE": [
+          "T1078.003",
+          "T1021.002"
+        ],
+        "ISO27001": "A.5.17",
+        "HIPAA": "§164.308(a)(5)(ii)(D)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 2.2.2"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.8",
+      "Title": "Users Cannot Recover BitLocker Keys of Their Devices",
+      "Description": "Restrict non-admin users from recovering the BitLocker key(s) for their owned devices is Yes (authorization policy defaultUserRolePermissions.allowedToReadBitlockerKeysForOwnedDevice = False). A tenant that does not return the setting is not assessed.",
+      "BusinessRisk": "A device owner can otherwise read the recovery key from My Account, so an attacker with a user's credentials and the device can retrieve the key and decrypt the drive.",
+      "Severity": "Low",
+      "Workload": "AAD",
+      "Category": "Endpoint",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraBitLockerKeyRecovery",
+      "Remediation": "Entra ID > Devices > Device settings > Restrict non-admin users from recovering the BitLocker key(s) for their owned devices = Yes. Recovery then goes through a Cloud Device Administrator, Helpdesk Administrator, Intune Administrator, Security Administrator or Security Reader.",
+      "References": {
+        "CISControls": [
+          "3.11"
+        ],
+        "CIS": "5.1.4.6",
+        "SCuBA": "",
+        "NIST": "AC-6, SC-12",
+        "CMMC": "SC.L2-3.13.10",
+        "MITRE": [
+          "T1552"
+        ],
+        "ISO27001": "A.8.24",
+        "HIPAA": "§164.312(a)(2)(iv)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 3.6.1"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
       "ControlId": "DEF-5.1",
       "Title": "Tenant Allow/Block List Entries Time-Boxed",
       "Description": "No domain, address, URL or file allow entry in the Tenant Allow/Block List is permanent; every such filtering override carries an expiry (a date, or 45 days after last use). Spoofed-sender allow entries never expire by design and are reviewed for a sending service still in use, not time-boxed.",
@@ -6356,6 +6598,799 @@
         "PCIDSS": "Req 10.5"
       },
       "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-17.1",
+      "Title": "Password Addition Blocked for Applications",
+      "Description": "The tenant application management policy (defaultAppManagementPolicy) is enabled and its passwordAddition restriction is enabled for applications and for service principals with no created-after date, so no new client secret can be added to any application or service principal. Existing secrets are not affected; per-application policies that override the default are not read.",
+      "BusinessRisk": "A client secret is a static string that carries no proof of possession and is routinely left in source code, pipelines and configuration files. Whoever finds one authenticates as the application with all of its permissions, with no MFA and no user sign-in to flag. Blocking new secrets forces certificates or workload identity federation for new credentials.",
+      "Severity": "Medium",
+      "Workload": "AAD",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "AAD-Inventory",
+      "EvaluatorFunction": "Test-TPControlAADAppPasswordAdditionBlocked",
+      "Remediation": "Microsoft Entra admin center > Entra ID > Enterprise apps > Application policies > Block password addition: Status On, Applies to All applications, Only apply to apps created after left unset. Move applications that still need a secret to certificates or workload identity federation first, and review any exclusions at least yearly.",
+      "References": {
+        "CISControls": [],
+        "CIS": "5.1.5.3",
+        "SCuBA": "",
+        "NIST": "IA-5",
+        "CMMC": "IA.L1-3.5.2",
+        "MITRE": [
+          "T1098.001",
+          "T1552.001"
+        ],
+        "ISO27001": "A.5.17",
+        "SOC2": "CC6.1",
+        "HIPAA": "§164.312(d)",
+        "PCIDSS": "Req 8.6"
+      },
+      "LicenseRequirement": "Included (Entra ID Free)"
+    },
+    {
+      "ControlId": "AAD-17.2",
+      "Title": "New Application Passwords System-Generated",
+      "Description": "The tenant application management policy (defaultAppManagementPolicy) is enabled and its customPasswordAddition restriction is enabled for applications and for service principals with no created-after date, so every new client secret is generated by Microsoft Entra ID and none is chosen by the caller. Per-application policies that override the default are not read.",
+      "BusinessRisk": "A caller-chosen client secret can be short, predictable or reused across applications, and a weak secret that leaks through code, logs or a supplier is easy to guess or crack. System-generated secrets are long and random.",
+      "Severity": "Low",
+      "Workload": "AAD",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "AAD-Inventory",
+      "EvaluatorFunction": "Test-TPControlAADAppCustomPasswordBlocked",
+      "Remediation": "Microsoft Entra admin center > Entra ID > Enterprise apps > Application policies > Block custom passwords: Status On, Applies to All applications, Only apply to apps created after left unset. Update any automation that supplies its own secret value to accept the generated one.",
+      "References": {
+        "CISControls": [
+          "5.2"
+        ],
+        "CIS": "5.1.5.5",
+        "SCuBA": "",
+        "NIST": "IA-5(1)",
+        "CMMC": "IA.L2-3.5.7",
+        "MITRE": [
+          "T1098.001",
+          "T1110"
+        ],
+        "ISO27001": "A.5.17",
+        "SOC2": "CC6.1",
+        "HIPAA": "§164.312(d)",
+        "PCIDSS": "Req 8.6"
+      },
+      "LicenseRequirement": "Included (Entra ID Free)"
+    },
+    {
+      "ControlId": "AAD-17.3",
+      "Title": "SMS and Voice Call Authentication Methods Disabled",
+      "Description": "The SMS and Voice call methods are disabled in the Microsoft Entra authentication methods policy. While the policy migration is not complete, the legacy MFA and SSPR policies (not read) can still allow them.",
+      "BusinessRisk": "SMS codes and voice calls travel over the phone network: a SIM swap, number port or intercepted message gives an attacker the second factor, and both are routinely relayed in real-time phishing. Users who keep them as a method can be steered to the weakest option.",
+      "Severity": "High",
+      "Workload": "AAD",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "AAD-AuthPolicies",
+      "EvaluatorFunction": "Test-TPControlAADWeakAuthMethodsDisabled",
+      "Remediation": "Microsoft Entra admin center > Entra ID > Authentication methods > Policies: open SMS and Voice call, turn Enable off, Save. Register users on Microsoft Authenticator or a phishing-resistant method first, and complete the migration from the legacy MFA and SSPR policies.",
+      "References": {
+        "CISControls": [
+          "6.3"
+        ],
+        "CIS": "5.2.3.5",
+        "SCuBA": "",
+        "NIST": "IA-5, CM-7",
+        "CMMC": "IA.L2-3.5.3",
+        "MITRE": [
+          "T1111"
+        ],
+        "ISO27001": "A.5.17, A.8.5",
+        "SOC2": "CC6.1",
+        "HIPAA": "§164.312(d)",
+        "PCIDSS": "Req 8.5"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-17.4",
+      "Title": "System-Preferred MFA Enabled for All Users",
+      "Description": "System-preferred multifactor authentication is set to Enabled (not Microsoft managed) for all users in the authentication methods policy, so sign-in prompts for the most secure method each user has registered. Read from the beta authentication methods policy; excluded targets are named for review.",
+      "BusinessRisk": "Without it, users are prompted for the method they used last or chose as default, which is often SMS or a voice call, even when they have registered Microsoft Authenticator or a passkey, leaving the weaker, interceptable method in daily use.",
+      "Severity": "Low",
+      "Workload": "AAD",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "AAD-AuthPolicies",
+      "EvaluatorFunction": "Test-TPControlAADSystemPreferredMfa",
+      "Remediation": "Microsoft Entra admin center > Entra ID > Authentication methods > Settings > System-preferred multifactor authentication: State Enabled, Include All users, Save. Document any excluded group.",
+      "References": {
+        "CISControls": [
+          "6.3"
+        ],
+        "CIS": "5.2.3.6",
+        "SCuBA": "",
+        "NIST": "IA-2(1)",
+        "CMMC": "IA.L2-3.5.3",
+        "MITRE": [
+          "T1111"
+        ],
+        "ISO27001": "A.8.5",
+        "SOC2": "CC6.1",
+        "HIPAA": "§164.312(d)",
+        "PCIDSS": "Req 8.5"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-17.5",
+      "Title": "Email OTP Authentication Method Disabled",
+      "Description": "The Email OTP method is disabled in the Microsoft Entra authentication methods policy, so a passcode sent to an email inbox cannot be used to sign in (it is the method B2B guests without another identity provider use).",
+      "BusinessRisk": "An emailed passcode is only as safe as the inbox it lands in, and a guest's inbox is outside the organization's control. A phished or compromised external mailbox becomes a sign-in to every resource that guest can reach.",
+      "Severity": "Medium",
+      "Workload": "AAD",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "AAD-AuthPolicies",
+      "EvaluatorFunction": "Test-TPControlAADEmailOtpDisabled",
+      "Remediation": "Microsoft Entra admin center > Entra ID > Authentication methods > Policies > Email OTP: turn Enable off, Save. Guests then redeem invitations with a Microsoft Entra account, a Microsoft account or a federated or social identity provider; confirm active guests have one first.",
+      "References": {
+        "CISControls": [
+          "6.3"
+        ],
+        "CIS": "5.2.3.7",
+        "SCuBA": "",
+        "NIST": "IA-5, CM-7",
+        "CMMC": "IA.L1-3.5.2",
+        "MITRE": [
+          "T1078.004",
+          "T1111"
+        ],
+        "ISO27001": "A.5.17",
+        "SOC2": "CC6.1",
+        "HIPAA": "§164.312(d)",
+        "PCIDSS": "Req 8.3"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-17.6",
+      "Title": "Authenticator on Companion Applications Disabled",
+      "Description": "Microsoft Authenticator on companion applications (Authenticator Lite, for example in Outlook mobile) is set to Disabled for all users with no excluded group. Microsoft managed is not Disabled: Microsoft documents its value as Enabled. Read from the beta authentication methods policy.",
+      "BusinessRisk": "With it on, a sign-in can be approved from inside another app on the same phone that may also hold the session, weakening the separation between the device used to sign in and the one that approves it; a compromised app or device can complete both.",
+      "Severity": "Low",
+      "Workload": "AAD",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "AAD-AuthPolicies",
+      "EvaluatorFunction": "Test-TPControlAADAuthenticatorCompanionAppsDisabled",
+      "Remediation": "Microsoft Entra admin center > Entra ID > Authentication methods > Policies > Microsoft Authenticator > Configure: Microsoft Authenticator on companion applications Status Disabled, target All users, Save. Make sure users who approve in Outlook mobile have the Microsoft Authenticator app registered first.",
+      "References": {
+        "CISControls": [
+          "6.3"
+        ],
+        "CIS": "5.2.3.10",
+        "SCuBA": "",
+        "NIST": "IA-2(1)",
+        "CMMC": "IA.L2-3.5.3",
+        "MITRE": [
+          "T1111",
+          "T1621"
+        ],
+        "ISO27001": "A.8.5",
+        "SOC2": "CC6.1",
+        "HIPAA": "§164.312(d)",
+        "PCIDSS": "Req 8.5"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "EXO-10.1",
+      "Title": "External Calendar Sharing Not Available",
+      "Description": "The Default Sharing Policy is disabled (Enabled = False), so users cannot share their calendars with people outside the organization, and no other enabled sharing policy shares calendars with every domain (*) or through anonymous published links (Anonymous).",
+      "BusinessRisk": "A calendar shared outside the organization tells an attacker who works with whom, when an executive is traveling or out of the office, and which meetings to imitate, the reconnaissance behind a convincing business email compromise or a well-timed payment fraud.",
+      "Severity": "Low",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-MailboxConfig",
+      "EvaluatorFunction": "Test-TPControlEXOCalendarSharing",
+      "Remediation": "Microsoft 365 admin center > Settings > Org settings > Services > Calendar: clear 'Let your users share their calendars with people outside of your organization'. Or: Set-SharingPolicy -Identity 'Default Sharing Policy' -Enabled $false. Review any other enabled sharing policy that shares calendars with * or Anonymous and disable it or limit it to named partner domains.",
+      "References": {
+        "CIS": "1.3.3",
+        "SCuBA": "",
+        "NIST": "AC-3",
+        "CMMC": "AC.L2-3.1.3",
+        "MITRE": [
+          "T1591"
+        ],
+        "CISControls": [
+          "3.3"
+        ],
+        "ISO27001": "A.5.14",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "EXO-10.2",
+      "Title": "Additional Storage Providers Restricted in Outlook on the Web",
+      "Description": "The default Outlook on the web mailbox policy, and every other Outlook on the web mailbox policy, sets AdditionalStorageProvidersAvailable = False, so users cannot open or attach files from third-party storage services (Box, Dropbox, Google Drive, personal OneDrive and others) in Outlook on the web.",
+      "BusinessRisk": "Third-party storage services sit outside the organization's control and data protection: a user can attach company files from, or save them to, a personal account, and a file from an untrusted service reaches the mailbox without the organization's own scanning and sharing rules.",
+      "Severity": "Medium",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-MailboxConfig",
+      "EvaluatorFunction": "Test-TPControlEXOOwaStorageProviders",
+      "Remediation": "Set-OwaMailboxPolicy -Identity OwaMailboxPolicy-Default -AdditionalStorageProvidersAvailable $false, and the same on any other Outlook on the web mailbox policy (Get-OwaMailboxPolicy).",
+      "References": {
+        "CIS": "6.5.3",
+        "SCuBA": "",
+        "NIST": "AC-20, CM-7",
+        "CMMC": "AC.L1-3.1.20",
+        "MITRE": [
+          "T1567.002"
+        ],
+        "CISControls": [
+          "4.8"
+        ],
+        "ISO27001": "A.5.23",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 12.3.4"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "EXO-10.3",
+      "Title": "Connection Filter IP Allow List Not Used",
+      "Description": "The IP Allow List of the connection filter policy is empty, so no source IP address skips spam filtering and sender authentication checks.",
+      "BusinessRisk": "Mail from an IP address on the allow list skips spam filtering and SPF, DKIM and DMARC checks; only malware and high confidence phishing are still filtered. A shared or compromised sending service on the list delivers spoofed and phishing mail straight to the inbox.",
+      "Severity": "Medium",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-ConnectionFilter",
+      "EvaluatorFunction": "Test-TPControlEXOConnectionIPAllowList",
+      "Remediation": "Microsoft Defender portal > Email & collaboration > Policies & rules > Threat policies > Anti-spam > Connection filter policy (Default) > Edit connection filter policy: remove every entry under 'Always allow messages from the following IP addresses or address range'. Or: Set-HostedConnectionFilterPolicy -Identity Default -IPAllowList @{}. Allow a trusted sender with a mail flow rule that also checks authentication, not by IP alone.",
+      "References": {
+        "CIS": "2.1.12",
+        "SCuBA": "",
+        "NIST": "SI-8",
+        "CMMC": "SI.L1-3.14.2",
+        "MITRE": [
+          "T1566"
+        ],
+        "CISControls": [
+          "9.7"
+        ],
+        "ISO27001": "A.8.7",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4.1"
+      },
+      "LicenseRequirement": "Included (EOP)"
+    },
+    {
+      "ControlId": "DEF-6.1",
+      "Title": "Administrators Notified When Internal Users Send Malware",
+      "Description": "Every anti-malware policy in force has EnableInternalSenderAdminNotifications = True and an InternalSenderAdminAddress, so an administrator is notified when an internal user sends a message that contains malware.",
+      "BusinessRisk": "An internal user sending malware usually means a compromised account or device. Without the notification nobody is told, and the malware keeps spreading inside the organization and to its partners until someone reports it.",
+      "Severity": "Low",
+      "Workload": "DEF",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "Defender-Policies",
+      "EvaluatorFunction": "Test-TPControlDefenderInternalMalwareNotify",
+      "Remediation": "Microsoft Defender portal > Email & collaboration > Policies & rules > Threat policies > Anti-malware > open each policy in force > Edit protection settings: turn on 'Notify an admin about undelivered messages from internal senders' and enter the administrator's address. Or: Set-MalwareFilterPolicy -Identity <policy> -EnableInternalSenderAdminNotifications $true -InternalSenderAdminAddress <address>.",
+      "References": {
+        "CIS": "2.1.3",
+        "SCuBA": "",
+        "NIST": "SI-4, IR-6",
+        "CMMC": "SI.L2-3.14.6",
+        "MITRE": [
+          "T1534"
+        ],
+        "CISControls": [
+          "13.1"
+        ],
+        "ISO27001": "A.8.16",
+        "HIPAA": "§164.308(a)(6)(ii)",
+        "SOC2": "CC7.2",
+        "PCIDSS": "Req 12.10.5"
+      },
+      "LicenseRequirement": "Included (EOP)"
+    },
+    {
+      "ControlId": "DEF-6.2",
+      "Title": "Outbound Spam Policies Notify Administrators",
+      "Description": "Every outbound spam policy in force copies messages from a sender over the sending limits to an administrator (BccSuspiciousOutboundMail = True with BccSuspiciousOutboundAdditionalRecipients set) and notifies administrators when a sender is blocked for outbound spam (NotifyOutboundSpam = True with NotifyOutboundSpamRecipients set).",
+      "BusinessRisk": "A user blocked for sending spam is a strong sign the account has been taken over and is being used to send phishing or spam. Without the copy and the notification, the compromise is discovered from a partner's complaint or a blocklisted domain instead of the same day.",
+      "Severity": "Low",
+      "Workload": "DEF",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-MailboxConfig",
+      "EvaluatorFunction": "Test-TPControlDefenderOutboundSpamNotify",
+      "Remediation": "Microsoft Defender portal > Email & collaboration > Policies & rules > Threat policies > Anti-spam > Anti-spam outbound policy (Default) > Edit protection settings > Notifications: select 'Send a copy of suspicious outbound messages that exceed these limits to these users and groups' and 'Notify these users and groups if a sender is blocked due to sending outbound spam', each with an administrator address. Or: Set-HostedOutboundSpamFilterPolicy -Identity Default -BccSuspiciousOutboundMail $true -BccSuspiciousOutboundAdditionalRecipients <address> -NotifyOutboundSpam $true -NotifyOutboundSpamRecipients <address>. Microsoft also recommends keeping the default alert policy 'User restricted from sending email' on.",
+      "References": {
+        "CIS": "2.1.6",
+        "SCuBA": "",
+        "NIST": "SI-4, IR-6",
+        "CMMC": "SI.L2-3.14.6",
+        "MITRE": [
+          "T1078.004"
+        ],
+        "CISControls": [
+          "13.1"
+        ],
+        "ISO27001": "A.8.16",
+        "HIPAA": "§164.308(a)(6)(ii)",
+        "SOC2": "CC7.2",
+        "PCIDSS": "Req 12.10.5"
+      },
+      "LicenseRequirement": "Included (EOP)"
+    },
+    {
+      "ControlId": "DEF-6.3",
+      "Title": "Comprehensive Attachment Filtering Applied",
+      "Description": "Every anti-malware policy in force has the common attachments filter on (EnableFileFilter = True) and blocks all 186 file types CIS Microsoft 365 Foundations Benchmark v7.0.0 recommendation 2.1.11 lists (Config/cis-m365-comprehensive-attachment-types.json), a superset of Microsoft's 53-type default.",
+      "BusinessRisk": "Legacy Office formats, scripts, archives, disk images and installer packages are common ways to deliver malware past content scanning. Blocking them by type stops a new or obfuscated sample that signature scanning does not yet recognize.",
+      "Severity": "Medium",
+      "Workload": "DEF",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "Defender-Policies",
+      "EvaluatorFunction": "Test-TPControlDefenderComprehensiveAttachments",
+      "Remediation": "Create an anti-malware policy with EnableFileFilter $true and the 186 CIS 2.1.11 file types in FileTypes (New-MalwareFilterPolicy -Name <name> -EnableFileFilter $true -FileTypes <list>), and apply it with a malware filter rule that covers every accepted domain (New-MalwareFilterRule -Name <name> -MalwareFilterPolicy <name> -RecipientDomainIs <domains>). Or add the missing types to each policy in force with Set-MalwareFilterPolicy -FileTypes. Agree beforehand which listed types the business needs to exchange by email and how they will be sent instead.",
+      "References": {
+        "CIS": "2.1.11",
+        "SCuBA": "",
+        "NIST": "SI-3",
+        "CMMC": "SI.L1-3.14.2",
+        "MITRE": [
+          "T1566.001",
+          "T1204.002"
+        ],
+        "CISControls": [
+          "9.6"
+        ],
+        "ISO27001": "A.8.7",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.2"
+      },
+      "LicenseRequirement": "Included (EOP)"
+    },
+    {
+      "ControlId": "DEF-6.4",
+      "Title": "Zero-Hour Auto Purge for Microsoft Teams Enabled",
+      "Description": "Zero-hour auto purge is on for Microsoft Teams (the Teams protection policy has ZapEnabled = True), so a Teams chat message later identified as malware or high confidence phishing is removed from the chat. Exceptions on the Teams protection policy rule are reported for review.",
+      "BusinessRisk": "Teams chats are a delivery channel for phishing links and malicious files. Without zero-hour auto purge a message identified as malicious after it was delivered stays in the chat for everyone in it.",
+      "Severity": "Medium",
+      "Workload": "DEF",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "Defender-Policies",
+      "EvaluatorFunction": "Test-TPControlDefenderTeamsZap",
+      "Remediation": "Microsoft Defender portal > Settings > Email & collaboration > Microsoft Teams protection: set Zero-hour auto purge (ZAP) to On. Or: Set-TeamsProtectionPolicy -Identity 'Teams Protection Policy' -ZapEnabled $true. Review the exclusions under 'Exclude these participants'. Requires Defender for Office 365 Plan 1 or Plan 2.",
+      "References": {
+        "CIS": "2.4.4",
+        "SCuBA": "",
+        "NIST": "SI-3",
+        "CMMC": "SI.L1-3.14.2",
+        "MITRE": [
+          "T1566"
+        ],
+        "CISControls": [
+          "9.7",
+          "10.1"
+        ],
+        "ISO27001": "A.8.7",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4.2"
+      },
+      "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)"
+    },
+    {
+      "ControlId": "TMS-5.1",
+      "Title": "External Unmanaged Teams Users Cannot Initiate Conversations",
+      "Description": "Unmanaged (personal or free) Teams accounts cannot search for users in the organization or start a chat or meeting with them: AllowTeamsConsumerInbound is False, communication with unmanaged accounts is off entirely, or the Global external access policy sets EnableTeamsConsumerInbound to False.",
+      "BusinessRisk": "Unmanaged Teams accounts take minutes to create and carry no accountability. Letting them start conversations hands phishing, malware delivery (DarkGate) and social engineering (Midnight Blizzard) a direct channel to staff outside email filtering.",
+      "Severity": "Medium",
+      "Workload": "TMS",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "Teams",
+      "EvaluatorFunction": "Test-TPControlTeamsConsumerInbound",
+      "Remediation": "Set-CsTenantFederationConfiguration -AllowTeamsConsumerInbound $false (or Set-CsExternalAccessPolicy -Identity Global -EnableTeamsConsumerInbound $false). Teams admin center > Users > External access: clear \"External users with Teams accounts not managed by an organization can contact users in my organization\".",
+      "References": {
+        "CISControls": [
+          "4.8"
+        ],
+        "CIS": "8.2.3",
+        "SCuBA": "",
+        "NIST": "AC-20, SC-7",
+        "CMMC": "AC.L1-3.1.20",
+        "MITRE": [
+          "T1566",
+          "T1534"
+        ],
+        "ISO27001": "A.5.14, A.8.22",
+        "SOC2": "CC6.6",
+        "HIPAA": "§164.312(e)(1)",
+        "PCIDSS": "Req 1.4"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "TMS-5.2",
+      "Title": "Communication With Trial-Only Teams Tenants Blocked",
+      "Description": "ExternalAccessWithTrialTenants is Blocked, so users in Teams tenants that hold only trial licenses cannot chat, call or meet with users in the organization (Microsoft's default).",
+      "BusinessRisk": "Trial tenants are free, short-lived and used for spam and phishing over Teams. Allowing them lets attackers reach staff from tenants with no purchased license and no accountability.",
+      "Severity": "Medium",
+      "Workload": "TMS",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "Teams",
+      "EvaluatorFunction": "Test-TPControlTeamsTrialTenants",
+      "Remediation": "Set-CsTenantFederationConfiguration -ExternalAccessWithTrialTenants Blocked (MicrosoftTeams module 6.4.0 or later). Add a needed trial domain to AllowedTrialTenantDomains instead of allowing every trial tenant.",
+      "References": {
+        "CISControls": [
+          "4.8"
+        ],
+        "CIS": "8.2.4",
+        "SCuBA": "",
+        "NIST": "AC-20, SC-7",
+        "CMMC": "AC.L1-3.1.20",
+        "MITRE": [
+          "T1566",
+          "T1534"
+        ],
+        "ISO27001": "A.5.14, A.8.22",
+        "SOC2": "CC6.6",
+        "HIPAA": "§164.312(e)(1)",
+        "PCIDSS": "Req 1.4"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "TMS-5.3",
+      "Title": "Only Organizers and Co-organizers Can Present",
+      "Description": "The Global meeting policy sets the default \"Who can present\" to only organizers and co-organizers (DesignatedPresenterRoleMode = OrganizerOnlyUserOverride); everyone else joins as an attendee unless the organizer changes it.",
+      "BusinessRisk": "When everyone joins as a presenter, any participant, including an external or anonymous one, can take over the screen and share malicious content, links or confidential material with the whole meeting.",
+      "Severity": "Low",
+      "Workload": "TMS",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "Teams",
+      "EvaluatorFunction": "Test-TPControlTeamsPresenterRole",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -DesignatedPresenterRoleMode OrganizerOnlyUserOverride. Teams admin center > Meetings > Meeting policies > Global > Who can present: Only organizers and co-organizers.",
+      "References": {
+        "CISControls": [
+          "6.8"
+        ],
+        "CIS": "8.5.6",
+        "SCuBA": "",
+        "NIST": "AC-3, AC-6",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1534"
+        ],
+        "ISO27001": "A.5.15, A.8.2",
+        "SOC2": "CC6.3",
+        "HIPAA": "§164.312(a)(1)",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "TMS-5.4",
+      "Title": "External Meeting Chat Disabled",
+      "Description": "Users cannot read or send chat in meetings hosted by organizations the tenant has no trusted relationship with (Global meeting policy AllowExternalNonTrustedMeetingChat = False).",
+      "BusinessRisk": "Chat in an untrusted organization's meeting carries links and files from unknown senders to staff outside email filtering, a route for phishing and malware.",
+      "Severity": "Medium",
+      "Workload": "TMS",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "Teams",
+      "EvaluatorFunction": "Test-TPControlTeamsExternalMeetingChat",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -AllowExternalNonTrustedMeetingChat $false. Teams admin center > Meetings > Meeting policies > Global > External meeting chat: Off.",
+      "References": {
+        "CISControls": [
+          "4.8"
+        ],
+        "CIS": "8.5.8",
+        "SCuBA": "",
+        "NIST": "AC-20, SC-7",
+        "CMMC": "AC.L1-3.1.20",
+        "MITRE": [
+          "T1566",
+          "T1534"
+        ],
+        "ISO27001": "A.5.14, A.8.22",
+        "SOC2": "CC6.6",
+        "HIPAA": "§164.312(e)(1)",
+        "PCIDSS": "Req 1.4"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "TMS-5.5",
+      "Title": "Meeting Recording Off by Default",
+      "Description": "Meeting recording is off in the Global meeting policy (AllowCloudRecording = False); users who need to record are assigned a separate meeting policy that allows it.",
+      "BusinessRisk": "Recordings capture confidential discussion, shared screens and personal information into stored files. Allowing every user to record by default spreads that content beyond the people who need it.",
+      "Severity": "Low",
+      "Workload": "TMS",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "Teams",
+      "EvaluatorFunction": "Test-TPControlTeamsCloudRecording",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -AllowCloudRecording $false, and grant a separate policy that allows recording to the users who need it.",
+      "References": {
+        "CISControls": [
+          "3.3"
+        ],
+        "CIS": "8.5.9",
+        "SCuBA": "",
+        "NIST": "AC-3, AC-6",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1123"
+        ],
+        "ISO27001": "A.5.15, A.8.2",
+        "SOC2": "CC6.3",
+        "HIPAA": "§164.312(a)(1)",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "TMS-5.6",
+      "Title": "Users Can Report Security Concerns in Teams",
+      "Description": "Users can report a suspicious Teams message (Global messaging policy AllowSecurityEndUserReporting = True), and the user reported settings keep reports in the organization: Teams reports go to the reporting mailbox only (ReportChatMessageEnabled = False, ReportChatMessageToCustomizedAddressEnabled = True) and junk, not-junk and phishing reports go to a named reporting mailbox.",
+      "BusinessRisk": "Without a reporting path, a malicious Teams message a user recognizes never reaches the security team, and reports sent only to Microsoft are not visible to the people who must respond.",
+      "Severity": "Medium",
+      "Workload": "TMS",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "Teams",
+      "EvaluatorFunction": "Test-TPControlTeamsSecurityReporting",
+      "Remediation": "Set-CsTeamsMessagingPolicy -Identity Global -AllowSecurityEndUserReporting $true; Set-ReportSubmissionPolicy -Identity DefaultReportSubmissionPolicy -ReportChatMessageEnabled $false -ReportChatMessageToCustomizedAddressEnabled $true -ReportJunkToCustomizedAddress $true -ReportNotJunkToCustomizedAddress $true -ReportPhishToCustomizedAddress $true -ReportJunkAddresses <mailbox> -ReportNotJunkAddresses <mailbox> -ReportPhishAddresses <mailbox> (and the report submission rule for the same mailbox).",
+      "References": {
+        "CISControls": [
+          "17.3"
+        ],
+        "CIS": "8.6.1",
+        "SCuBA": "",
+        "NIST": "IR-6, SI-4",
+        "CMMC": "IR.L2-3.6.2",
+        "MITRE": [
+          "T1566",
+          "T1534"
+        ],
+        "ISO27001": "A.6.8",
+        "SOC2": "CC7.3",
+        "HIPAA": "§164.308(a)(6)(ii)",
+        "PCIDSS": "Req 12.10.1"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.1",
+      "Title": "SharePoint Infected Files Cannot Be Downloaded",
+      "Description": "A file SharePoint, OneDrive or Teams has detected as infected cannot be downloaded from the Virus Found page (Set-SPOTenant DisallowInfectedFileDownload = True).",
+      "BusinessRisk": "By default users can still download a file detected as malicious, so a single click reintroduces malware the platform already caught onto an endpoint.",
+      "Severity": "Medium",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPOInfectedFileDownload",
+      "Remediation": "Set-SPOTenant -DisallowInfectedFileDownload $true",
+      "References": {
+        "CISControls": [
+          "10.1"
+        ],
+        "CIS": "7.3.1",
+        "SCuBA": "",
+        "NIST": "SI-3",
+        "CMMC": "SI.L1-3.14.2",
+        "MITRE": [
+          "T1204.002",
+          "T1105"
+        ],
+        "ISO27001": "A.8.7",
+        "SOC2": "CC6.8",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
+        "PCIDSS": "Req 5.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.2",
+      "Title": "SharePoint and OneDrive Integration With Entra B2B Enabled",
+      "Description": "Sharing a SharePoint or OneDrive file or folder with an external person creates a Microsoft Entra guest account (Set-SPOTenant EnableAzureADB2BIntegration = True), so Entra guest settings, access reviews and Conditional Access apply.",
+      "BusinessRisk": "Without the integration, files are shared through SharePoint's own one-time passcodes with no guest account, so external recipients sit outside Entra access policies, MFA and access reviews and are hard to audit.",
+      "Severity": "Medium",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPOB2BIntegration",
+      "Remediation": "Set-SPOTenant -EnableAzureADB2BIntegration $true",
+      "References": {
+        "CISControls": [
+          "6.7"
+        ],
+        "CIS": "7.2.2",
+        "SCuBA": "",
+        "NIST": "AC-2, AC-20",
+        "CMMC": "AC.L1-3.1.1",
+        "MITRE": [
+          "T1078.004"
+        ],
+        "ISO27001": "A.5.16, A.5.19",
+        "SOC2": "CC6.2",
+        "HIPAA": "§164.312(a)(1)",
+        "PCIDSS": "Req 8.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.3",
+      "Title": "OneDrive Content Sharing Restricted",
+      "Description": "OneDrive content can be shared only with people in the organization (OneDriveSharingCapability = Disabled), or SharePoint external sharing is off, which OneDrive cannot exceed.",
+      "BusinessRisk": "Open OneDrive sharing lets users send personal and work files to anyone outside the organization, often without the file owner noticing, through links that are hard to track.",
+      "Severity": "Medium",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPOOneDriveSharing",
+      "Remediation": "Set-SPOTenant -OneDriveSharingCapability Disabled. SharePoint admin center > Policies > Sharing > External sharing: set OneDrive to Only people in your organization; move external collaboration to governed SharePoint sites.",
+      "References": {
+        "CISControls": [
+          "3.3"
+        ],
+        "CIS": "7.2.4",
+        "SCuBA": "",
+        "NIST": "AC-3, AC-4",
+        "CMMC": "AC.L1-3.1.1",
+        "MITRE": [
+          "T1567.002",
+          "T1530"
+        ],
+        "ISO27001": "A.5.14, A.8.12",
+        "SOC2": "CC6.7",
+        "HIPAA": "§164.312(e)(1)",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.4",
+      "Title": "SharePoint Guests Cannot Share Items They Do Not Own",
+      "Description": "Guests cannot reshare files, folders or sites they do not own (Set-SPOTenant PreventExternalUsersFromResharing = True, read from Graph isResharingByExternalUsersEnabled = False).",
+      "BusinessRisk": "When guests can reshare, content reaches people its owner never chose, and the organization loses control of who outside it holds access.",
+      "Severity": "Medium",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPOGuestResharing",
+      "Remediation": "Set-SPOTenant -PreventExternalUsersFromResharing $true. SharePoint admin center > Policies > Sharing > More external sharing settings: clear \"Allow guests to share items they don't own\".",
+      "References": {
+        "CISControls": [
+          "3.3"
+        ],
+        "CIS": "7.2.5",
+        "SCuBA": "",
+        "NIST": "AC-3",
+        "CMMC": "AC.L1-3.1.1",
+        "MITRE": [
+          "T1213.002",
+          "T1530"
+        ],
+        "ISO27001": "A.5.14, A.5.15",
+        "SOC2": "CC6.2",
+        "HIPAA": "§164.312(a)(1)",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.5",
+      "Title": "SharePoint External Sharing Limited to Allowed Domains",
+      "Description": "External sharing in SharePoint and OneDrive is limited to an allow list naming at least one approved domain (SharingDomainRestrictionMode = AllowList), or external sharing is off.",
+      "BusinessRisk": "Without a domain allow list, a user can share content with any external domain, including one an attacker controls, an easy route for sending data out of the tenant.",
+      "Severity": "Medium",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPODomainAllowList",
+      "Remediation": "Set-SPOTenant -SharingDomainRestrictionMode AllowList -SharingAllowedDomainList \"partner1.com partner2.com\". SharePoint admin center > Policies > Sharing > More external sharing settings > Limit external sharing by domain > Allow only specific domains.",
+      "References": {
+        "CISControls": [
+          "3.3"
+        ],
+        "CIS": "7.2.6",
+        "SCuBA": "",
+        "NIST": "AC-4, SC-7",
+        "CMMC": "AC.L1-3.1.20",
+        "MITRE": [
+          "T1567.002",
+          "T1537"
+        ],
+        "ISO27001": "A.5.14, A.8.12",
+        "SOC2": "CC6.7",
+        "HIPAA": "§164.312(e)(1)",
+        "PCIDSS": "Req 1.4"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.6",
+      "Title": "SharePoint External Sharing Restricted by Security Group",
+      "Description": "Only members of named security groups can share SharePoint and OneDrive content externally, with authenticated guests only (Get-SPOTenant WhoCanShareAuthenticatedGuestAllowList names at least one group), or external sharing is off.",
+      "BusinessRisk": "When every user can share externally, one compromised account can send files to any outside address; limiting external sharing to a group keeps that right with the people who need it.",
+      "Severity": "Medium",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPOSharingGroups",
+      "Remediation": "SharePoint admin center > Policies > Sharing > More external sharing settings: select \"Allow only users in specific security groups to share externally\", add the security group, and keep \"Can share with\" at Authenticated guests only.",
+      "References": {
+        "CISControls": [
+          "6.8"
+        ],
+        "CIS": "7.2.8",
+        "SCuBA": "",
+        "NIST": "AC-3, AC-6",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1567.002",
+          "T1530"
+        ],
+        "ISO27001": "A.5.15, A.8.2",
+        "SOC2": "CC6.3",
+        "HIPAA": "§164.312(a)(1)",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.7",
+      "Title": "SharePoint Default Sharing Link Permission Is View",
+      "Description": "Sharing links default to view-only (Set-SPOTenant DefaultLinkPermission = View), so a user must deliberately choose edit.",
+      "BusinessRisk": "With edit as the default, a link shared without changing the option lets every recipient change or delete the content, granting more access than the share usually needs.",
+      "Severity": "Low",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPODefaultLinkPermission",
+      "Remediation": "Set-SPOTenant -DefaultLinkPermission View. SharePoint admin center > Policies > Sharing > File and folder links: set the default permission to View.",
+      "References": {
+        "CISControls": [
+          "3.3"
+        ],
+        "CIS": "7.2.11",
+        "SCuBA": "",
+        "NIST": "AC-6",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1565.001"
+        ],
+        "ISO27001": "A.5.15, A.8.2",
+        "SOC2": "CC6.3",
+        "HIPAA": "§164.312(c)(1)",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
     }
   ]
 }

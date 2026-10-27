@@ -10,6 +10,17 @@
   (new `-Kind Results`), never serves incident-response output, never returns raw data, exceptions, the tenant ID or
   paths, and pseudonymizes identities unless started with `-IncludeIdentities`. Off by default; the module does not
   load `Mcp/`, so its exports are unchanged. See `docs/TP-MCP-SERVER.md`.
+- **[Controls] 34 new controls for CIS Microsoft 365 v7.0.0 recommendations no control read (243 controls; 119
+  controls cite 99 recommendations).** AAD-16.1-16.8 (group creation and device registration, 5.1.3.x / 5.1.4.x, new
+  `AAD-DirectorySettings` collector), AAD-17.1-17.6 (application password restrictions and authentication methods,
+  5.1.5.3, 5.1.5.5, 5.2.3.5-5.2.3.7, 5.2.3.10), EXO-10.1-10.3 and DEF-6.1-6.4 (calendar sharing, OWA storage
+  providers, connection filter IP allow list, malware and outbound spam notifications, comprehensive attachment
+  filtering, Teams ZAP), TMS-5.1-5.6 and SPO-5.1-5.7 (unmanaged Teams users, trial tenants, presenters, external
+  meeting chat, recording, security reporting, infected files, B2B integration, OneDrive sharing, resharing, allowed
+  domains and groups, link permission). Each replaces its manual row in the NRG Security Baseline (191 rows: 119
+  tool-checked, 72 manual). Every read is an existing scope or an Exchange, Teams or SharePoint `Get-*` cmdlet; no new
+  Graph scope. Not built because the read needs a scope the tool does not request: 5.1.6.1, 5.1.8.1, 1.3.4, 1.3.5;
+  1.3.7 waits on a decision about the service principal CIS audits.
 - **[Evaluators] Ten controls tightened to earn their CIS Microsoft 365 v7.0.0 citation (85 controls cite 65
   recommendations).** AAD-1.3 (5.2.2.5), AAD-1.4 (5.2.2.7), AAD-1.5 (5.2.2.6), AAD-10.4 (5.2.2.4), AAD-11.4 (5.2.2.16),
   AAD-10.2 (1.1.1), AAD-14.1 (5.1.5.4), SPO-1.2 (7.2.7), DEF-4.2 (3.2.1) and INT-3.1 (4.2) now pass only when the CIS

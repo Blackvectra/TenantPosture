@@ -81,7 +81,7 @@
     "INT-2.6": "Office macro and active-content Intune policy (judged against the CIS Intune for Office benchmark, not the M365 benchmark); no v7 M365 recommendation covers Office client macro settings.",
     "INT-3.2": "App configuration policies; no v7 recommendation.",
     "INT-3.3": "App protection conditional-launch minimum OS; no v7 recommendation.",
-    "INT-4.1": "Closest is 5.1.4.5 (Entra deviceRegistrationPolicy localAdminPassword.isEnabled = True), but the evaluator only counts assigned Intune Windows LAPS policies and never reads the Entra tenant switch, so it does not judge R's setting.",
+    "INT-4.1": "Closest is 5.1.4.5 (Entra deviceRegistrationPolicy localAdminPassword.isEnabled = True), but the evaluator only counts assigned Intune Windows LAPS policies and never reads the Entra tenant switch, so it does not judge R's setting; AAD-16.7 judges it.",
     "INT-4.2": "Windows Hello for Business enrollment configuration; no v7 recommendation.",
     "INT-4.3": "Minimum OS version in compliance policies plus 90% device compliance; no v7 recommendation.",
     "INT-4.4": "Mobile compliance passcode required; no v7 recommendation.",

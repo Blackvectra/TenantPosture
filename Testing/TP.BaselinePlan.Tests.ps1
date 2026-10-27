@@ -292,7 +292,10 @@ Describe 'NRG baseline plan — catalog and entry point integrity' {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
         Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
         $script:Catalog = Get-TPOptionalCollectorCatalog -Force
-        $script:SpoSrc = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Evaluators/Test-TPControlSharePoint.ps1') -Raw
+        # Shell-gated SharePoint verdicts live in the SharePoint evaluator and in the CIS
+        # Microsoft 365 v7.0.0 collaboration evaluator (SPO-5.x); both are scanned.
+        $script:SpoSrc = (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Evaluators/Test-TPControlSharePoint.ps1') -Raw) + "`n" +
+                         (Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Evaluators/Test-TPControlCollabCis.ps1') -Raw)
         $script:Entry = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Invoke-TPAssessment.ps1') -Raw
         $script:Wrapper = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Get-TPBaselinePlan.ps1') -Raw
         $script:Lib = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib/Get-TPBaselinePlan.ps1') -Raw

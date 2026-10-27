@@ -430,7 +430,41 @@
     "AAD-7.3": "auth-prompt",
     "AAD-7.4": "auth-prompt",
     "AAD-7.5": "none-visible",
-    "AAD-6.4": "app-consent-friction"
+    "AAD-6.4": "app-consent-friction",
+    "AAD-16.1": "app-consent-friction",
+    "AAD-16.2": "app-consent-friction",
+    "AAD-16.3": "device-gate",
+    "AAD-16.4": "device-gate",
+    "AAD-16.5": "admin-elevation-friction",
+    "AAD-16.6": "admin-elevation-friction",
+    "AAD-16.7": "none-visible",
+    "AAD-16.8": "admin-review-workload",
+    "AAD-17.1": "legacy-client-break",
+    "AAD-17.2": "legacy-client-break",
+    "AAD-17.3": "auth-prompt",
+    "AAD-17.4": "auth-prompt",
+    "AAD-17.5": "external-collab-friction",
+    "AAD-17.6": "auth-prompt",
+    "EXO-10.1": "external-collab-friction",
+    "EXO-10.2": "external-collab-friction",
+    "EXO-10.3": "mail-flow-quarantine",
+    "DEF-6.1": "admin-review-workload",
+    "DEF-6.2": "admin-review-workload",
+    "DEF-6.3": "mail-flow-quarantine",
+    "DEF-6.4": "none-visible",
+    "TMS-5.1": "external-collab-friction",
+    "TMS-5.2": "external-collab-friction",
+    "TMS-5.3": "meeting-friction",
+    "TMS-5.4": "external-collab-friction",
+    "TMS-5.5": "meeting-friction",
+    "TMS-5.6": "admin-review-workload",
+    "SPO-5.1": "none-visible",
+    "SPO-5.2": "external-collab-friction",
+    "SPO-5.3": "sharing-restriction",
+    "SPO-5.4": "sharing-restriction",
+    "SPO-5.5": "sharing-restriction",
+    "SPO-5.6": "sharing-restriction",
+    "SPO-5.7": "sharing-restriction"
   },
   "deviceControls": {
     "DEV-1.1": "device-encryption",
@@ -555,6 +589,153 @@
     "AAD-6.4": {
       "Summary": "People who build agents need the Agent ID Developer role to create agent blueprints; nobody else is prompted.",
       "Watchouts": "Check first who has already created blueprints (Entra ID > Agents > Agent blueprints) and give those builders the role before switching it off.",
+      "Reversible": "Yes."
+    },
+    "AAD-16.1": {
+      "Summary": "Users can no longer create security groups themselves; group requests come to an administrator or an approval workflow.",
+      "Watchouts": "Find the teams that create security groups today (for app access or SharePoint permissions) and give them a request path or a delegated groups role before switching it off. Existing groups are not affected.",
+      "Reversible": "Yes."
+    },
+    "AAD-16.2": {
+      "Summary": "Users can no longer create Microsoft 365 groups, and with them new Teams teams, SharePoint team sites and Planner plans; requests come to an administrator.",
+      "Users": "Creating a team in Teams or a group site in SharePoint shows that the user is not allowed.",
+      "Watchouts": "Teams creation is the visible casualty. Name the people who may still create groups in GroupCreationAllowedGroupId before turning it off, and publish how everyone else asks for a team.",
+      "Reversible": "Yes."
+    },
+    "AAD-16.3": {
+      "Summary": "Only the selected users or groups can join Windows devices to Microsoft Entra; everyone else is refused at join.",
+      "Users": "Users outside the selected set who join a new Windows device themselves (out-of-box setup, user-driven Autopilot) are refused.",
+      "Watchouts": "User-driven Autopilot is the usual casualty: either include the users who set up their own devices or move provisioning to Autopilot self-deploying mode, which this setting does not cover. Hybrid joined devices are not affected.",
+      "Reversible": "Yes, immediately."
+    },
+    "AAD-16.4": {
+      "Summary": "A user who already has the maximum number of joined or registered devices cannot add another until one is removed.",
+      "Users": "Someone with many old device records is refused when registering a new phone or laptop.",
+      "Admins": "Clean up stale device records first, and give staff who enroll devices for others a Device Enrollment Manager account in Intune.",
+      "Watchouts": "Count devices per user before lowering the quota; heavy device users and shared provisioning accounts hit it first.",
+      "Reversible": "Yes, immediately."
+    },
+    "AAD-16.5": {
+      "Summary": "Global Administrators are no longer local administrators on newly joined devices; device administration uses the Microsoft Entra Joined Device Local Administrator role instead.",
+      "Users": "Nothing.",
+      "Watchouts": "Applies to devices joined after the change only. Assign the Microsoft Entra Joined Device Local Administrator role to the device support staff before switching it off.",
+      "Reversible": "Yes, for future registrations."
+    },
+    "AAD-16.6": {
+      "Summary": "People who join a device are no longer made its local administrator; local administrator rights are granted centrally.",
+      "Users": "Users who join a new device cannot install software or change system settings that need administrator rights on it.",
+      "Watchouts": "Applies to devices joined after the change only; existing devices keep their local administrators until Intune manages the group. Plan how software gets installed (Intune, Company Portal) before users lose the rights.",
+      "Reversible": "Yes, for future registrations."
+    },
+    "AAD-16.7": {
+      "Summary": "Lets devices back up their local administrator password to Microsoft Entra ID; nothing rotates until an Intune LAPS policy is assigned (INT-4.1).",
+      "Watchouts": "The tenant switch alone changes no device. Deploy and verify the Intune Windows LAPS policy, and decide who may read the passwords, before relying on it.",
+      "Reversible": "Yes."
+    },
+    "AAD-16.8": {
+      "Summary": "Users can no longer read their own BitLocker recovery keys; recovery goes through the help desk.",
+      "Users": "A user locked out at the BitLocker recovery screen has to call support instead of reading the key from My Account.",
+      "Admins": "Help desk staff need a role that can read recovery keys (Cloud Device Administrator, Helpdesk Administrator, Intune Administrator, Security Administrator or Security Reader) and a process for verifying the caller.",
+      "Reversible": "Yes."
+    },
+    "AAD-17.1": {
+      "Summary": "No new client secret can be added to any application or service principal; existing secrets keep working until they expire.",
+      "Watchouts": "Pipelines and scripts that rotate secrets by adding a new one fail at their next rotation. Find them in the audit log (Update application, certificates and secrets management) and move them to certificates or workload identity federation before switching it on.",
+      "Reversible": "Yes."
+    },
+    "AAD-17.2": {
+      "Summary": "A client secret can still be added, but only with a value Microsoft Entra ID generates.",
+      "Watchouts": "Automation that supplies its own secret value fails; the admin center, Azure CLI and Azure PowerShell already let Microsoft generate it.",
+      "Reversible": "Yes."
+    },
+    "AAD-17.3": {
+      "Summary": "Users can no longer use a text message or phone call to sign in or complete MFA.",
+      "Watchouts": "Users whose only registered method is a phone number are locked out of MFA at the next prompt. Run the registration details report first and move them to Microsoft Authenticator or a passkey.",
+      "Reversible": "Yes."
+    },
+    "AAD-17.4": {
+      "Summary": "Users are prompted first for the strongest method they have registered; they can still choose another.",
+      "Users": "People who usually approve by text message are offered Microsoft Authenticator or a passkey instead, if they have one registered.",
+      "Reversible": "Yes."
+    },
+    "AAD-17.5": {
+      "Summary": "Guests can no longer redeem invitations or sign in with a passcode sent to their email.",
+      "Watchouts": "Guests without a Microsoft Entra account, Microsoft account or federated or social identity provider lose access. Check which active guests sign in with email one-time passcodes before switching it off.",
+      "Reversible": "Yes."
+    },
+    "AAD-17.6": {
+      "Summary": "Sign-ins can no longer be approved from Outlook mobile or another companion application; only the Microsoft Authenticator app approves.",
+      "Watchouts": "Users who registered only Authenticator Lite in Outlook need the Microsoft Authenticator app registered first, or they lose their MFA method.",
+      "Reversible": "Yes."
+    },
+    "EXO-10.1": {
+      "Summary": "Users can no longer share their calendars with people outside the organization, and calendars already shared or published stop returning data.",
+      "Users": "External free/busy and published calendar links stop working as soon as the policy is disabled. Internal calendar sharing and meeting invitations to external attendees are not affected.",
+      "Watchouts": "Find who relies on it first (assistants sharing an executive's calendar with an outside firm, published booking calendars). A partner that genuinely needs free/busy is better served by an organization relationship than by reopening sharing for everyone.",
+      "Reversible": "Yes. Re-enabling the policy restores sharing, but recipients have to be invited again."
+    },
+    "EXO-10.2": {
+      "Summary": "Users can no longer add or open files from third-party storage services (Box, Dropbox, Google Drive, personal OneDrive) in Outlook on the web.",
+      "Users": "The third-party storage locations disappear from the attach dialog in Outlook on the web; attaching from the organization's own OneDrive and SharePoint is unchanged.",
+      "Watchouts": "Ask first whether a department exchanges files with a client through a third-party service; the change can take up to an hour to apply.",
+      "Reversible": "Yes."
+    },
+    "EXO-10.3": {
+      "Summary": "Mail from the servers on the IP Allow List goes through spam filtering and sender authentication again.",
+      "Users": "Mail from a listed sender that fails SPF, DKIM or DMARC, or looks like spam, may land in Junk or quarantine instead of the inbox.",
+      "Watchouts": "Find out why each address is on the list (a scanner, a line-of-business application, a third-party sender) and fix that sender's authentication, or allow it with a mail flow rule that also checks authentication, before removing it.",
+      "Reversible": "Yes. Re-adding an address restores the bypass."
+    },
+    "DEF-6.1": {
+      "Summary": "An administrator receives a message whenever an internal user sends malware.",
+      "Watchouts": "Send it to a monitored shared mailbox or ticketing address, not one person's inbox, and decide who investigates the sender's account and device."
+    },
+    "DEF-6.2": {
+      "Summary": "An administrator is copied on suspicious outbound mail and notified when a user is blocked for sending spam.",
+      "Watchouts": "The Bcc copies can be numerous during an incident; route them to a monitored shared mailbox. A blocked user stays blocked until an administrator releases them, so the notification needs an owner."
+    },
+    "DEF-6.3": {
+      "Summary": "Messages carrying any of the 186 listed file types are blocked, including legacy Office formats, archives, HTML and calendar files.",
+      "Users": "Attachments such as .zip, .7z, .rar, .doc, .xls, .htm, .ics and .rtf are rejected or quarantined; senders and recipients have to exchange those files another way.",
+      "Watchouts": "This list blocks types many businesses still exchange by email. Pilot the policy on a group first, agree which types the business needs and how they will be sent instead (a sharing link), and expect quarantine release requests in the first weeks.",
+      "Reversible": "Yes. Removing a type from the list stops blocking it for new mail."
+    },
+    "DEF-6.4": {
+      "Summary": "Teams chat messages later identified as malware or high confidence phishing are removed from the chat for everyone in it.",
+      "Users": "Nothing, until a message is purged; then it is replaced by a notice that it was blocked. Quarantined Teams messages are available to administrators only."
+    },
+    "TMS-5.3": {
+      "Summary": "New meetings default to only the organizer and co-organizers presenting.",
+      "Users": "Attendees who expect to share their screen ask the organizer to make them a presenter; organizers can still change the default in meeting options.",
+      "Reversible": "Yes."
+    },
+    "TMS-5.5": {
+      "Summary": "Users on the Global meeting policy can no longer record meetings.",
+      "Watchouts": "Assign a policy that allows recording to the teams who rely on it (training, sales demos, compliance) before changing the Global policy.",
+      "Reversible": "Yes."
+    },
+    "TMS-5.6": {
+      "Admins": "Reported Teams messages and email land in the reporting mailbox; someone has to own and work that mailbox, including reports about colleagues that belong with HR.",
+      "Reversible": "Yes."
+    },
+    "SPO-5.1": {
+      "Users": "A file flagged as infected can no longer be downloaded from the Virus Found page; a false positive has to be released by an administrator.",
+      "Reversible": "Yes."
+    },
+    "SPO-5.2": {
+      "Summary": "Every external file share creates an Entra guest account, so guest invitation settings and Conditional Access apply.",
+      "Watchouts": "Entra external collaboration settings now decide who can share files with outsiders; check who may invite guests before turning it on.",
+      "Reversible": "Yes; shares made while it was on keep their guest accounts."
+    },
+    "SPO-5.5": {
+      "Watchouts": "Agree the partner domain list with the teams that share content first: sharing with any other domain stops until it is added."
+    },
+    "SPO-5.6": {
+      "Watchouts": "Users outside the named security groups can no longer share externally; populate the group with the people who share today before turning it on."
+    },
+    "SPO-5.7": {
+      "Summary": "New sharing links default to view only.",
+      "Users": "A user who wants a recipient to edit chooses Edit in the sharing dialog; existing links are unchanged.",
       "Reversible": "Yes."
     }
   }

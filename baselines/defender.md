@@ -761,4 +761,128 @@ Defender portal > Policies & rules > Threat policies > Tenant Allow/Block Lists.
 
 ---
 
+### DEF-6.1 — Administrators Notified When Internal Users Send Malware
+
+**Severity:** Low  |  **Category:** Email  |  **Automated:** Yes
+
+**License required:** Included (EOP)
+
+**Description:**
+Every anti-malware policy in force has EnableInternalSenderAdminNotifications = True and an InternalSenderAdminAddress, so an administrator is notified when an internal user sends a message that contains malware.
+
+**Business risk:**
+An internal user sending malware usually means a compromised account or device. Without the notification nobody is told, and the malware keeps spreading inside the organization and to its partners until someone reports it.
+
+**Remediation:**
+Microsoft Defender portal > Email & collaboration > Policies & rules > Threat policies > Anti-malware > open each policy in force > Edit protection settings: turn on 'Notify an admin about undelivered messages from internal senders' and enter the administrator's address. Or: Set-MalwareFilterPolicy -Identity <policy> -EnableInternalSenderAdminNotifications $true -InternalSenderAdminAddress <address>.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | SI-4, IR-6 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.3 |
+| CIS Controls v8.1 | 13.1 |
+| CMMC 2.0 | SI.L2-3.14.6 |
+| ISO/IEC 27001:2022 | A.8.16 |
+| SOC 2 | CC7.2 |
+| HIPAA | §164.308(a)(6)(ii) |
+| PCI DSS v4.0 | Req 12.10.5 |
+| MITRE ATT&CK | T1534 |
+
+---
+
+### DEF-6.2 — Outbound Spam Policies Notify Administrators
+
+**Severity:** Low  |  **Category:** Email  |  **Automated:** Yes
+
+**License required:** Included (EOP)
+
+**Description:**
+Every outbound spam policy in force copies messages from a sender over the sending limits to an administrator (BccSuspiciousOutboundMail = True with BccSuspiciousOutboundAdditionalRecipients set) and notifies administrators when a sender is blocked for outbound spam (NotifyOutboundSpam = True with NotifyOutboundSpamRecipients set).
+
+**Business risk:**
+A user blocked for sending spam is a strong sign the account has been taken over and is being used to send phishing or spam. Without the copy and the notification, the compromise is discovered from a partner's complaint or a blocklisted domain instead of the same day.
+
+**Remediation:**
+Microsoft Defender portal > Email & collaboration > Policies & rules > Threat policies > Anti-spam > Anti-spam outbound policy (Default) > Edit protection settings > Notifications: select 'Send a copy of suspicious outbound messages that exceed these limits to these users and groups' and 'Notify these users and groups if a sender is blocked due to sending outbound spam', each with an administrator address. Or: Set-HostedOutboundSpamFilterPolicy -Identity Default -BccSuspiciousOutboundMail $true -BccSuspiciousOutboundAdditionalRecipients <address> -NotifyOutboundSpam $true -NotifyOutboundSpamRecipients <address>. Microsoft also recommends keeping the default alert policy 'User restricted from sending email' on.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | SI-4, IR-6 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.6 |
+| CIS Controls v8.1 | 13.1 |
+| CMMC 2.0 | SI.L2-3.14.6 |
+| ISO/IEC 27001:2022 | A.8.16 |
+| SOC 2 | CC7.2 |
+| HIPAA | §164.308(a)(6)(ii) |
+| PCI DSS v4.0 | Req 12.10.5 |
+| MITRE ATT&CK | T1078.004 |
+
+---
+
+### DEF-6.3 — Comprehensive Attachment Filtering Applied
+
+**Severity:** Medium  |  **Category:** Email  |  **Automated:** Yes
+
+**License required:** Included (EOP)
+
+**Description:**
+Every anti-malware policy in force has the common attachments filter on (EnableFileFilter = True) and blocks all 186 file types CIS Microsoft 365 Foundations Benchmark v7.0.0 recommendation 2.1.11 lists (Config/cis-m365-comprehensive-attachment-types.json), a superset of Microsoft's 53-type default.
+
+**Business risk:**
+Legacy Office formats, scripts, archives, disk images and installer packages are common ways to deliver malware past content scanning. Blocking them by type stops a new or obfuscated sample that signature scanning does not yet recognize.
+
+**Remediation:**
+Create an anti-malware policy with EnableFileFilter $true and the 186 CIS 2.1.11 file types in FileTypes (New-MalwareFilterPolicy -Name <name> -EnableFileFilter $true -FileTypes <list>), and apply it with a malware filter rule that covers every accepted domain (New-MalwareFilterRule -Name <name> -MalwareFilterPolicy <name> -RecipientDomainIs <domains>). Or add the missing types to each policy in force with Set-MalwareFilterPolicy -FileTypes. Agree beforehand which listed types the business needs to exchange by email and how they will be sent instead.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | SI-3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.11 |
+| CIS Controls v8.1 | 9.6 |
+| CMMC 2.0 | SI.L1-3.14.2 |
+| ISO/IEC 27001:2022 | A.8.7 |
+| SOC 2 | CC6.8 |
+| HIPAA | §164.308(a)(5)(ii)(B) |
+| PCI DSS v4.0 | Req 5.2 |
+| MITRE ATT&CK | T1566.001, T1204.002 |
+
+---
+
+### DEF-6.4 — Zero-Hour Auto Purge for Microsoft Teams Enabled
+
+**Severity:** Medium  |  **Category:** Email  |  **Automated:** Yes
+
+**License required:** Defender for Office 365 Plan 1 (M365 Business Premium)
+
+**Description:**
+Zero-hour auto purge is on for Microsoft Teams (the Teams protection policy has ZapEnabled = True), so a Teams chat message later identified as malware or high confidence phishing is removed from the chat. Exceptions on the Teams protection policy rule are reported for review.
+
+**Business risk:**
+Teams chats are a delivery channel for phishing links and malicious files. Without zero-hour auto purge a message identified as malicious after it was delivered stays in the chat for everyone in it.
+
+**Remediation:**
+Microsoft Defender portal > Settings > Email & collaboration > Microsoft Teams protection: set Zero-hour auto purge (ZAP) to On. Or: Set-TeamsProtectionPolicy -Identity 'Teams Protection Policy' -ZapEnabled $true. Review the exclusions under 'Exclude these participants'. Requires Defender for Office 365 Plan 1 or Plan 2.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | SI-3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.4.4 |
+| CIS Controls v8.1 | 9.7, 10.1 |
+| CMMC 2.0 | SI.L1-3.14.2 |
+| ISO/IEC 27001:2022 | A.8.7 |
+| SOC 2 | CC6.8 |
+| HIPAA | §164.308(a)(5)(ii)(B) |
+| PCI DSS v4.0 | Req 5.4.2 |
+| MITRE ATT&CK | T1566 |
+
+---
+
 *Generated from `Config/controls.json` · NRG Technology Services / NextLayerSec LLC*
