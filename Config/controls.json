@@ -6233,6 +6233,248 @@
       }
     },
     {
+      "ControlId": "AAD-16.1",
+      "Title": "Users Cannot Create Security Groups",
+      "Description": "Ordinary users cannot create security groups in the Microsoft Entra admin centers, the API or PowerShell (authorization policy defaultUserRolePermissions.allowedToCreateSecurityGroups = False). A tenant that does not return the setting is not assessed.",
+      "BusinessRisk": "A user who creates a security group owns it. A compromised account can create groups with names such as Accounting or Break-glass that an administrator later grants access to, adds to a role or excludes from Conditional Access by mistake.",
+      "Severity": "Medium",
+      "Workload": "AAD",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraSecurityGroupCreation",
+      "Remediation": "Entra ID > Groups > General > Users can create security groups in Azure portals, API or PowerShell = No (or Entra ID > Users > User settings > Users can create security groups = No).",
+      "References": {
+        "CISControls": [
+          "6.8"
+        ],
+        "CIS": "5.1.3.1",
+        "SCuBA": "",
+        "NIST": "AC-2, AC-6",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1098"
+        ],
+        "ISO27001": "A.5.18",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.1"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.2",
+      "Title": "Users Cannot Create Microsoft 365 Groups",
+      "Description": "Non-admin users cannot create Microsoft 365 groups in Azure portals, the API or PowerShell: the Group.Unified directory setting exists with EnableGroupCreation = False. Without a Group.Unified object Microsoft's template default (True) applies, which is a Gap. Members of the GroupCreationAllowedGroupId group may still create groups, as Microsoft documents.",
+      "BusinessRisk": "Every Microsoft 365 group a user creates brings a mailbox, a SharePoint site and often a team that the creator owns and can open to guests, so data spreads into containers nobody governs.",
+      "Severity": "Low",
+      "Workload": "AAD",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraM365GroupCreation",
+      "Remediation": "Entra ID > Groups > General > Users can create Microsoft 365 groups in Azure portals, API or PowerShell = No. To let a named team keep creating groups, set GroupCreationAllowedGroupId on the Group.Unified setting to their security group.",
+      "References": {
+        "CISControls": [
+          "6.8"
+        ],
+        "CIS": "5.1.3.4",
+        "SCuBA": "",
+        "NIST": "AC-2, AC-6",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1098"
+        ],
+        "ISO27001": "A.5.18",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.1"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.3",
+      "Title": "Joining Devices to Microsoft Entra Restricted",
+      "Description": "Users may join devices to Microsoft Entra is set to Selected or None (device registration policy azureADJoin.allowedToJoin is an enumerated or no-membership type, not all users). Microsoft applies the setting to user-driven Microsoft Entra join on Windows 10 or later, not to hybrid join, Azure VMs or Autopilot self-deploying mode.",
+      "BusinessRisk": "Microsoft Incident Response has seen attackers join their own devices with a compromised standard account; the device can inherit management policies, look compliant and give the attacker persistent access without another MFA prompt.",
+      "Severity": "Medium",
+      "Workload": "AAD",
+      "Category": "Endpoint",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraDeviceJoinRestricted",
+      "Remediation": "Entra ID > Devices > Device settings > Users may join devices to Microsoft Entra = Selected (add the provisioning staff or group) or None.",
+      "References": {
+        "CISControls": [
+          "1.2"
+        ],
+        "CIS": "5.1.4.1",
+        "SCuBA": "",
+        "NIST": "IA-3, AC-3",
+        "CMMC": "IA.L1-3.5.2",
+        "MITRE": [
+          "T1098.005"
+        ],
+        "ISO27001": "A.8.1",
+        "HIPAA": "§164.312(a)(1)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 12.5.1"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.4",
+      "Title": "Maximum Devices per User Limited",
+      "Description": "The maximum number of Microsoft Entra joined or registered devices a user can have (device registration policy userDeviceQuota) is 10 or less. Microsoft's default is 50.",
+      "BusinessRisk": "A high quota lets one compromised account register many devices that look legitimate, and lets unmanaged devices accumulate unnoticed.",
+      "Severity": "Low",
+      "Workload": "AAD",
+      "Category": "Endpoint",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraDeviceQuota",
+      "Remediation": "Entra ID > Devices > Device settings > Maximum number of devices per user = 10 or less. Staff who enroll devices on the organization's behalf use a Device Enrollment Manager account in Intune instead.",
+      "References": {
+        "CISControls": [
+          "1.2"
+        ],
+        "CIS": "5.1.4.2",
+        "SCuBA": "",
+        "NIST": "CM-8, IA-3",
+        "CMMC": "CM.L2-3.4.1",
+        "MITRE": [
+          "T1098.005"
+        ],
+        "ISO27001": "A.5.9",
+        "HIPAA": "§164.310(d)(1)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 12.5.1"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.5",
+      "Title": "Global Administrators Not Local Admins on Joined Devices",
+      "Description": "Global administrator role is added as local administrator on the device during Microsoft Entra join is No (device registration policy azureADJoin.localAdmins.enableGlobalAdmins = False). Microsoft applies the setting to future registrations only.",
+      "BusinessRisk": "When Global Administrators are local administrators everywhere, using one to work on an endpoint is easy, and signing in to a compromised endpoint with the tenant's most privileged account exposes it to credential theft.",
+      "Severity": "Medium",
+      "Workload": "AAD",
+      "Category": "Endpoint",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraJoinGlobalAdminLocalAdmin",
+      "Remediation": "Entra ID > Devices > Device settings > Global administrator role is added as local administrator on the device during Microsoft Entra join = No; use the Microsoft Entra Joined Device Local Administrator role for device administration.",
+      "References": {
+        "CISControls": [
+          "5.4"
+        ],
+        "CIS": "5.1.4.3",
+        "SCuBA": "",
+        "NIST": "AC-6, AC-6(5)",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1078.004",
+          "T1003"
+        ],
+        "ISO27001": "A.8.2",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.2"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.6",
+      "Title": "Registering Users Not Local Admins on Joined Devices",
+      "Description": "Registering user is added as local administrator on the device during Microsoft Entra join is Selected or None (device registration policy azureADJoin.localAdmins.registeringUsers is an enumerated or no-membership type, not all users).",
+      "BusinessRisk": "By default everyone who joins a device becomes its local administrator, so ordinary users run with administrative rights and malware they launch can disable protections and persist.",
+      "Severity": "High",
+      "Workload": "AAD",
+      "Category": "Endpoint",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraJoinRegisteringUserLocalAdmin",
+      "Remediation": "Entra ID > Devices > Device settings > Registering user is added as local administrator on the device during Microsoft Entra join = Selected (add the provisioning staff) or None; manage local administrators through Intune or the Microsoft Entra Joined Device Local Administrator role.",
+      "References": {
+        "CISControls": [
+          "5.4"
+        ],
+        "CIS": "5.1.4.4",
+        "SCuBA": "",
+        "NIST": "AC-6, AC-6(5)",
+        "CMMC": "AC.L2-3.1.6",
+        "MITRE": [
+          "T1078.003"
+        ],
+        "ISO27001": "A.8.2",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2.2"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.7",
+      "Title": "Microsoft Entra LAPS Enabled",
+      "Description": "Enable Microsoft Entra Local Administrator Password Solution (LAPS) is Yes (device registration policy localAdminPassword.isEnabled = True). The tenant switch is a prerequisite and rotates nothing by itself: the Intune LAPS policy that does is judged by INT-4.1.",
+      "BusinessRisk": "Without LAPS in Microsoft Entra ID, devices cannot back up a unique, rotated local administrator password, and organizations fall back to the same password on every machine, so one compromised device opens all of them.",
+      "Severity": "Medium",
+      "Workload": "AAD",
+      "Category": "Endpoint",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraLapsEnabled",
+      "Remediation": "Entra ID > Devices > Device settings > Enable Microsoft Entra Local Administrator Password Solution (LAPS) = Yes, then deploy an Intune Windows LAPS policy that backs the password up to Microsoft Entra ID (INT-4.1).",
+      "References": {
+        "CISControls": [
+          "5.2"
+        ],
+        "CIS": "5.1.4.5",
+        "SCuBA": "",
+        "NIST": "AC-2, IA-5",
+        "CMMC": "IA.L1-3.5.2",
+        "MITRE": [
+          "T1078.003",
+          "T1021.002"
+        ],
+        "ISO27001": "A.5.17",
+        "HIPAA": "§164.308(a)(5)(ii)(D)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 2.2.2"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "AAD-16.8",
+      "Title": "Users Cannot Recover BitLocker Keys of Their Devices",
+      "Description": "Restrict non-admin users from recovering the BitLocker key(s) for their owned devices is Yes (authorization policy defaultUserRolePermissions.allowedToReadBitlockerKeysForOwnedDevice = False). A tenant that does not return the setting is not assessed.",
+      "BusinessRisk": "A device owner can otherwise read the recovery key from My Account, so an attacker with a user's credentials and the device can retrieve the key and decrypt the drive.",
+      "Severity": "Low",
+      "Workload": "AAD",
+      "Category": "Endpoint",
+      "Automated": true,
+      "CollectorDependency": "AAD-DirectorySettings",
+      "EvaluatorFunction": "Test-TPControlEntraBitLockerKeyRecovery",
+      "Remediation": "Entra ID > Devices > Device settings > Restrict non-admin users from recovering the BitLocker key(s) for their owned devices = Yes. Recovery then goes through a Cloud Device Administrator, Helpdesk Administrator, Intune Administrator, Security Administrator or Security Reader.",
+      "References": {
+        "CISControls": [
+          "3.11"
+        ],
+        "CIS": "5.1.4.6",
+        "SCuBA": "",
+        "NIST": "AC-6, SC-12",
+        "CMMC": "SC.L2-3.13.10",
+        "MITRE": [
+          "T1552"
+        ],
+        "ISO27001": "A.8.24",
+        "HIPAA": "§164.312(a)(2)(iv)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 3.6.1"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
       "ControlId": "DEF-5.1",
       "Title": "Tenant Allow/Block List Entries Time-Boxed",
       "Description": "No domain, address, URL or file allow entry in the Tenant Allow/Block List is permanent; every such filtering override carries an expiry (a date, or 45 days after last use). Spoofed-sender allow entries never expire by design and are reviewed for a sending service still in use, not time-boxed.",

@@ -430,7 +430,15 @@
     "AAD-7.3": "auth-prompt",
     "AAD-7.4": "auth-prompt",
     "AAD-7.5": "none-visible",
-    "AAD-6.4": "app-consent-friction"
+    "AAD-6.4": "app-consent-friction",
+    "AAD-16.1": "app-consent-friction",
+    "AAD-16.2": "app-consent-friction",
+    "AAD-16.3": "device-gate",
+    "AAD-16.4": "device-gate",
+    "AAD-16.5": "admin-elevation-friction",
+    "AAD-16.6": "admin-elevation-friction",
+    "AAD-16.7": "none-visible",
+    "AAD-16.8": "admin-review-workload"
   },
   "deviceControls": {
     "DEV-1.1": "device-encryption",
@@ -555,6 +563,53 @@
     "AAD-6.4": {
       "Summary": "People who build agents need the Agent ID Developer role to create agent blueprints; nobody else is prompted.",
       "Watchouts": "Check first who has already created blueprints (Entra ID > Agents > Agent blueprints) and give those builders the role before switching it off.",
+      "Reversible": "Yes."
+    },
+    "AAD-16.1": {
+      "Summary": "Users can no longer create security groups themselves; group requests come to an administrator or an approval workflow.",
+      "Watchouts": "Find the teams that create security groups today (for app access or SharePoint permissions) and give them a request path or a delegated groups role before switching it off. Existing groups are not affected.",
+      "Reversible": "Yes."
+    },
+    "AAD-16.2": {
+      "Summary": "Users can no longer create Microsoft 365 groups, and with them new Teams teams, SharePoint team sites and Planner plans; requests come to an administrator.",
+      "Users": "Creating a team in Teams or a group site in SharePoint shows that the user is not allowed.",
+      "Watchouts": "Teams creation is the visible casualty. Name the people who may still create groups in GroupCreationAllowedGroupId before turning it off, and publish how everyone else asks for a team.",
+      "Reversible": "Yes."
+    },
+    "AAD-16.3": {
+      "Summary": "Only the selected users or groups can join Windows devices to Microsoft Entra; everyone else is refused at join.",
+      "Users": "Users outside the selected set who join a new Windows device themselves (out-of-box setup, user-driven Autopilot) are refused.",
+      "Watchouts": "User-driven Autopilot is the usual casualty: either include the users who set up their own devices or move provisioning to Autopilot self-deploying mode, which this setting does not cover. Hybrid joined devices are not affected.",
+      "Reversible": "Yes, immediately."
+    },
+    "AAD-16.4": {
+      "Summary": "A user who already has the maximum number of joined or registered devices cannot add another until one is removed.",
+      "Users": "Someone with many old device records is refused when registering a new phone or laptop.",
+      "Admins": "Clean up stale device records first, and give staff who enroll devices for others a Device Enrollment Manager account in Intune.",
+      "Watchouts": "Count devices per user before lowering the quota; heavy device users and shared provisioning accounts hit it first.",
+      "Reversible": "Yes, immediately."
+    },
+    "AAD-16.5": {
+      "Summary": "Global Administrators are no longer local administrators on newly joined devices; device administration uses the Microsoft Entra Joined Device Local Administrator role instead.",
+      "Users": "Nothing.",
+      "Watchouts": "Applies to devices joined after the change only. Assign the Microsoft Entra Joined Device Local Administrator role to the device support staff before switching it off.",
+      "Reversible": "Yes, for future registrations."
+    },
+    "AAD-16.6": {
+      "Summary": "People who join a device are no longer made its local administrator; local administrator rights are granted centrally.",
+      "Users": "Users who join a new device cannot install software or change system settings that need administrator rights on it.",
+      "Watchouts": "Applies to devices joined after the change only; existing devices keep their local administrators until Intune manages the group. Plan how software gets installed (Intune, Company Portal) before users lose the rights.",
+      "Reversible": "Yes, for future registrations."
+    },
+    "AAD-16.7": {
+      "Summary": "Lets devices back up their local administrator password to Microsoft Entra ID; nothing rotates until an Intune LAPS policy is assigned (INT-4.1).",
+      "Watchouts": "The tenant switch alone changes no device. Deploy and verify the Intune Windows LAPS policy, and decide who may read the passwords, before relying on it.",
+      "Reversible": "Yes."
+    },
+    "AAD-16.8": {
+      "Summary": "Users can no longer read their own BitLocker recovery keys; recovery goes through the help desk.",
+      "Users": "A user locked out at the BitLocker recovery screen has to call support instead of reading the key from My Account.",
+      "Admins": "Help desk staff need a role that can read recovery keys (Cloud Device Administrator, Helpdesk Administrator, Intune Administrator, Security Administrator or Security Reader) and a process for verifying the caller.",
       "Reversible": "Yes."
     }
   }

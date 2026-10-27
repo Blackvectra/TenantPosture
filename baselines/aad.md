@@ -1617,6 +1617,254 @@ Entra ID > Enterprise applications > All applications > Permissions. For each ap
 
 ---
 
+### AAD-16.1 — Users Cannot Create Security Groups
+
+**Severity:** Medium  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Ordinary users cannot create security groups in the Microsoft Entra admin centers, the API or PowerShell (authorization policy defaultUserRolePermissions.allowedToCreateSecurityGroups = False). A tenant that does not return the setting is not assessed.
+
+**Business risk:**
+A user who creates a security group owns it. A compromised account can create groups with names such as Accounting or Break-glass that an administrator later grants access to, adds to a role or excludes from Conditional Access by mistake.
+
+**Remediation:**
+Entra ID > Groups > General > Users can create security groups in Azure portals, API or PowerShell = No (or Entra ID > Users > User settings > Users can create security groups = No).
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-2, AC-6 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.3.1 |
+| CIS Controls v8.1 | 6.8 |
+| CMMC 2.0 | AC.L2-3.1.5 |
+| ISO/IEC 27001:2022 | A.5.18 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.308(a)(4)(ii)(B) |
+| PCI DSS | Req 7.2.1 |
+| MITRE ATT&CK | T1098 |
+
+---
+
+### AAD-16.2 — Users Cannot Create Microsoft 365 Groups
+
+**Severity:** Low  |  **Category:** Identity  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Non-admin users cannot create Microsoft 365 groups in Azure portals, the API or PowerShell: the Group.Unified directory setting exists with EnableGroupCreation = False. Without a Group.Unified object Microsoft's template default (True) applies, which is a Gap. Members of the GroupCreationAllowedGroupId group may still create groups, as Microsoft documents.
+
+**Business risk:**
+Every Microsoft 365 group a user creates brings a mailbox, a SharePoint site and often a team that the creator owns and can open to guests, so data spreads into containers nobody governs.
+
+**Remediation:**
+Entra ID > Groups > General > Users can create Microsoft 365 groups in Azure portals, API or PowerShell = No. To let a named team keep creating groups, set GroupCreationAllowedGroupId on the Group.Unified setting to their security group.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-2, AC-6 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.3.4 |
+| CIS Controls v8.1 | 6.8 |
+| CMMC 2.0 | AC.L2-3.1.5 |
+| ISO/IEC 27001:2022 | A.5.18 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.308(a)(4)(ii)(B) |
+| PCI DSS | Req 7.2.1 |
+| MITRE ATT&CK | T1098 |
+
+---
+
+### AAD-16.3 — Joining Devices to Microsoft Entra Restricted
+
+**Severity:** Medium  |  **Category:** Endpoint  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Users may join devices to Microsoft Entra is set to Selected or None (device registration policy azureADJoin.allowedToJoin is an enumerated or no-membership type, not all users). Microsoft applies the setting to user-driven Microsoft Entra join on Windows 10 or later, not to hybrid join, Azure VMs or Autopilot self-deploying mode.
+
+**Business risk:**
+Microsoft Incident Response has seen attackers join their own devices with a compromised standard account; the device can inherit management policies, look compliant and give the attacker persistent access without another MFA prompt.
+
+**Remediation:**
+Entra ID > Devices > Device settings > Users may join devices to Microsoft Entra = Selected (add the provisioning staff or group) or None.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IA-3, AC-3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.4.1 |
+| CIS Controls v8.1 | 1.2 |
+| CMMC 2.0 | IA.L1-3.5.2 |
+| ISO/IEC 27001:2022 | A.8.1 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(a)(1) |
+| PCI DSS | Req 12.5.1 |
+| MITRE ATT&CK | T1098.005 |
+
+---
+
+### AAD-16.4 — Maximum Devices per User Limited
+
+**Severity:** Low  |  **Category:** Endpoint  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+The maximum number of Microsoft Entra joined or registered devices a user can have (device registration policy userDeviceQuota) is 10 or less. Microsoft's default is 50.
+
+**Business risk:**
+A high quota lets one compromised account register many devices that look legitimate, and lets unmanaged devices accumulate unnoticed.
+
+**Remediation:**
+Entra ID > Devices > Device settings > Maximum number of devices per user = 10 or less. Staff who enroll devices on the organization's behalf use a Device Enrollment Manager account in Intune instead.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | CM-8, IA-3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.4.2 |
+| CIS Controls v8.1 | 1.2 |
+| CMMC 2.0 | CM.L2-3.4.1 |
+| ISO/IEC 27001:2022 | A.5.9 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.310(d)(1) |
+| PCI DSS | Req 12.5.1 |
+| MITRE ATT&CK | T1098.005 |
+
+---
+
+### AAD-16.5 — Global Administrators Not Local Admins on Joined Devices
+
+**Severity:** Medium  |  **Category:** Endpoint  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Global administrator role is added as local administrator on the device during Microsoft Entra join is No (device registration policy azureADJoin.localAdmins.enableGlobalAdmins = False). Microsoft applies the setting to future registrations only.
+
+**Business risk:**
+When Global Administrators are local administrators everywhere, using one to work on an endpoint is easy, and signing in to a compromised endpoint with the tenant's most privileged account exposes it to credential theft.
+
+**Remediation:**
+Entra ID > Devices > Device settings > Global administrator role is added as local administrator on the device during Microsoft Entra join = No; use the Microsoft Entra Joined Device Local Administrator role for device administration.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-6, AC-6(5) |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.4.3 |
+| CIS Controls v8.1 | 5.4 |
+| CMMC 2.0 | AC.L2-3.1.5 |
+| ISO/IEC 27001:2022 | A.8.2 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.308(a)(4)(ii)(B) |
+| PCI DSS | Req 7.2.2 |
+| MITRE ATT&CK | T1078.004, T1003 |
+
+---
+
+### AAD-16.6 — Registering Users Not Local Admins on Joined Devices
+
+**Severity:** High  |  **Category:** Endpoint  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Registering user is added as local administrator on the device during Microsoft Entra join is Selected or None (device registration policy azureADJoin.localAdmins.registeringUsers is an enumerated or no-membership type, not all users).
+
+**Business risk:**
+By default everyone who joins a device becomes its local administrator, so ordinary users run with administrative rights and malware they launch can disable protections and persist.
+
+**Remediation:**
+Entra ID > Devices > Device settings > Registering user is added as local administrator on the device during Microsoft Entra join = Selected (add the provisioning staff) or None; manage local administrators through Intune or the Microsoft Entra Joined Device Local Administrator role.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-6, AC-6(5) |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.4.4 |
+| CIS Controls v8.1 | 5.4 |
+| CMMC 2.0 | AC.L2-3.1.6 |
+| ISO/IEC 27001:2022 | A.8.2 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.308(a)(4)(ii)(B) |
+| PCI DSS | Req 7.2.2 |
+| MITRE ATT&CK | T1078.003 |
+
+---
+
+### AAD-16.7 — Microsoft Entra LAPS Enabled
+
+**Severity:** Medium  |  **Category:** Endpoint  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Enable Microsoft Entra Local Administrator Password Solution (LAPS) is Yes (device registration policy localAdminPassword.isEnabled = True). The tenant switch is a prerequisite and rotates nothing by itself: the Intune LAPS policy that does is judged by INT-4.1.
+
+**Business risk:**
+Without LAPS in Microsoft Entra ID, devices cannot back up a unique, rotated local administrator password, and organizations fall back to the same password on every machine, so one compromised device opens all of them.
+
+**Remediation:**
+Entra ID > Devices > Device settings > Enable Microsoft Entra Local Administrator Password Solution (LAPS) = Yes, then deploy an Intune Windows LAPS policy that backs the password up to Microsoft Entra ID (INT-4.1).
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-2, IA-5 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.4.5 |
+| CIS Controls v8.1 | 5.2 |
+| CMMC 2.0 | IA.L1-3.5.2 |
+| ISO/IEC 27001:2022 | A.5.17 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.308(a)(5)(ii)(D) |
+| PCI DSS | Req 2.2.2 |
+| MITRE ATT&CK | T1078.003, T1021.002 |
+
+---
+
+### AAD-16.8 — Users Cannot Recover BitLocker Keys of Their Devices
+
+**Severity:** Low  |  **Category:** Endpoint  |  **Automated:** Yes
+
+**License required:** Included (all plans)
+
+**Description:**
+Restrict non-admin users from recovering the BitLocker key(s) for their owned devices is Yes (authorization policy defaultUserRolePermissions.allowedToReadBitlockerKeysForOwnedDevice = False). A tenant that does not return the setting is not assessed.
+
+**Business risk:**
+A device owner can otherwise read the recovery key from My Account, so an attacker with a user's credentials and the device can retrieve the key and decrypt the drive.
+
+**Remediation:**
+Entra ID > Devices > Device settings > Restrict non-admin users from recovering the BitLocker key(s) for their owned devices = Yes. Recovery then goes through a Cloud Device Administrator, Helpdesk Administrator, Intune Administrator, Security Administrator or Security Reader.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-6, SC-12 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.4.6 |
+| CIS Controls v8.1 | 3.11 |
+| CMMC 2.0 | SC.L2-3.13.10 |
+| ISO/IEC 27001:2022 | A.8.24 |
+| SOC 2 | CC6.1 |
+| HIPAA | §164.312(a)(2)(iv) |
+| PCI DSS | Req 3.6.1 |
+| MITRE ATT&CK | T1552 |
+
+---
+
 ### AAD-14.1 — Application Credentials Current and Short-Lived
 
 **Severity:** High  |  **Category:** Identity  |  **Automated:** Yes

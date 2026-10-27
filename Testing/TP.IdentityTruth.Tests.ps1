@@ -2270,4 +2270,106 @@ Describe 'Benchmark gap fixes (AAD)' {
             $g.State | Should -Be 'Gap'; $g.Detail | Should -Match '36 to 90 days may exist'
         }
     }
+
+    Context 'AAD-16.x group creation and device registration (real collector, Microsoft''s documented shapes)' {
+        BeforeAll {
+            # Microsoft's documented response shapes: the authorization policy and the
+            # deviceRegistrationPolicy example (Graph v1.0 reference pages, defaults),
+            # and the groupSettings list. A $null route answers as a refused read.
+            $script:AuthDefault = '{"id":"authorizationPolicy","defaultUserRolePermissions":{"allowedToCreateApps":true,"allowedToCreateSecurityGroups":true,"allowedToCreateTenants":true,"allowedToReadBitlockerKeysForOwnedDevice":true,"allowedToReadOtherUsers":true}}'
+            $script:AuthHard    = '{"id":"authorizationPolicy","defaultUserRolePermissions":{"allowedToCreateApps":false,"allowedToCreateSecurityGroups":false,"allowedToReadBitlockerKeysForOwnedDevice":false}}'
+            $script:DrpDefault  = '{"id":"deviceRegistrationPolicy","userDeviceQuota":2,"multiFactorAuthConfiguration":"notRequired","azureADRegistration":{"isAdminConfigurable":false,"allowedToRegister":{"@odata.type":"#microsoft.graph.noDeviceRegistrationMembership"}},"azureADJoin":{"isAdminConfigurable":true,"allowedToJoin":{"@odata.type":"#microsoft.graph.allDeviceRegistrationMembership"},"localAdmins":{"enableGlobalAdmins":true,"registeringUsers":{"@odata.type":"#microsoft.graph.enumeratedDeviceRegistrationMembership","users":["3c8ef067-8b96-44de-b2ae-557dfa0f97a0"],"groups":[]}}},"localAdminPassword":{"isEnabled":false}}'
+            $script:DrpHard     = '{"id":"deviceRegistrationPolicy","userDeviceQuota":10,"azureADJoin":{"isAdminConfigurable":true,"allowedToJoin":{"@odata.type":"#microsoft.graph.enumeratedDeviceRegistrationMembership","users":[],"groups":["0f1e2d3c-0000-0000-0000-000000000001"]},"localAdmins":{"enableGlobalAdmins":false,"registeringUsers":{"@odata.type":"#microsoft.graph.noDeviceRegistrationMembership"}}},"localAdminPassword":{"isEnabled":true}}'
+            function script:GroupSettings($Enable, [string] $AllowedGroup = '') {
+                $vals = @(@{ name = 'UsageGuidelinesUrl'; value = '' }, @{ name = 'GroupCreationAllowedGroupId'; value = $AllowedGroup })
+                if ($null -ne $Enable) { $vals += @{ name = 'EnableGroupCreation'; value = $Enable } }
+                @{ value = @(
+                    @{ id = 'a'; displayName = 'Password Rule Settings'; templateId = '5cf42378-d67d-4f36-ba46-e8b86229381d'; values = @(@{ name = 'LockoutThreshold'; value = '10' }) },
+                    @{ id = 'b'; displayName = 'Group.Unified'; templateId = '62375ab9-6b52-47ed-826b-58e47e0e304b'; values = $vals }) } | ConvertTo-Json -Depth 6
+            }
+            function script:Run-Dir($Auth, $Groups, $Drp) {
+                Clear-TPState
+                $script:T_Dir = @{ Auth = $Auth; Groups = $Groups; Drp = $Drp }
+                Set-Graph {
+                    param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                    $k = if ($Uri -match '/v1\.0/policies/authorizationPolicy$') { 'Auth' } elseif ($Uri -match '/v1\.0/groupSettings$') { 'Groups' } elseif ($Uri -match '/v1\.0/policies/deviceRegistrationPolicy$') { 'Drp' } else { throw "no route: $Uri" }
+                    $j = $script:T_Dir[$k]
+                    if ($null -eq $j) { throw 'Graph 403 Forbidden: Authorization_RequestDenied' }
+                    return ($j | ConvertFrom-Json -AsHashtable)
+                }
+                Invoke-TPCollectAADDirectorySettings 3>$null | Out-Null
+            }
+            $script:Fns = [ordered]@{
+                'AAD-16.1' = 'Test-TPControlEntraSecurityGroupCreation'; 'AAD-16.2' = 'Test-TPControlEntraM365GroupCreation'
+                'AAD-16.3' = 'Test-TPControlEntraDeviceJoinRestricted';  'AAD-16.4' = 'Test-TPControlEntraDeviceQuota'
+                'AAD-16.5' = 'Test-TPControlEntraJoinGlobalAdminLocalAdmin'; 'AAD-16.6' = 'Test-TPControlEntraJoinRegisteringUserLocalAdmin'
+                'AAD-16.7' = 'Test-TPControlEntraLapsEnabled';           'AAD-16.8' = 'Test-TPControlEntraBitLockerKeyRecovery' }
+            function script:States {
+                $o = [ordered]@{}
+                foreach ($k in $script:Fns.Keys) { $o[$k] = (V $script:Fns[$k] $k).State }
+                $o
+            }
+        }
+        It 'Microsoft''s documented defaults: every restriction is a Gap except the documented quota of 2 and the example''s selected local admins' {
+            Run-Dir $script:AuthDefault '{"value":[]}' $script:DrpDefault
+            $s = States
+            $s['AAD-16.1'] | Should -Be 'Gap'
+            $s['AAD-16.2'] | Should -Be 'Gap' -Because 'no Group.Unified object means Microsoft''s template default, EnableGroupCreation True'
+            $s['AAD-16.3'] | Should -Be 'Gap'
+            $s['AAD-16.4'] | Should -Be 'Satisfied'
+            $s['AAD-16.5'] | Should -Be 'Gap'
+            $s['AAD-16.6'] | Should -Be 'Satisfied' -Because 'the example selects one user (enumerated membership)'
+            $s['AAD-16.7'] | Should -Be 'Gap'
+            $s['AAD-16.8'] | Should -Be 'Gap'
+            (V 'Test-TPControlEntraM365GroupCreation' 'AAD-16.2').Detail | Should -Match 'no Group\.Unified directory setting'
+            (Get-TPRawData -Key 'AAD-DirectorySettings').Data.SectionStatus.Values | Should -Not -Contain 'Failed'
+        }
+        It 'every restriction in place is Satisfied, the allowed group is named, and the LAPS pass points at INT-4.1' {
+            Run-Dir $script:AuthHard (GroupSettings 'False' '11111111-2222-3333-4444-555555555555') $script:DrpHard
+            $s = States
+            @($s.Values | Where-Object { $_ -ne 'Satisfied' }).Count | Should -Be 0 -Because ($s | Out-String)
+            (V 'Test-TPControlEntraM365GroupCreation' 'AAD-16.2').Detail | Should -Match '11111111-2222-3333-4444-555555555555'
+            (V 'Test-TPControlEntraLapsEnabled' 'AAD-16.7').Detail | Should -Match 'INT-4\.1'
+            (V 'Test-TPControlEntraDeviceJoinRestricted' 'AAD-16.3').CurrentValue | Should -Match 'Selected \(0 user\(s\), 1 group\(s\)\)'
+        }
+        It 'the device quota passes at 10 and fails at 11; Group.Unified values are strings, parsed, never cast' {
+            Run-Dir $script:AuthHard (GroupSettings 'True') ($script:DrpHard -replace '"userDeviceQuota":10', '"userDeviceQuota":11')
+            (V 'Test-TPControlEntraDeviceQuota' 'AAD-16.4').State | Should -Be 'Gap'
+            (V 'Test-TPControlEntraM365GroupCreation' 'AAD-16.2').State | Should -Be 'Gap'
+            Run-Dir $script:AuthHard (GroupSettings 'maybe') $script:DrpHard
+            (V 'Test-TPControlEntraM365GroupCreation' 'AAD-16.2').State | Should -Be 'NotApplicable'
+            Run-Dir $script:AuthHard (GroupSettings $null) $script:DrpHard
+            (V 'Test-TPControlEntraM365GroupCreation' 'AAD-16.2').State | Should -Be 'NotApplicable' -Because 'a Group.Unified object without EnableGroupCreation is not read'
+        }
+        It 'a refused read leaves only its own controls not assessed, with the reason' {
+            Run-Dir $script:AuthHard (GroupSettings 'False') $null
+            $s = States
+            foreach ($k in 'AAD-16.3', 'AAD-16.4', 'AAD-16.5', 'AAD-16.6', 'AAD-16.7') { $s[$k] | Should -Be 'NotApplicable' }
+            foreach ($k in 'AAD-16.1', 'AAD-16.2', 'AAD-16.8') { $s[$k] | Should -Be 'Satisfied' }
+            $f = V 'Test-TPControlEntraLapsEnabled' 'AAD-16.7'
+            $f.Detail | Should -Match '^DeviceRegistrationPolicy was not collected; not assessed\. Reason recorded by the collector: .*403'
+            (@($f.FrameworkIds) -join ' ') | Should -Match 'NIST:AC-2'
+            Run-Dir $null $null $script:DrpHard
+            (V 'Test-TPControlEntraSecurityGroupCreation' 'AAD-16.1').State | Should -Be 'NotApplicable'
+            (V 'Test-TPControlEntraM365GroupCreation' 'AAD-16.2').State | Should -Be 'NotApplicable' -Because 'a failed groupSettings read is not the absence of Group.Unified'
+        }
+        It 'a property the tenant omits, or a membership type Microsoft does not document, is not assessed, never the default' {
+            Run-Dir '{"id":"authorizationPolicy"}' '{"value":[]}' '{"id":"deviceRegistrationPolicy","azureADJoin":{"allowedToJoin":{"@odata.type":"#microsoft.graph.somethingNew"}}}'
+            $s = States
+            foreach ($k in 'AAD-16.1', 'AAD-16.3', 'AAD-16.4', 'AAD-16.5', 'AAD-16.6', 'AAD-16.7', 'AAD-16.8') { $s[$k] | Should -Be 'NotApplicable' -Because $k }
+        }
+        It 'an older results file without the collector is not assessed; a replayed one is judged as live (the quota arrives as Int64)' {
+            Clear-TPState
+            Set-TPRawData -Key 'AAD-AuthPolicies' -Data (Bag @{})
+            foreach ($k in $script:Fns.Keys) { (V $script:Fns[$k] $k).Detail | Should -Match 'did not run' }
+            Run-Dir $script:AuthHard (GroupSettings 'False') ($script:DrpHard -replace '"userDeviceQuota":10', '"userDeviceQuota":12')
+            $replay = (Get-TPRawData -Key 'AAD-DirectorySettings') | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+            Clear-TPState
+            Set-TPRawData -Key 'AAD-DirectorySettings' -Data $replay
+            $replay.Data.DeviceRegistration.UserDeviceQuota | Should -BeOfType [long]
+            $s = States
+            $s['AAD-16.4'] | Should -Be 'Gap'
+            @($s.Values | Where-Object { $_ -eq 'Satisfied' }).Count | Should -Be 7
+        }
+    }
 }
