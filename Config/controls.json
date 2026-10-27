@@ -67,7 +67,7 @@
     {
       "ControlId": "AAD-1.3",
       "Title": "Phishing-Resistant MFA Required for Admins",
-      "Description": "CA policy requires phishing-resistant MFA (Authentication Strength: FIDO2, CBA, or Windows Hello) for all privileged directory roles.",
+      "Description": "A Conditional Access policy that is On requires the phishing-resistant MFA authentication strength (only FIDO2 security keys, Windows Hello for Business and certificate-based MFA) on all resources with no exclusion and no narrowing condition, and names every administrator role CIS 5.2.2.5 lists (Application, Authentication, Billing, Cloud Application, Conditional Access, Exchange, Global, Helpdesk, Password, Privileged Authentication, Privileged Role, Security, SharePoint and User Administrator, and Global Reader) as well as every privileged role in the tenant's own role catalog. A policy for All users protects administrators but does not on its own pass CIS 5.2.2.5's audit, which looks for the roles by name.",
       "BusinessRisk": "Standard MFA is bypassed by AiTM proxy phishing attacks. Attackers use Evilginx2 to steal session tokens even when MFA is completed.",
       "Severity": "Critical",
       "Workload": "AAD",
@@ -75,12 +75,12 @@
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
       "EvaluatorFunction": "Test-TPControlAADPhishResistantMFA",
-      "Remediation": "CA policy targeting privileged roles with Authentication Strength = Phishing-resistant MFA. Must cover Global Administrator at minimum.",
+      "Remediation": "Create a Conditional Access policy that includes, under Users > Directory roles, every administrator role CIS 5.2.2.5 lists and every other privileged role the tenant uses; targets All resources with no exclusions and no platform, location, client app, device filter, risk or authentication flow condition; and grants access only with Require authentication strength = Phishing-resistant MFA. Exclude emergency access accounts and record them as approved exceptions.",
       "References": {
         "CISControls": [
           "6.5"
         ],
-        "CIS": "",
+        "CIS": "5.2.2.5",
         "SCuBA": "MS.AAD.3.6v1",
         "NIST": "IA-2(1), IA-2(2), IA-2(6)",
         "CMMC": "IA.L2-3.5.3",
@@ -897,7 +897,7 @@
     {
       "ControlId": "SPO-1.2",
       "Title": "Default Sharing Link Not Anonymous",
-      "Description": "Default sharing link type is Internal or Specific people — not Anyone.",
+      "Description": "The tenant default sharing link type (Get-SPOTenant DefaultSharingLinkType) is Direct (specific people) or Internal (people in the organization). Read from the SharePoint Online Management Shell; Anyone links being disabled tenant-wide does not by itself satisfy it, and a value not read is not assessed.",
       "BusinessRisk": "Defaulting to anonymous links means users create them accidentally, without understanding the exposure.",
       "Severity": "Medium",
       "Workload": "SPO",
@@ -905,12 +905,12 @@
       "Automated": true,
       "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-TPControlSharePoint",
-      "Remediation": "Set-SPOTenant -DefaultSharingLinkType Internal",
+      "Remediation": "Set-SPOTenant -DefaultSharingLinkType Direct (specific people), or Internal (people in the organization)",
       "References": {
         "CISControls": [
           "3.3"
         ],
-        "CIS": "",
+        "CIS": "7.2.7",
         "SCuBA": "MS.SHAREPOINT.2.1v1",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.3",
@@ -1680,7 +1680,7 @@
     {
       "ControlId": "AAD-1.4",
       "Title": "Sign-in Risk CA Policy",
-      "Description": "CA policy enforces MFA or blocks access when sign-in risk is elevated. Requires Entra ID P2.",
+      "Description": "Enabled Conditional Access policies respond to high and medium sign-in risk for all users on all applications (each level judged on who it protects), and one enabled policy meets CIS 5.2.2.7: it selects both high and medium sign-in risk, covers all users, all applications and every client app type with no other condition, and either blocks access or requires MFA (or an authentication strength) with sign-in frequency set to every time. Requires Entra ID P2.",
       "BusinessRisk": "Without sign-in risk policies, compromised credentials and impossible travel go unchallenged.",
       "Severity": "High",
       "Workload": "AAD",
@@ -1688,12 +1688,12 @@
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
       "EvaluatorFunction": "Test-TPControlAADSignInRisk",
-      "Remediation": "CA policy: Condition = Sign-in risk high/medium, Grant = Require MFA or Block. Requires Entra P2.",
+      "Remediation": "CA policy: Users = All users (exclude emergency access accounts only), Target resources = All resources, Conditions > Sign-in risk = High and Medium, Client apps not limited, Grant = Require multifactor authentication (or an authentication strength), Session > Sign-in frequency = Every time; or Grant = Block access. Requires Entra P2.",
       "References": {
         "CISControls": [
           "6.7"
         ],
-        "CIS": "",
+        "CIS": "5.2.2.7",
         "SCuBA": "MS.AAD.2.3v1",
         "NIST": "AC-7, IA-2",
         "CMMC": "AC.L2-3.1.8",
@@ -1711,7 +1711,7 @@
     {
       "ControlId": "AAD-1.5",
       "Title": "User Risk CA Policy",
-      "Description": "CA policy enforces password change or blocks access when user risk is elevated.",
+      "Description": "Enabled Conditional Access policies respond to high user risk for all users on all applications, and one enabled policy meets CIS 5.2.2.6: it selects high user risk, covers all users, all applications and every client app type with no other condition, requires a password change AND MFA (or an authentication strength), and sets sign-in frequency to every time. Microsoft's newer 'Require risk remediation' grant is reported but does not meet CIS 5.2.2.6, which audits the password-change grant.",
       "BusinessRisk": "High user risk indicates credential compromise. Without automated response, compromised accounts remain active.",
       "Severity": "High",
       "Workload": "AAD",
@@ -1719,12 +1719,12 @@
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
       "EvaluatorFunction": "Test-TPControlAADUserRisk",
-      "Remediation": "CA policy: Condition = User risk high, Grant = Require password change. Requires Entra P2.",
+      "Remediation": "CA policy: Users = All users (exclude emergency access accounts only), Target resources = All resources, Conditions > User risk = High, Client apps not limited, Grant = Require multifactor authentication (or an authentication strength) AND Require password change (Require all the selected controls), Session > Sign-in frequency = Every time. Requires Entra P2.",
       "References": {
         "CISControls": [
           "6.7"
         ],
-        "CIS": "",
+        "CIS": "5.2.2.6",
         "SCuBA": "MS.AAD.2.1v1",
         "NIST": "AC-7, IA-5",
         "CMMC": "AC.L2-3.1.8",
@@ -3703,7 +3703,7 @@
     {
       "ControlId": "AAD-10.2",
       "Title": "Privileged Accounts Use Dedicated Cloud-Only Accounts",
-      "Description": "All privileged role holders use separate cloud-only accounts, not their day-to-day synced accounts.",
+      "Description": "No account holding a directory role whose name contains \"Administrator\", or Global Reader, is synchronized from on-premises Active Directory (onPremisesSyncEnabled), judged from the tenant's own role catalog over active and, where read, PIM-eligible assignments: administrators use separate cloud-only accounts.",
       "BusinessRisk": "Using the same account for email and admin work means email phishing can compromise admin credentials. Dedicated admin accounts separate the blast radius.",
       "Severity": "High",
       "Workload": "AAD",
@@ -3711,12 +3711,12 @@
       "Automated": true,
       "CollectorDependency": "AAD-DirectoryRoles",
       "EvaluatorFunction": "Test-TPControlAADPrivCloudOnly",
-      "Remediation": "Create dedicated .admin or .onmicrosoft.com accounts for all privileged role holders. Remove privileged roles from on-premises synced accounts.",
+      "Remediation": "Create dedicated cloud-only administrator accounts (for example on the .onmicrosoft.com domain) for every holder of a role whose name contains \"Administrator\", or Global Reader, move the role assignments to them, and remove those roles from on-premises synced accounts.",
       "References": {
         "CISControls": [
           "5.4"
         ],
-        "CIS": "",
+        "CIS": "1.1.1",
         "SCuBA": "MS.AAD.7.3v1",
         "NIST": "AC-6(5)",
         "CMMC": "AC.L2-3.1.6",
@@ -3762,7 +3762,7 @@
     {
       "ControlId": "AAD-10.4",
       "Title": "Short Sign-in Frequency for Admins and Guests",
-      "Description": "Enabled CA policies set a sign-in frequency of 4 hours or less for every privileged role (named in the policy's roles) and 24 hours or less (or every time) for guest or external users, limiting the lifetime of stolen session tokens.",
+      "Description": "Enabled CA policies set a sign-in frequency of 4 hours or less with a persistent browser session of never persistent for every privileged role (the tool's list, Microsoft's isPrivileged roles and the administrative roles CIS 5.2.2.4 lists, named in the policy's roles, on all applications), with at least one such policy naming every role CIS 5.2.2.4 lists, and 24 hours or less (or every time) for guest or external users, limiting the lifetime of stolen session tokens.",
       "BusinessRisk": "Stolen tokens (from AiTM, token theft via malware) remain valid for the full session lifetime. Sign-in frequency limits re-use to the configured window.",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -3770,12 +3770,12 @@
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
       "EvaluatorFunction": "Test-TPControlAADSignInFrequency",
-      "Remediation": "CA policy for the privileged directory roles (Users > Directory roles, every privileged role): Session > Sign-in frequency > Periodic reauthentication, 4 hours or less. CA policy for Guest or external users: Session > Sign-in frequency, 24 hours or less (or Every time).",
+      "Remediation": "CA policy for the privileged directory roles (Users > Directory roles: every privileged role, including Application, Authentication, Billing, Cloud Application, Conditional Access, Exchange, Global, Helpdesk, Password, Privileged Authentication, Privileged Role, Security, SharePoint and User Administrator and Global Reader), Target resources = All resources: Session > Sign-in frequency > Periodic reauthentication, 4 hours or less, and Session > Persistent browser session > Never persistent. CA policy for Guest or external users: Session > Sign-in frequency, 24 hours or less (or Every time).",
       "References": {
         "CISControls": [
           "4.3"
         ],
-        "CIS": "",
+        "CIS": "5.2.2.4",
         "SCuBA": "",
         "NIST": "AC-12",
         "CMMC": "AC.L2-3.1.10",
@@ -4400,7 +4400,7 @@
     {
       "ControlId": "INT-3.1",
       "Title": "Device Enrollment Restrictions Configured",
-      "Description": "Intune enrollment restrictions limit which platforms, ownership types, and OS versions can enroll.",
+      "Description": "The default (priority 0, All users and all devices) Intune device platform restriction blocks personally owned devices, or blocks the platform, on Windows, iOS/iPadOS, macOS, Android Enterprise (work profile) and Android device administrator. A minimum OS version or a block in a custom restriction does not meet it; a platform whose restriction was not read is not assessed.",
       "BusinessRisk": "Without enrollment restrictions, any device — including unmanaged personal or obsolete devices — can enroll and receive corporate app access.",
       "Severity": "Medium",
       "Workload": "INT",
@@ -4408,12 +4408,12 @@
       "Automated": true,
       "CollectorDependency": "Intune-DeviceCompliance",
       "EvaluatorFunction": "Test-TPControlIntuneEnrollmentRestrictions",
-      "Remediation": "Intune > Devices > Enrollment > Enrollment restrictions > Create policy restricting to managed platforms and minimum OS versions.",
+      "Remediation": "Intune > Devices > Enrollment > Device platform restriction: edit the default All users and all devices restriction for each of Windows, iOS/iPadOS, macOS and Android (Android Enterprise work profile and device administrator) and set Personally owned devices to Block, or set the platform to Block where it is not used. Enroll corporate devices through Autopilot, Automated Device Enrollment or corporate identifiers first.",
       "References": {
         "CISControls": [
           "4.1"
         ],
-        "CIS": "",
+        "CIS": "4.2",
         "SCuBA": "",
         "NIST": "CM-7, AC-3",
         "CMMC": "CM.L2-3.4.1",
@@ -4674,7 +4674,7 @@
     {
       "ControlId": "AAD-11.4",
       "Title": "Token Protection (Session Binding) Enforced",
-      "Description": "CA policy enforces token protection for Exchange Online and SharePoint Online on Windows, binding tokens to the originating device and blocking replay attacks.",
+      "Description": "CA policy enforces token protection for Office 365 Exchange Online, Office 365 SharePoint Online and Microsoft Teams Services on Windows mobile apps and desktop clients, binding tokens to the originating device and blocking replay attacks.",
       "BusinessRisk": "AiTM (adversary-in-the-middle) phishing steals authenticated session tokens. Without token binding, stolen tokens work from any device — effectively bypassing MFA entirely.",
       "Severity": "High",
       "Workload": "AAD",
@@ -4682,11 +4682,11 @@
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
       "EvaluatorFunction": "Test-TPControlAADTokenProtection",
-      "Remediation": "CA policy: Session controls > Token protection. Enable for Exchange Online and SharePoint Online at minimum. Requires Entra ID P1+. Note: may cause issues with non-compliant clients — test in report-only mode first.",
+      "Remediation": "CA policy: Users = the users in scope (not None), Target resources = Select resources: Office 365 Exchange Online, Office 365 SharePoint Online and Microsoft Teams Services only (not All resources or the Office 365 group), Conditions > Device platforms = Windows, Client apps = Mobile apps and desktop clients only, Session > Require token protection for sign-in sessions. Requires Entra ID P1+. Note: unsupported clients are blocked; test in report-only mode first.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
         "CISControls": [],
-        "CIS": "",
+        "CIS": "5.2.2.16",
         "SCuBA": "",
         "NIST": "AC-12, IA-2",
         "CMMC": "AC.L2-3.1.10",
@@ -4882,7 +4882,7 @@
     {
       "ControlId": "DEF-4.2",
       "Title": "DLP Policy Uses Sensitive Information Types",
-      "Description": "At least one DLP policy uses sensitive information types (SSN, credit card, health data) for automatic content detection.",
+      "Description": "At least one enabled DLP rule matches sensitive information types (SSN, credit card, health data) inside a DLP policy that is enforced (Mode Enable) and covers Exchange, SharePoint, OneDrive or Teams. A rule in a test-mode policy, or in a policy covering only other locations such as devices, is not counted; a policy whose locations were not recorded is not assessed.",
       "BusinessRisk": "DLP without SITs cannot automatically identify regulated or sensitive content. Policy enforcement is entirely manual and depends on users correctly classifying their own files.",
       "Severity": "High",
       "Workload": "DEF",
@@ -4890,13 +4890,13 @@
       "Automated": true,
       "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-TPControlDefenderDLPSITs",
-      "Remediation": "Purview > DLP > Edit policy > Add condition > Content contains > Sensitive info types.",
+      "Remediation": "Purview > Data loss prevention > Policies: in a policy that covers Exchange, SharePoint, OneDrive or Teams, add a rule condition Content contains > Sensitive info types, then turn the policy on (Mode Enable, not simulation).",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
         "CISControls": [
           "3.13"
         ],
-        "CIS": "",
+        "CIS": "3.2.1",
         "SCuBA": "MS.SECURITYSUITE.3.1v1",
         "NIST": "SC-28",
         "CMMC": "MP.L2-3.8.1",
@@ -6137,7 +6137,7 @@
     {
       "ControlId": "AAD-14.1",
       "Title": "Application Credentials Current and Short-Lived",
-      "Description": "App registration client secrets and certificates are unexpired and issued with a bounded lifetime, and the tenant application management policy caps the lifetime of new ones.",
+      "Description": "App registration client secrets and certificates are unexpired and issued with a bounded lifetime, and the tenant's default application management policy is enabled and limits new client secrets (passwordLifetime) and certificates (asymmetricKeyLifetime) to 180 days or less for every application registration and every service principal, with no created-after date and no exempted actors.",
       "BusinessRisk": "A client secret is a standing bearer credential to everything its application can reach. No MFA applies to it, no Conditional Access evaluates it, and no sign-in risk is scored against it. A long-lived secret keeps working for everyone who has ever seen it — a departed administrator, a stale runbook, a CI variable, a chat message — until somebody rotates it, and nothing forces rotation. An expired credential is the other half of the same problem: the fix under outage pressure is a new secret with the longest lifetime available and no reminder set.",
       "Severity": "High",
       "Workload": "AAD",
@@ -6145,9 +6145,9 @@
       "Automated": true,
       "CollectorDependency": "AAD-Inventory",
       "EvaluatorFunction": "Test-TPControlAADAppCredentialExpiry",
-      "Remediation": "Entra admin center > App registrations > Certificates and secrets. Remove expired credentials rather than leaving them in place. Reissue anything with a lifetime beyond 180 days at a shorter term and record the rotation date. Prefer certificate credentials or workload identity federation over client secrets where the application supports them.",
+      "Remediation": "Entra admin center > App registrations > Certificates and secrets. Remove expired credentials rather than leaving them in place. Reissue anything with a lifetime beyond 180 days at a shorter term and record the rotation date. Prefer certificate credentials or workload identity federation over client secrets where the application supports them. Enable the tenant default application management policy (Microsoft Graph /policies/defaultAppManagementPolicy) with passwordLifetime and asymmetricKeyLifetime restrictions of 180 days or less (P180D) under both applicationRestrictions and servicePrincipalRestrictions, and no restrictForAppsCreatedAfterDateTime.",
       "References": {
-        "CIS": "",
+        "CIS": "5.1.5.4",
         "CISControls": [
           "5.4",
           "6.2"

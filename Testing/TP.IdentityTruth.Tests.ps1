@@ -49,6 +49,8 @@ Describe 'Identity controls report what the tenant is configured to do' {
             Set-TPRawData -Key 'AAD-CAPolicies' -Data (Bag @{ Policies = @($Policies); SectionStatus = @{ TokenProtection = 'Collected'; NamedLocations = 'Collected' } })
         }
         function script:V([string] $Fn, [string] $Cid) { & $Fn 3>$null | Out-Null; @(Get-TPFindings | Where-Object ControlId -eq $Cid)[0] }
+        # Sign-in frequency every time, as the collector stores it (CIS 5.2.2.6 / 5.2.2.7).
+        $script:EveryTime = @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'everyTime'; Value = $null; Type = '' }; PersistentBrowser = $null }
     }
 
     Context 'AAD-6.2 user consent, collected from the documented authorizationPolicy shape' {
@@ -114,7 +116,8 @@ Describe 'Identity controls report what the tenant is configured to do' {
             Ca @((& $mk 'enabledForReportingButNotEnforced' 'signin' @('high') @('mfa')));                   (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Gap'  # only one level
             Ca @((& $mk 'disabled' 'signin' @('high', 'medium') @('mfa')));                                  (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Gap'
             # an enforced policy still wins over a report-only one
-            Ca @((& $mk 'enabled' 'user' @('high') @('riskRemediation')), (& $mk 'enabledForReportingButNotEnforced' 'user' @('high') @('riskRemediation')))
+            $cisUser = & $mk 'enabled' 'user' @('high') @('passwordChange', 'mfa'); $cisUser.SessionControls = $script:EveryTime
+            Ca @($cisUser, (& $mk 'enabledForReportingButNotEnforced' 'user' @('high') @('riskRemediation')))
             (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
         }
         It 'AAD-1.4 / 1.5: a policy list that could not be proven complete is not assessed, never a Gap; an absent key replays as complete' {
@@ -124,15 +127,20 @@ Describe 'Identity controls report what the tenant is configured to do' {
             (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'NotApplicable'
             @((Get-TPAssessmentScope -Findings @(Get-TPFindings)).CollectionIncomplete | ForEach-Object { $_.ControlId }) | Should -Contain 'AAD-1.5' -Because 'it must be named as a collection gap, not filed as an advisory'
             # an enforced qualifying policy is still a pass: the missing policies cannot make it worse
-            $ok = Pol -Name 'u' -Grant @('riskRemediation'); $ok.Conditions.UserRiskLevels = @('high')
+            $ok = Pol -Name 'u' -Grant @('passwordChange', 'mfa') -Session $script:EveryTime; $ok.Conditions.UserRiskLevels = @('high')
             & $incomplete @($ok)
             (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
             Ca @()
             (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Gap' -Because 'results collected before the beta merge have no PolicyCompleteness and replay unchanged'
         }
-        It 'AAD-1.4 / 1.5: blocking and risk-remediation responses count' {
-            Ca @(Pol -SignInRisk @('high', 'medium') -Grant @('block'));   (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied'
-            Ca @(Pol -UserRisk @('high') -Grant @('riskRemediation'));     (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
+        It 'AAD-1.4 / 1.5: blocking and risk-remediation responses count toward coverage; CIS needs MFA every time (or a block) and a password change' {
+            Ca @(Pol -SignInRisk @('high', 'medium') -Grant @('block'));   (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied' -Because 'CIS 5.2.2.7 accepts a block without sign-in frequency'
+            Ca @(Pol -UserRisk @('high') -Grant @('riskRemediation'))
+            $f = V 'Test-TPControlAADUserRisk' 'AAD-1.5'
+            $f.State | Should -Be 'Partial' -Because 'risk remediation covers the level but is not the password-change grant CIS 5.2.2.6 audits'
+            $f.Detail | Should -Match 'Verified: A responding policy applies to high user risk'
+            $f.Detail | Should -Match 'requires risk remediation'
+            Ca @(Pol -UserRisk @('high') -Grant @('passwordChange', 'mfa') -Session $script:EveryTime); (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
         }
         # A policy applies only to the risk levels it selects. Microsoft's
         # templates select High and Medium (sign-in) and High (user); a
@@ -142,10 +150,51 @@ Describe 'Identity controls report what the tenant is configured to do' {
             Ca @(Pol -SignInRisk @('high') -Grant @('mfa'));   (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Partial'
             $f = V 'Test-TPControlAADSignInRisk' 'AAD-1.4';   $f.Detail | Should -Match 'medium-risk sign-in is let through'
             Ca @(Pol -SignInRisk @('medium') -Grant @('mfa')); (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Partial'
-            Ca @((Pol -SignInRisk @('high') -Grant @('block')), (Pol -SignInRisk @('medium') -Grant @('mfa')))
-            (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied' -Because 'levels combine across the enabled policies'
+            Ca @((Pol -SignInRisk @('high') -Grant @('block')), (Pol -SignInRisk @('medium') -Grant @('mfa') -Session $script:EveryTime))
+            $f = V 'Test-TPControlAADSignInRisk' 'AAD-1.4'
+            $f.State | Should -Be 'Partial' -Because 'the levels are covered across policies, but CIS 5.2.2.7 needs one policy selecting both'
+            $f.Detail | Should -Match 'No enabled policy meets CIS 5.2.2.7 .* both high and medium'
             Ca @(Pol -UserRisk @('low', 'medium') -Grant @('passwordChange')); (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Gap'
-            Ca @(Pol -UserRisk @('medium', 'high') -Grant @('passwordChange')); (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
+            Ca @(Pol -UserRisk @('medium', 'high') -Grant @('passwordChange', 'mfa') -Session $script:EveryTime); (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
+        }
+        It 'AAD-1.4 (CIS 5.2.2.7): one policy, both levels, MFA with sign-in frequency every time or a block on its own; each shortfall is named' {
+            $sif = { param($p) $p.SessionControls = $script:EveryTime; $p }
+            Ca @(& $sif (Pol -SignInRisk @('high', 'medium') -Grant @('mfa')));                (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied'
+            Ca @(Pol -SignInRisk @('high', 'medium') -Grant @('mfa') -Session @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'everyTime' } }); (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied'
+            Ca @(& $sif (Pol -SignInRisk @('high', 'medium') -Grant @('mfa', 'compliantDevice') -Op 'AND')); (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied' -Because 'MFA AND another control still requires MFA'
+            foreach ($c in @(
+                    @{ P = (Pol -SignInRisk @('high', 'medium') -Grant @('mfa') -Session @{ SignInFrequency = $null }); Rx = 'does not set sign-in frequency to every time' },
+                    @{ P = (Pol -SignInRisk @('high', 'medium') -Grant @('mfa') -Session @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'timeBased'; Value = 1; Type = 'hours' } }); Rx = 'does not set sign-in frequency to every time' },
+                    @{ P = (& $sif (Pol -SignInRisk @('high', 'medium') -Grant @('mfa', 'compliantDevice') -Op 'OR')); Rx = '' },   # MFA is optional: not a responding policy at all
+                    @{ P = (& $sif (Pol -SignInRisk @('high', 'medium') -Grant @('mfa') -ClientApps @('browser', 'mobileAppsAndDesktopClients'))); Rx = 'limited to some client app types' },
+                    @{ P = (& $sif (Pol -SignInRisk @('high', 'medium') -UserRisk @('high') -Grant @('mfa'))); Rx = 'also sets a user risk condition' },
+                    @{ P = (Pol -SignInRisk @('high', 'medium') -Grant @('block', 'mfa') -Op 'OR'); Rx = 'combines block with other grant controls' })) {
+                Ca @($c.P)
+                $f = V 'Test-TPControlAADSignInRisk' 'AAD-1.4'
+                $f.State | Should -Not -Be 'Satisfied' -Because $c.Rx
+                if ($c.Rx) { $f.Detail | Should -Match $c.Rx }
+            }
+            # A results file from before the sign-in frequency was read: per-level coverage is verified, the CIS half is not assessed.
+            Ca @(Pol -SignInRisk @('high', 'medium') -Grant @('mfa'))
+            $f = V 'Test-TPControlAADSignInRisk' 'AAD-1.4'; $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'predates the read'
+        }
+        It 'AAD-1.5 (CIS 5.2.2.6): password change AND MFA (or a strength), operator AND, sign-in frequency every time' {
+            $u = { param([string[]] $g, [string] $op = 'AND', $sess = $script:EveryTime) Pol -UserRisk @('high') -Grant $g -Op $op -Session $sess }
+            Ca @(& $u @('passwordChange', 'mfa'));   (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
+            $s1 = & $u @('passwordChange'); $s1.GrantControls.AuthStrengthId = '00000000-0000-0000-0000-000000000002'
+            Ca @($s1);                                 (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied' -Because 'an authentication strength stands in for MFA'
+            foreach ($c in @(
+                    @{ P = (& $u @('mfa')); Rx = 'does not require a password change' },
+                    @{ P = (& $u @('passwordChange')); Rx = 'does not require MFA or an authentication strength' },
+                    @{ P = (& $u @('passwordChange', 'mfa') 'OR'); Rx = 'operator OR' },
+                    @{ P = (& $u @('block')); Rx = 'blocks access instead of requiring MFA and a password change' },
+                    @{ P = (& $u @('riskRemediation')); Rx = 'requires risk remediation' },
+                    @{ P = (& $u @('passwordChange', 'mfa') 'AND' @{ SignInFrequency = $null }); Rx = 'does not set sign-in frequency to every time' })) {
+                Ca @($c.P)
+                $f = V 'Test-TPControlAADUserRisk' 'AAD-1.5'
+                $f.State | Should -Be 'Partial' -Because "$($c.Rx): the high level is covered, CIS 5.2.2.6 is not met"
+                $f.Detail | Should -Match $c.Rx
+            }
         }
         It 'AAD-2.3: "compliant OR MFA" does not enforce a device' {
             Ca @(Pol -Grant @('compliantDevice','domainJoinedDevice','mfa') -Op 'OR'); (V 'Test-TPControlAADDeviceComplianceCA' 'AAD-2.3').State | Should -Be 'Partial'
@@ -170,7 +219,7 @@ Describe 'Identity controls report what the tenant is configured to do' {
             (V 'Test-TPControlAADSignInFrequency' 'AAD-10.4').State | Should -Be 'Gap'
         }
         It 'AAD-11.4 / 11.5: token protection and CAE strict mode read their real values' {
-            $tp = Pol -Session @{ SecureSignInSession = $true }; $tp.Conditions.Platforms = @('windows')
+            $tp = Pol -Apps @('00000002-0000-0ff1-ce00-000000000000', '00000003-0000-0ff1-ce00-000000000000', 'cc15fd57-2c6c-4117-a88c-83b1d56b4bbe') -ClientApps @('mobileAppsAndDesktopClients') -Session @{ SecureSignInSession = $true }; $tp.Conditions.Platforms = @('windows')
             Ca @($tp);                                                              (V 'Test-TPControlAADTokenProtection' 'AAD-11.4').State | Should -Be 'Satisfied'
             Ca @(Pol -Session @{ ContinuousAccessEvaluation = 'strictEnforcement' }); (V 'Test-TPControlAADContinuousAccess' 'AAD-11.5').State | Should -Be 'Satisfied'
         }
@@ -193,7 +242,10 @@ Describe 'Identity controls report what the tenant is configured to do' {
         It 'AAD-11.2 / 10.2: an ELIGIBLE guest or synced Global Administrator counts' {
             Clear-TPState
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{ RoleAssignments = @((Asg 'a' 'A' 'a@x.com')); PrivRoles = @((Asg 'a' 'A' 'a@x.com'))
-                AllPrivilegedAssignments = @((Asg 'g' 'Guest' 'g_msp.com#EXT#@x.onmicrosoft.com'), (Asg 'b' 'Bob' 'bob@x.com' $true)); SectionStatus = @{ RoleAssignments = 'Collected' } })
+                AllPrivilegedAssignments = @((Asg 'g' 'Guest' 'g_msp.com#EXT#@x.onmicrosoft.com'), (Asg 'b' 'Bob' 'bob@x.com' $true))
+                RoleEligibilitySchedules = @((Asg 'g' 'Guest' 'g_msp.com#EXT#@x.onmicrosoft.com'), (Asg 'b' 'Bob' 'bob@x.com' $true))
+                RoleDefinitions = @(@{ Id = $script:GA; DisplayName = 'Global Administrator'; IsPriv = $true })
+                SectionStatus = @{ RoleAssignments = 'Collected'; RoleEligibilitySchedules = 'Collected' } })
             (V 'Test-TPControlAADNoGuestInPrivRoles' 'AAD-11.2').State | Should -Be 'Gap'
             (V 'Test-TPControlAADPrivCloudOnly' 'AAD-10.2').State      | Should -Be 'Gap'
         }
@@ -1471,8 +1523,9 @@ Describe 'Security Defaults: Conditional Access controls account for it' {
 #   AAD-11.2  a guest is userType Guest (or #EXT#); a privileged role is the
 #             tool's list or Microsoft's isPrivileged flag (beta); eligible
 #             assignments count; anything unread is not assessed.
-#   AAD-11.4  token protection counts only on Windows, for users, on Exchange
-#             Online and SharePoint Online (or All resources).
+#   AAD-11.4  token protection counts only on the Windows platform, for users,
+#             mobile apps and desktop clients only, on Exchange Online,
+#             SharePoint Online and Teams Services (CIS 5.2.2.16).
 #   AAD-11.7  both halves of Microsoft's PAW check: compliant device for a
 #             privileged role AND a device-filter (exclude) block.
 #   AAD-11.9  a workload identity policy must block on service principal risk.
@@ -1500,8 +1553,8 @@ Describe 'Benchmark gap fixes (AAD)' {
         function script:Pol {
             param([string] $Name = 'p', [string] $State = 'enabled', [string[]] $Users = @('All'), [string[]] $Roles = @(),
                   [string[]] $Apps = @('All'), [string[]] $Platforms = @(), [string[]] $Grant = @(), [hashtable] $Session = @{},
-                  [string] $FilterMode = '', [string] $FilterRule = '', [string[]] $Sps = @(), $SpRisk = 'absent')
-            $cond = @{ ClientAppTypes = @('all'); SignInRiskLevels = @(); UserRiskLevels = @(); Platforms = $Platforms; ExcludePlatforms = @()
+                  [string] $FilterMode = '', [string] $FilterRule = '', [string[]] $Sps = @(), $SpRisk = 'absent', [string[]] $ClientApps = @('all'))
+            $cond = @{ ClientAppTypes = $ClientApps; SignInRiskLevels = @(); UserRiskLevels = @(); Platforms = $Platforms; ExcludePlatforms = @()
                        Users = @{ IncludeUsers = $Users; IncludeGroups = @(); IncludeRoles = $Roles; ExcludeUsers = @(); ExcludeGroups = @(); ExcludeRoles = @() }
                        Applications = @{ Include = $Apps; Exclude = @() }
                        Locations = @{ Include = @(); Exclude = @() }
@@ -1723,19 +1776,110 @@ Describe 'Benchmark gap fixes (AAD)' {
         }
     }
 
-    Context 'AAD-11.4 token protection scope' {
-        It 'requires Windows, some users, and Exchange Online plus SharePoint Online (or All)' {
+    # AAD-10.2 (CIS 1.1.1): every role whose catalog name contains "Administrator",
+    # plus Global Reader, judged on onPremisesSyncEnabled, through the real collector.
+    Context 'AAD-10.2 cloud-only administrators (real roles collector, CIS 1.1.1)' {
+        BeforeAll {
+            $script:GR  = 'f2ef992c-3afb-46b9-b7cf-a126ee74c451'
+            $script:HIA = '8ac3fc64-6eca-42ea-9e69-59f4c7b60eb2'
+            $script:RR  = '4a5d8f65-41da-4de4-8968-e035b65339cf'
+            function script:Run-Cloud([object[]] $Assign, [object[]] $Elig = @(), [bool] $DefsFail = $false, [bool] $EligFail = $false) {
+                Clear-TPState
+                $script:T_Asg = $Assign; $script:T_Elig = $Elig; $script:T_DefsFail = $DefsFail; $script:T_EligFail = $EligFail
+                Set-Graph {
+                    param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                    if ($Uri -match '/beta/roleManagement/directory/roleDefinitions') { return @{ value = @() } }
+                    if ($Uri -match 'roleDefinitions') {
+                        if ($script:T_DefsFail) { throw 'Graph 503 ServiceUnavailable' }
+                        return @{ value = @(
+                            @{ id = '62e90394-69f5-4237-9190-012177145e10'; displayName = 'Global Administrator'; isBuiltIn = $true; isEnabled = $true },
+                            @{ id = $script:HIA; displayName = 'Hybrid Identity Administrator'; isBuiltIn = $true; isEnabled = $true },
+                            @{ id = $script:GR;  displayName = 'Global Reader'; isBuiltIn = $true; isEnabled = $true },
+                            @{ id = $script:RR;  displayName = 'Reports Reader'; isBuiltIn = $true; isEnabled = $true }) } }
+                    if ($Uri -match 'roleAssignments') { return @{ value = @($script:T_Asg) } }
+                    if ($Uri -match 'roleEligibilitySchedules') { if ($script:T_EligFail) { throw 'Graph 403 Forbidden' }; return @{ value = @($script:T_Elig) } }
+                    return @{ value = @() }
+                }
+                Invoke-TPCollectAADRoles 3>$null | Out-Null
+                V 'Test-TPControlAADPrivCloudOnly' 'AAD-10.2'
+            }
+            # Raw Graph shape with $expand=principal. -Sync 'absent' leaves the property out.
+            function script:CAsg([string] $Role, [string] $Upn, $Sync = $null) {
+                $pr = @{ '@odata.type' = '#microsoft.graph.user'; id = "id-$Upn"; displayName = $Upn; userPrincipalName = $Upn; userType = 'Member' }
+                if (-not ($Sync -is [string] -and $Sync -eq 'absent')) { $pr.onPremisesSyncEnabled = $Sync }
+                @{ id = "a-$Upn-$Role"; principalId = "id-$Upn"; roleDefinitionId = $Role; directoryScopeId = '/'; principal = $pr }
+            }
+        }
+        It 'cites CIS 1.1.1' {
+            ((Get-Content (Join-Path $script:RepoRoot 'Config/controls.json') -Raw | ConvertFrom-Json).controls | Where-Object ControlId -eq 'AAD-10.2').References.CIS | Should -Be '1.1.1'
+        }
+        It 'cloud-only holders (null returned) of Administrator roles and Global Reader are Satisfied' {
+            $f = Run-Cloud @((CAsg $script:GA 'ga@contoso.com'), (CAsg $script:GR 'gr@contoso.com' $false))
+            $f.State | Should -Be 'Satisfied'; $f.Detail | Should -Match 'Global Reader'
+            @((Get-TPRawData -Key 'AAD-DirectoryRoles').Data.RoleAssignments)[0].OnPremisesSyncReturned | Should -BeTrue
+        }
+        It 'a synced Hybrid Identity Administrator (outside the 17-role list) is a Gap' {
+            $f = Run-Cloud @((CAsg $script:GA 'ga@contoso.com'), (CAsg $script:HIA 'hia@corp.example' $true))
+            $f.State | Should -Be 'Gap'; @($f.AffectedObjects)[0].Role | Should -Be 'Hybrid Identity Administrator'
+        }
+        It 'a synced Global Reader is a Gap' {
+            (Run-Cloud @((CAsg $script:GR 'gr@corp.example' $true))).State | Should -Be 'Gap'
+        }
+        It 'a synced account ELIGIBLE for an Administrator role is a Gap' {
+            (Run-Cloud @((CAsg $script:GA 'ga@contoso.com')) -Elig @((CAsg $script:HIA 'hia@corp.example' $true))).State | Should -Be 'Gap'
+        }
+        It 'a synced holder of a role without "Administrator" in its name (Reports Reader) is outside 1.1.1' {
+            (Run-Cloud @((CAsg $script:GA 'ga@contoso.com'), (CAsg $script:RR 'rr@corp.example' $true))).State | Should -Be 'Satisfied'
+        }
+        It 'onPremisesSyncEnabled not returned on a holder is not assessed, never a pass' {
+            $f = Run-Cloud @((CAsg $script:GA 'ga@contoso.com' 'absent'))
+            $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'onPremisesSyncEnabled'
+        }
+        It 'the role catalog not read is not assessed' {
+            $f = Run-Cloud @((CAsg $script:GA 'ga@contoso.com')) -DefsFail $true
+            $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'role catalog'
+        }
+        It 'eligibility not read still judges active assignments (what the CIS audit lists) and says so' {
+            $f = Run-Cloud @((CAsg $script:GA 'ga@contoso.com')) -EligFail $true
+            $f.State | Should -Be 'Satisfied'; $f.Detail | Should -Match 'PIM-eligible assignments were not read'
+        }
+        It 'a results file from before the returned flag was recorded is not assessed' {
+            Clear-TPState
+            Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{
+                RoleDefinitions = @(@{ Id = $script:GA; DisplayName = 'Global Administrator' })
+                RoleAssignments = @(@{ PrincipalId = 'a'; PrincipalType = '#microsoft.graph.user'; RoleDefinitionId = $script:GA; OnPremisesSyncEnabled = $null })
+                SectionStatus = @{ RoleAssignments = 'Collected' } })
+            (V 'Test-TPControlAADPrivCloudOnly' 'AAD-10.2').State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'AAD-11.4 token protection scope (CIS 5.2.2.16)' {
+        BeforeAll { $script:TEAMS = 'cc15fd57-2c6c-4117-a88c-83b1d56b4bbe' }
+        It 'requires some users, Exchange Online, SharePoint Online and Teams Services selected, the Windows platform and mobile apps and desktop clients only' {
             $tp = @{ SecureSignInSession = $true }
-            Ca @(Pol -Platforms @('windows') -Apps @($script:EXO, $script:SPO) -Session $tp); (V 'Test-TPControlAADTokenProtection' 'AAD-11.4').State | Should -Be 'Satisfied'
-            Clear-TPState; Ca @(Pol -Platforms @('windows', 'macOS') -Apps @('All') -Session $tp); (V 'Test-TPControlAADTokenProtection' 'AAD-11.4').State | Should -Be 'Satisfied'
-            Clear-TPState; Ca @(Pol -Platforms @('iOS') -Apps @('All') -Session $tp)
-            $f = V 'Test-TPControlAADTokenProtection' 'AAD-11.4'
-            $f.State | Should -Be 'Gap'; $f.Detail | Should -Match 'does not include the Windows platform'
-            Clear-TPState; Ca @(Pol -Platforms @('windows') -Apps @($script:EXO) -Session $tp)
-            $f = V 'Test-TPControlAADTokenProtection' 'AAD-11.4'
-            $f.State | Should -Be 'Gap'; $f.Detail | Should -Match 'SharePoint Online'
-            Clear-TPState; Ca @(Pol -Platforms @('windows') -Users @('None') -Session $tp); (V 'Test-TPControlAADTokenProtection' 'AAD-11.4').State | Should -Be 'Gap'
-            Clear-TPState; Ca @(Pol -Platforms @() -Session $tp); (V 'Test-TPControlAADTokenProtection' 'AAD-11.4').State | Should -Be 'Gap' -Because 'no platform condition read is not the Windows platform'
+            $three = @($script:EXO, $script:SPO, $script:TEAMS); $desk = @('mobileAppsAndDesktopClients')
+            Ca @(Pol -Platforms @('windows') -Apps $three -ClientApps $desk -Session $tp)
+            $f = V 'Test-TPControlAADTokenProtection' 'AAD-11.4'; $f.State | Should -Be 'Satisfied'; $f.Detail | Should -Match 'Microsoft Teams Services'
+            Clear-TPState; Ca @(Pol -Platforms @('windows', 'macOS') -Apps $three -ClientApps $desk -Session $tp); (V 'Test-TPControlAADTokenProtection' 'AAD-11.4').State | Should -Be 'Satisfied' -Because 'Windows is selected; Apple platforms beside it do not take it away'
+            # Each boundary CIS 5.2.2.16 draws, one at a time.
+            foreach ($c in @(
+                    @{ P = (Pol -Platforms @('windows') -Apps @('All') -ClientApps $desk -Session $tp); Rx = 'targets All resources'; Why = 'All resources is not the three applications Microsoft and CIS name' },
+                    @{ P = (Pol -Platforms @('windows') -Apps @($script:EXO, $script:SPO) -ClientApps $desk -Session $tp); Rx = 'does not target Microsoft Teams Services'; Why = 'Teams Services is required' },
+                    @{ P = (Pol -Platforms @('windows') -Apps @($script:EXO) -ClientApps $desk -Session $tp); Rx = 'Office 365 SharePoint Online'; Why = 'SharePoint is required' },
+                    @{ P = (Pol -Platforms @('all') -Apps $three -ClientApps $desk -Session $tp); Rx = 'any device rather than selecting the Windows platform'; Why = 'any device is not the Windows platform' },
+                    @{ P = (Pol -Platforms @('iOS') -Apps $three -ClientApps $desk -Session $tp); Rx = 'does not include the Windows platform'; Why = 'no Windows' },
+                    @{ P = (Pol -Platforms @() -Apps $three -ClientApps $desk -Session $tp); Rx = 'does not include the Windows platform'; Why = 'no platform condition read is not the Windows platform' },
+                    @{ P = (Pol -Platforms @('windows') -Apps $three -ClientApps @('all') -Session $tp); Rx = 'does not limit client apps to mobile apps and desktop clients'; Why = 'client apps must be set to mobile apps and desktop clients only' },
+                    @{ P = (Pol -Platforms @('windows') -Apps $three -ClientApps @('browser', 'mobileAppsAndDesktopClients') -Session $tp); Rx = 'client apps: browser, mobileAppsAndDesktopClients'; Why = 'browser beside desktop clients is not what CIS audits' },
+                    @{ P = (Pol -Platforms @('windows') -Users @('None') -Apps $three -ClientApps $desk -Session $tp); Rx = 'includes no users'; Why = 'a user scope of None' },
+                    @{ P = (Pol -Platforms @('windows') -Apps $three -ClientApps $desk -Session $tp -FilterMode 'include' -FilterRule 'device.isCompliant -eq True'); Rx = 'device filter'; Why = 'a device filter narrows it' })) {
+                Clear-TPState; Ca @($c.P)
+                $f = V 'Test-TPControlAADTokenProtection' 'AAD-11.4'
+                $f.State | Should -Be 'Gap' -Because $c.Why
+                $f.Detail | Should -Match $c.Rx
+            }
+            $x = Pol -Platforms @('windows') -Apps $three -ClientApps $desk -Session $tp; $x.Conditions.Applications.Exclude = @($script:SPO)
+            Clear-TPState; Ca @($x); (V 'Test-TPControlAADTokenProtection' 'AAD-11.4').State | Should -Be 'Gap' -Because 'an excluded SharePoint is not targeted'
         }
     }
 
@@ -1854,11 +1998,21 @@ Describe 'Benchmark gap fixes (AAD)' {
                 V 'Test-TPControlAADAppCredentialExpiry' 'AAD-14.1'
             }
             # Raw shape of tenantAppManagementPolicy (Graph v1.0).
-            function script:Amp([bool] $Enabled = $true, [string] $Pw = 'P180D', [string] $Key = 'P180D', [string] $State = 'enabled', $After = $null) {
-                @{ id = '00000000-0000-0000-0000-000000000000'; isEnabled = $Enabled
+            # CIS 5.1.5.4 / 5.1.5.6 apply the limit to service principals as well:
+            # -SpPw / -SpKey set those ('' leaves the restriction out), -NoSp drops the
+            # servicePrincipalRestrictions block.
+            function script:Amp([bool] $Enabled = $true, [string] $Pw = 'P180D', [string] $Key = 'P180D', [string] $State = 'enabled', $After = $null,
+                                [string] $SpPw = 'P180D', [string] $SpKey = 'P180D', [switch] $NoSp) {
+                $a = @{ id = '00000000-0000-0000-0000-000000000000'; isEnabled = $Enabled
                    applicationRestrictions = @{
                        passwordCredentials = @(@{ restrictionType = 'passwordLifetime'; state = $State; maxLifetime = $Pw; restrictForAppsCreatedAfterDateTime = $After })
                        keyCredentials      = @(@{ restrictionType = 'asymmetricKeyLifetime'; state = $State; maxLifetime = $Key; restrictForAppsCreatedAfterDateTime = $After }) } }
+                if (-not $NoSp) {
+                    $a.servicePrincipalRestrictions = @{
+                        passwordCredentials = @(if ($SpPw) { @{ restrictionType = 'passwordLifetime'; state = 'enabled'; maxLifetime = $SpPw; restrictForAppsCreatedAfterDateTime = $null } })
+                        keyCredentials      = @(if ($SpKey) { @{ restrictionType = 'asymmetricKeyLifetime'; state = 'enabled'; maxLifetime = $SpKey; restrictForAppsCreatedAfterDateTime = $null } }) }
+                }
+                $a
             }
         }
         It 'no credentials and the policy capping both at 180 days for every app is Satisfied' {
@@ -1883,6 +2037,35 @@ Describe 'Benchmark gap fixes (AAD)' {
             $f = V 'Test-TPControlAADAppCredentialExpiry' 'AAD-14.1'
             $f.State | Should -Be 'NotApplicable' -Because 'a results file from before the policy was read is not a pass'
         }
+        # CIS 5.1.5.4 (secrets) and 5.1.5.6 (certificates): the limit applies to
+        # application registrations AND service principals, at 180 days or less.
+        It 'CIS 5.1.5.4: 180 days passes, 181 days or a missing limit on service principals does not' {
+            (Run-AppPolicy (Amp -Pw 'P180D' -SpPw 'P180D')).State | Should -Be 'Satisfied'
+            $f = Run-AppPolicy (Amp -Pw 'P181D')
+            $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'client secrets \(passwordLifetime\) on application registrations falls short: it allows 181 days'
+            $f = Run-AppPolicy (Amp -SpPw 'P181D')
+            $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'client secrets \(passwordLifetime\) on service principals falls short'
+            $f = Run-AppPolicy (Amp -SpPw '')
+            $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'no lifetime limit for client secrets \(passwordLifetime\) on service principals'
+            $f = Run-AppPolicy (Amp -SpKey '')
+            $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'certificates \(asymmetricKeyLifetime\) on service principals'
+            (Get-TPRawData -Key 'AAD-Inventory').Data.AppManagementPolicy.ServicePrincipalKeyRestrictions.Count | Should -Be 0
+        }
+        It 'a policy with no servicePrincipalRestrictions block sets no service-principal limit (a shortfall)' {
+            $f = Run-AppPolicy (Amp -NoSp)
+            $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'on service principals'
+        }
+        It 'a results file from before the service-principal restrictions were collected is not assessed, never a pass' {
+            Clear-TPState
+            Set-TPRawData -Key 'AAD-Inventory' -Data (Bag @{
+                AppCredentials = @()
+                AppManagementPolicy = @{ IsEnabled = $true
+                    PasswordRestrictions = @(@{ RestrictionType = 'passwordLifetime'; State = 'enabled'; MaxLifetime = 'P180D'; RestrictForAppsCreatedAfterDateTime = ''; ExcludedActorAttributes = 0 })
+                    KeyRestrictions      = @(@{ RestrictionType = 'asymmetricKeyLifetime'; State = 'enabled'; MaxLifetime = 'P180D'; RestrictForAppsCreatedAfterDateTime = ''; ExcludedActorAttributes = 0 }) }
+                SectionStatus = @{ AppCredentials = 'Collected'; AppManagementPolicy = 'Collected' } })
+            $f = V 'Test-TPControlAADAppCredentialExpiry' 'AAD-14.1'
+            $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'on service principals was not read'
+        }
         It 'an expired or long-lived credential stays a Gap even with the policy in place' {
             Clear-TPState
             Set-TPRawData -Key 'AAD-Inventory' -Data (Bag @{
@@ -1901,7 +2084,11 @@ Describe 'Benchmark gap fixes (AAD)' {
     # hours or less, 1 day, or every time). One half is Partial; neither is a Gap.
     Context 'AAD-10.4 sign-in frequency per population' {
         BeforeAll {
-            $script:SifH = { param([int] $v, [string] $t = 'hours') @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'timeBased'; Value = $v; Type = $t } } }
+            # Persistent browser session never persistent unless said otherwise (CIS 5.2.2.4).
+            $script:SifH = { param([int] $v, [string] $t = 'hours', $pb = @{ IsEnabled = $true; Mode = 'never' }) @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'timeBased'; Value = $v; Type = $t }; PersistentBrowser = $pb } }
+            # GA, HIA and every administrative role CIS 5.2.2.4 lists.
+            $script:CisIds = @(& $script:Mod { @(Get-TPCisAdminRoles | ForEach-Object { $_.Id }) })
+            $script:AdminRoles = @(@($script:GA, $script:HIA) + $script:CisIds | Select-Object -Unique)
             function script:GuestPol([string] $Name = 'Guests SIF', [hashtable] $Session, [string] $State = 'enabled') {
                 $p = Pol -Name $Name -State $State -Users @() -Session $Session
                 $p.Conditions.Users.IncludeGuestsOrExternalUsers = @{ GuestOrExternalUserTypes = 'internalGuest,b2bCollaborationGuest,b2bCollaborationMember,b2bDirectConnectUser,otherExternalUser,serviceProvider'; ExternalTenantsMembershipKind = 'all' }
@@ -1923,10 +2110,11 @@ Describe 'Benchmark gap fixes (AAD)' {
 
         It 'every privileged role (tool list and Microsoft isPrivileged) at 4 hours and guests at 24 hours is Satisfied' {
             Catalog104
-            Ca104 @((Pol -Name 'Admins 4h' -Users @() -Roles @($script:GA, $script:HIA) -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 24)))
+            Ca104 @((Pol -Name 'Admins 4h' -Users @() -Roles $script:AdminRoles -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 24)))
             $f = V104
             $f.State  | Should -Be 'Satisfied'
-            $f.Detail | Should -Match 'Every one of the 2 privileged roles'
+            $f.Detail | Should -Match 'Every one of the 16 privileged roles'
+            $f.Detail | Should -Match 'One enabled policy names every one of the 15 administrative roles CIS 5.2.2.4 lists'
             $f.Detail | Should -Match "Microsoft marks isPrivileged"
             $f.Detail | Should -Match 'Guests SIF \[24 hour\(s\); guest types: internalGuest'
         }
@@ -1934,13 +2122,13 @@ Describe 'Benchmark gap fixes (AAD)' {
         It 'boundaries: 5 hours, or 1 day, for privileged roles fails the half; 1 day and every time pass for guests, 25 hours and 2 days do not' {
             foreach ($c in @(@{ S = (& $script:SifH 5); Ok = $false }, @{ S = (& $script:SifH 1 'days'); Ok = $false }, @{ S = (& $script:SifH 1); Ok = $true })) {
                 Clear-TPState; Catalog104
-                Ca104 @((Pol -Name 'Admins' -Users @() -Roles @($script:GA, $script:HIA) -Session $c.S), (GuestPol -Session (& $script:SifH 24)))
+                Ca104 @((Pol -Name 'Admins' -Users @() -Roles $script:AdminRoles -Session $c.S), (GuestPol -Session (& $script:SifH 24)))
                 (V104).State | Should -Be $(if ($c.Ok) { 'Satisfied' } else { 'Partial' }) -Because "privileged $($c.S.SignInFrequency.Value) $($c.S.SignInFrequency.Type)"
             }
             foreach ($c in @(@{ S = (& $script:SifH 1 'days'); Ok = $true }, @{ S = @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'everyTime'; Value = $null; Type = '' } }; Ok = $true },
                              @{ S = (& $script:SifH 25); Ok = $false }, @{ S = (& $script:SifH 2 'days'); Ok = $false })) {
                 Clear-TPState; Catalog104
-                Ca104 @((Pol -Name 'Admins' -Users @() -Roles @($script:GA, $script:HIA) -Session (& $script:SifH 4)), (GuestPol -Session $c.S))
+                Ca104 @((Pol -Name 'Admins' -Users @() -Roles $script:AdminRoles -Session (& $script:SifH 4)), (GuestPol -Session $c.S))
                 (V104).State | Should -Be $(if ($c.Ok) { 'Satisfied' } else { 'Partial' }) -Because "guest $($c.S.SignInFrequency.Value) $($c.S.SignInFrequency.Type) $($c.S.SignInFrequency.FrequencyInterval)"
             }
         }
@@ -1950,18 +2138,18 @@ Describe 'Benchmark gap fixes (AAD)' {
             Ca104 @((Pol -Name 'GA 4h' -Users @() -Roles @($script:GA) -Session (& $script:SifH 4)), (Pol -Name 'Everyone 4h' -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8)))
             $f = V104
             $f.State  | Should -Be 'Partial'
-            $f.Detail | Should -Match '1 of 2 privileged roles .* Hybrid Identity Administrator'
+            $f.Detail | Should -Match '15 of 16 privileged roles .* Hybrid Identity Administrator'
         }
 
         It 'a privileged-role policy excluding the role, scoped to one application, or report-only is not counted' {
             Catalog104
-            $excl = Pol -Name 'Excludes HIA' -Users @() -Roles @($script:GA, $script:HIA) -Session (& $script:SifH 4); $excl.Conditions.Users.ExcludeRoles = @($script:HIA)
+            $excl = Pol -Name 'Excludes HIA' -Users @() -Roles $script:AdminRoles -Session (& $script:SifH 4); $excl.Conditions.Users.ExcludeRoles = @($script:HIA)
             Ca104 @($excl, (GuestPol -Session (& $script:SifH 8))); (V104).State | Should -Be 'Partial'
             Clear-TPState; Catalog104
-            Ca104 @((Pol -Name 'Portal only' -Users @() -Roles @($script:GA, $script:HIA) -Apps @('797f4846-ba00-4fd7-ba43-dac1f8f63013') -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8)))
+            Ca104 @((Pol -Name 'Portal only' -Users @() -Roles $script:AdminRoles -Apps @('797f4846-ba00-4fd7-ba43-dac1f8f63013') -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8)))
             $f = V104; $f.State | Should -Be 'Partial'; $f.Detail | Should -Match "'Portal only' .* applies to only some applications"
             Clear-TPState; Catalog104
-            Ca104 @((Pol -Name 'Staged' -State 'enabledForReportingButNotEnforced' -Users @() -Roles @($script:GA, $script:HIA) -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8)))
+            Ca104 @((Pol -Name 'Staged' -State 'enabledForReportingButNotEnforced' -Users @() -Roles $script:AdminRoles -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8)))
             $f = V104; $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'Report-only for privileged roles .* Staged'
         }
 
@@ -1975,7 +2163,7 @@ Describe 'Benchmark gap fixes (AAD)' {
 
         It 'a user excluded from every counted policy is a shortfall carrying structured exclusions for the emergency-access approval' {
             Catalog104
-            $p = Pol -Name 'Admins 4h' -Users @() -Roles @($script:GA, $script:HIA) -Session (& $script:SifH 4); $p.Conditions.Users.ExcludeUsers = @('bg-1')
+            $p = Pol -Name 'Admins 4h' -Users @() -Roles $script:AdminRoles -Session (& $script:SifH 4); $p.Conditions.Users.ExcludeUsers = @('bg-1')
             Ca104 @($p, (GuestPol -Session (& $script:SifH 8)))
             $f = V104
             $f.State | Should -Be 'Partial'
@@ -1984,14 +2172,47 @@ Describe 'Benchmark gap fixes (AAD)' {
         }
 
         It 'not read is not assessed: no role catalog, a results file without the guest selection, or an incomplete policy list' {
-            Ca104 @((Pol -Name 'Admins 4h' -Users @() -Roles @($script:GA) -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8)))
+            Ca104 @((Pol -Name 'Admins 4h' -Users @() -Roles $script:AdminRoles -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8)))
             $f = V104; $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'role catalog was not read'
             Clear-TPState; Catalog104
-            Ca104 @((Pol -Name 'Admins 4h' -Users @() -Roles @($script:GA, $script:HIA) -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8))) -GuestRead $false
+            Ca104 @((Pol -Name 'Admins 4h' -Users @() -Roles $script:AdminRoles -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8))) -GuestRead $false
             $f = V104; $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'predates the read'
             Clear-TPState; Catalog104
             Set-TPRawData -Key 'AAD-CAPolicies' -Data (Bag @{ Policies = @(); GuestConditionsRead = $true; SectionStatus = @{ PolicyCompleteness = 'Failed' } })
             (V104).State | Should -Be 'NotApplicable'
+        }
+
+        It 'CIS 5.2.2.4: the persistent browser session must be never persistent; a results file without that read is not assessed' {
+            foreach ($c in @(@{ Pb = $null; Why = 'not configured' }, @{ Pb = @{ IsEnabled = $true; Mode = 'always' }; Why = 'always persistent' }, @{ Pb = @{ IsEnabled = $false; Mode = 'never' }; Why = 'control off' })) {
+                Clear-TPState; Catalog104
+                Ca104 @((Pol -Name 'Admins 4h' -Users @() -Roles $script:AdminRoles -Session (& $script:SifH 4 'hours' $c.Pb)), (GuestPol -Session (& $script:SifH 8)))
+                $f = V104
+                $f.State | Should -Be 'Partial' -Because "persistent browser $($c.Why)"
+                $f.Detail | Should -Match "Sets 4 hours or less for privileged roles but not a persistent browser session of never persistent, so not counted: Admins 4h"
+                $f.Detail | Should -Match 'No single enabled policy names every one of the 15 administrative roles CIS 5.2.2.4 lists'
+            }
+            Clear-TPState; Catalog104
+            $old = @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'timeBased'; Value = 4; Type = 'hours' } }   # no PersistentBrowser key: an older results file
+            Ca104 @((Pol -Name 'Admins 4h' -Users @() -Roles $script:AdminRoles -Session $old), (GuestPol -Session (& $script:SifH 8)))
+            $f = V104; $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'predates the read of that session control'
+        }
+
+        It 'CIS 5.2.2.4: one policy must name every role CIS lists; several policies splitting the roles cover each role but not the CIS audit' {
+            Catalog104
+            $half = [int][math]::Floor($script:AdminRoles.Count / 2)
+            Ca104 @((Pol -Name 'Admins A' -Users @() -Roles @($script:AdminRoles | Select-Object -First $half) -Session (& $script:SifH 4)),
+                    (Pol -Name 'Admins B' -Users @() -Roles @($script:AdminRoles | Select-Object -Skip $half) -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8)))
+            $f = V104
+            $f.State | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Every one of the 16 privileged roles'
+            $f.Detail | Should -Match "No single enabled policy names every one of the 15 administrative roles CIS 5.2.2.4 lists .*'Admins A' leaves out"
+            # Global Reader and Password Administrator are in neither the tool's list nor this catalog, and are still required.
+            Clear-TPState; Catalog104
+            $noGr = @($script:AdminRoles | Where-Object { $_ -notin @('f2ef992c-3afb-46b9-b7cf-a126ee74c451', '966707d0-3269-4727-9be2-8c3a10f19b9d') })
+            Ca104 @((Pol -Name 'Admins 4h' -Users @() -Roles $noGr -Session (& $script:SifH 4)), (GuestPol -Session (& $script:SifH 8)))
+            $f = V104
+            $f.State | Should -Be 'Partial'
+            $f.Detail | Should -Match '2 of 16 privileged roles .* Global Reader, Password Administrator'
         }
 
         It 'the CA collector projects the guest or external users selection and records that it read it' {

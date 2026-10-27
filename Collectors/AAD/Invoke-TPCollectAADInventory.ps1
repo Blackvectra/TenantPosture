@@ -409,6 +409,10 @@ function Invoke-TPCollectAADInventory {
                 IsEnabled            = (Get-TPObjectField -Item $amp -Key 'isEnabled' -Default $null)
                 PasswordRestrictions = @(Get-TPNestedProperty -Object $amp -Path 'applicationRestrictions.passwordCredentials' -Default @() | Where-Object { $null -ne $_ } | ForEach-Object { & $mkRestriction $_ })
                 KeyRestrictions      = @(Get-TPNestedProperty -Object $amp -Path 'applicationRestrictions.keyCredentials' -Default @() | Where-Object { $null -ne $_ } | ForEach-Object { & $mkRestriction $_ })
+                # The same restrictions for service principals (CIS 5.1.5.4 / 5.1.5.6
+                # apply the limit to application registrations AND service principals).
+                ServicePrincipalPasswordRestrictions = @(Get-TPNestedProperty -Object $amp -Path 'servicePrincipalRestrictions.passwordCredentials' -Default @() | Where-Object { $null -ne $_ } | ForEach-Object { & $mkRestriction $_ })
+                ServicePrincipalKeyRestrictions      = @(Get-TPNestedProperty -Object $amp -Path 'servicePrincipalRestrictions.keyCredentials' -Default @() | Where-Object { $null -ne $_ } | ForEach-Object { & $mkRestriction $_ })
             }
             $result.Data.SectionStatus.AppManagementPolicy = 'Collected'
         } catch {

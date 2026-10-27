@@ -38,8 +38,10 @@ $script:TPAppCredMaxLifetimeDays = 180
 $script:TPAppCredWarnDays        = 30
 
 # The tenant application management policy half (ScubaGear MS.AAD.5.6v1 and
-# 5.7v1 audit it): enabled, with a passwordLifetime and an asymmetricKeyLifetime
-# restriction that is enabled, applies to every app (no created-after date),
+# 5.7v1, CIS v7.0.0 5.1.5.4 and 5.1.5.6 audit it): enabled, with a
+# passwordLifetime and an asymmetricKeyLifetime restriction, each for application
+# registrations AND service principals, that is enabled, applies to every object
+# (no created-after date),
 # exempts no actor, and caps the lifetime at this control's own bound. Returns
 # Verified / Shortfalls / NotEstablished sentences. Module scope, not exported.
 function Get-TPAppManagementPolicyVerdict {
@@ -58,11 +60,22 @@ function Get-TPAppManagementPolicyVerdict {
         else { $s += 'the tenant application management policy is not enabled, so no lifetime limit applies to new secrets or certificates.' }
         return [pscustomobject]@{ Verified = $v; Shortfalls = $s; NotEstablished = $n }
     }
+    # CIS 5.1.5.4 (secrets) and 5.1.5.6 (certificates) apply the limit to both
+    # application registrations and service principals; each scope is judged on
+    # its own. A results file from before the service-principal restrictions were
+    # collected has no key for them and leaves that half not assessed.
     foreach ($kind in @(
-            @{ Key = 'PasswordRestrictions'; Type = 'passwordLifetime';      Name = 'client secrets (passwordLifetime)' },
-            @{ Key = 'KeyRestrictions';      Type = 'asymmetricKeyLifetime'; Name = 'certificates (asymmetricKeyLifetime)' })) {
+            @{ Key = 'PasswordRestrictions'; Type = 'passwordLifetime';      Name = 'client secrets (passwordLifetime)';      Scope = 'application registrations' },
+            @{ Key = 'KeyRestrictions';      Type = 'asymmetricKeyLifetime'; Name = 'certificates (asymmetricKeyLifetime)';  Scope = 'application registrations' },
+            @{ Key = 'ServicePrincipalPasswordRestrictions'; Type = 'passwordLifetime';      Name = 'client secrets (passwordLifetime)';     Scope = 'service principals' },
+            @{ Key = 'ServicePrincipalKeyRestrictions';      Type = 'asymmetricKeyLifetime'; Name = 'certificates (asymmetricKeyLifetime)'; Scope = 'service principals' })) {
+        $what = "$($kind.Name) on $($kind.Scope)"
+        if (-not (Test-TPFieldPresent -Item $pol -Key $kind.Key)) {
+            $n += "the tenant application management policy limit for $what was not read (a results file from before it was collected)."
+            continue
+        }
         $r = @(Get-TPObjectField -Item $pol -Key $kind.Key -Default @() | Where-Object { $null -ne $_ -and [string](Get-TPObjectField -Item $_ -Key 'RestrictionType' -Default '') -eq $kind.Type }) | Select-Object -First 1
-        if (-not $r) { $s += "the tenant application management policy sets no lifetime limit for $($kind.Name)."; continue }
+        if (-not $r) { $s += "the tenant application management policy sets no lifetime limit for $what."; continue }
         $state = [string](Get-TPObjectField -Item $r -Key 'State' -Default '')
         $maxRaw = [string](Get-TPObjectField -Item $r -Key 'MaxLifetime' -Default '')
         $days = $null
@@ -70,13 +83,13 @@ function Get-TPAppManagementPolicyVerdict {
         $after = ConvertTo-TPUtcDateTime (Get-TPObjectField -Item $r -Key 'RestrictForAppsCreatedAfterDateTime' -Default $null)
         $exempt = [int](Get-TPObjectField -Item $r -Key 'ExcludedActorAttributes' -Default 0)
         $why = @()
-        if ($state -eq 'disabled') { $why += 'the restriction is disabled' } elseif ($state -ne 'enabled') { $n += "the state of the lifetime limit for $($kind.Name) was not returned."; continue }
-        if ($null -eq $days) { $n += "the lifetime limit for $($kind.Name) ('$maxRaw') could not be read as a duration."; continue }
+        if ($state -eq 'disabled') { $why += 'the restriction is disabled' } elseif ($state -ne 'enabled') { $n += "the state of the lifetime limit for $what was not returned."; continue }
+        if ($null -eq $days) { $n += "the lifetime limit for $what ('$maxRaw') could not be read as a duration."; continue }
         if ($days -gt $MaxDays) { $why += "it allows $([math]::Round($days)) days, more than $MaxDays" }
-        if ($after -and $after.Year -gt 1) { $why += "it applies only to applications created after $($after.ToString('yyyy-MM-dd')), so older applications are unrestricted" }
+        if ($after -and $after.Year -gt 1) { $why += "it applies only to objects created after $($after.ToString('yyyy-MM-dd')), so older ones are unrestricted" }
         if ($exempt -gt 0) { $why += 'it exempts actors holding a custom security attribute' }
-        if ($why.Count) { $s += "the tenant application management policy limit for $($kind.Name) falls short: $($why -join '; ')." }
-        else { $v += "The tenant application management policy limits $($kind.Name) to $([math]::Round($days)) days for every application." }
+        if ($why.Count) { $s += "the tenant application management policy limit for $what falls short: $($why -join '; ')." }
+        else { $v += "The tenant application management policy limits $what to $([math]::Round($days)) days for every object." }
     }
     return [pscustomobject]@{ Verified = $v; Shortfalls = $s; NotEstablished = $n }
 }
@@ -97,7 +110,7 @@ function Test-TPControlAADAppCredentialExpiry {
 
     $creds = @(Get-TPNestedProperty -Object $inv -Path 'Data.AppCredentials' -Default @())
     $pv = Get-TPAppManagementPolicyVerdict -Inventory $inv -MaxDays $script:TPAppCredMaxLifetimeDays
-    $required = "Every application credential current and issued for no more than $($script:TPAppCredMaxLifetimeDays) days, and the tenant application management policy limiting new secrets and certificates to $($script:TPAppCredMaxLifetimeDays) days for every application"
+    $required = "Every application credential current and issued for no more than $($script:TPAppCredMaxLifetimeDays) days, and the tenant application management policy limiting new secrets and certificates to $($script:TPAppCredMaxLifetimeDays) days for every application registration and service principal"
 
     # No credentials at all is a legitimate and good state — an app-only
     # integration may use federated credentials, or the tenant may simply have

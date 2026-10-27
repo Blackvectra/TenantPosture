@@ -553,19 +553,20 @@ Purview > DLP > Create or edit policy > Choose where to apply > Enable Exchange,
 **License required:** M365 Business Premium or E3+
 
 **Description:**
-At least one DLP policy uses sensitive information types (SSN, credit card, health data) for automatic content detection.
+At least one enabled DLP rule matches sensitive information types (SSN, credit card, health data) inside a DLP policy that is enforced (Mode Enable) and covers Exchange, SharePoint, OneDrive or Teams. A rule in a test-mode policy, or in a policy covering only other locations such as devices, is not counted; a policy whose locations were not recorded is not assessed.
 
 **Business risk:**
 DLP without SITs cannot automatically identify regulated or sensitive content. Policy enforcement is entirely manual and depends on users correctly classifying their own files.
 
 **Remediation:**
-Purview > DLP > Edit policy > Add condition > Content contains > Sensitive info types.
+Purview > Data loss prevention > Policies: in a policy that covers Exchange, SharePoint, OneDrive or Teams, add a rule condition Content contains > Sensitive info types, then turn the policy on (Mode Enable, not simulation).
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | SC-28 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 3.2.1 |
 | CIS Controls v8.1 | 3.13 |
 | CISA SCuBA | MS.DEFENDER.4.1v2 |
 | CMMC 2.0 | MP.L2-3.8.1 |

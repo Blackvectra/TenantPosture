@@ -1288,9 +1288,6 @@
     "INT-2.4": {
       "Reason": "Microsoft's Zero Trust common policies page gives recommended compliance settings for Windows, iOS/iPadOS and Android only, not macOS; no Microsoft-published macOS compliance baseline with a FileVault value was found, and ScubaGear has no Intune baseline. CIS Apple macOS and DISA macOS STIG FileVault rules audit the device's FileVault state, not an Intune compliance-policy rule, so they are a different setting."
     },
-    "INT-3.1": {
-      "Reason": "Searched Microsoft's Intune enrollment guidance, Zero Trust common policies and the security configuration framework pages: Microsoft documents the enrollment restriction options but publishes no recommended value set. The control is Satisfied by any single restriction on any one platform, so it could not pass a value-specific item anyway."
-    },
     "INT-3.2": {
       "Reason": "No allowed benchmark audits that an app configuration policy exists. Microsoft's app configuration guidance (for example Outlook or Edge managed configuration) documents keys without recommending the existence of a policy as a security baseline, and the control reads no key or value."
     },

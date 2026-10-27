@@ -68,7 +68,66 @@ Describe 'Intune controls count what enforces something' {
         (Verdict 'Test-TPControlIntuneEnrollmentRestrictions' 'INT-3.1').State | Should -Be 'Gap'
         $d = $script:Defaults.Clone(); $d[1] = $d[1].Clone(); $d[1].windowsRestriction = @{ platformBlocked = $false; personalDeviceEnrollmentBlocked = $true }
         Run @{ 'deviceEnrollmentConfigurations' = $d }
-        (Verdict 'Test-TPControlIntuneEnrollmentRestrictions' 'INT-3.1').State | Should -Be 'Satisfied'
+        (Verdict 'Test-TPControlIntuneEnrollmentRestrictions' 'INT-3.1').State | Should -Not -Be 'Satisfied' -Because 'one platform blocked is not every platform (CIS 4.2)'
+    }
+    Context 'INT-3.1 judges the default platform restriction as CIS Microsoft 365 v7.0.0 4.2 audits it' {
+        BeforeAll {
+            $script:Rx = { param([bool] $Platform, [bool] $Personal) @{ '@odata.type' = 'microsoft.graph.deviceEnrollmentPlatformRestriction'; platformBlocked = $Platform; personalDeviceEnrollmentBlocked = $Personal; osMinimumVersion = $null; osMaximumVersion = $null } }
+            # The beta shape of the priority-0 default, every platform CIS lists plus the ones it does not.
+            $script:Default = {
+                param([hashtable] $Over = @{})
+                $o = [ordered]@{ '@odata.type' = '#microsoft.graph.deviceEnrollmentPlatformRestrictionsConfiguration'; id = "$($script:Tid)_DefaultPlatformRestrictions"; displayName = 'All users and all devices'; priority = 0
+                    windowsRestriction = (& $script:Rx $false $true); windowsHomeSkuRestriction = (& $script:Rx $false $false); windowsMobileRestriction = (& $script:Rx $true $false)
+                    iosRestriction = (& $script:Rx $false $true); macOSRestriction = (& $script:Rx $false $true); macRestriction = (& $script:Rx $false $false)
+                    androidRestriction = (& $script:Rx $true $false); androidForWorkRestriction = (& $script:Rx $false $true) }
+                foreach ($k in $Over.Keys) { if ($null -eq $Over[$k]) { $o.Remove($k) } else { $o[$k] = $Over[$k] } }
+                $o
+            }
+            $script:Run31 = { param($Rows) Run @{ 'deviceEnrollmentConfigurations' = @($Rows) }; Verdict 'Test-TPControlIntuneEnrollmentRestrictions' 'INT-3.1' }
+        }
+        It 'every listed platform blocks personal devices or the platform: Satisfied, read from Graph beta' {
+            $f = & $script:Run31 @(& $script:Default)
+            $f.State | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'Android device administrator: platform blocked'
+            (& $script:Mod { $script:SeenUris }) | Should -Contain 'https://graph.microsoft.com/beta/deviceManagement/deviceEnrollmentConfigurations'
+        }
+        It 'any one listed platform allowing personal devices fails, by name' {
+            foreach ($k in @('windowsRestriction', 'iosRestriction', 'macOSRestriction', 'androidForWorkRestriction', 'androidRestriction')) {
+                $f = & $script:Run31 @(& $script:Default @{ $k = (& $script:Rx $false $false) })
+                $f.State | Should -Be 'Partial' -Because "$k allows personal enrollment"
+                @($f.AffectedObjects | Where-Object { $_.Platform }).Count | Should -Be 1
+            }
+            $all = @{}; foreach ($k in @('windowsRestriction', 'iosRestriction', 'macOSRestriction', 'androidForWorkRestriction', 'androidRestriction')) { $all[$k] = (& $script:Rx $false $false) }
+            (& $script:Run31 @(& $script:Default $all)).State | Should -Be 'Gap'
+        }
+        It 'a minimum OS version, a block in a custom restriction, or the platforms CIS does not list do not count' {
+            $minOs = @{ platformBlocked = $false; personalDeviceEnrollmentBlocked = $false; osMinimumVersion = '17.0' }
+            (& $script:Run31 @(& $script:Default @{ iosRestriction = $minOs })).State | Should -Be 'Partial'
+            $custom = @{ '@odata.type' = '#microsoft.graph.deviceEnrollmentPlatformRestrictionConfiguration'; id = 'custom_1'; priority = 1; platformType = 'ios'
+                         platformRestriction = (& $script:Rx $false $true) }
+            (& $script:Run31 @((& $script:Default @{ iosRestriction = (& $script:Rx $false $false) }), $custom)).State | Should -Be 'Partial' -Because 'CIS 4.2 judges the default restriction, not a custom one'
+            (& $script:Run31 @(& $script:Default @{ windowsHomeSkuRestriction = (& $script:Rx $false $false); macRestriction = (& $script:Rx $false $false) })).State | Should -Be 'Satisfied'
+        }
+        It 'a platform not returned, or a flag not returned, is not assessed; a found shortfall still reports' {
+            $f = & $script:Run31 @(& $script:Default @{ androidForWorkRestriction = $null })
+            $f.State | Should -Be 'NotApplicable' -Because 'the v1.0 shape has no Android Enterprise work profile row'
+            $f.Detail | Should -Match 'Android Enterprise'
+            (& $script:Run31 @(& $script:Default @{ macOSRestriction = @{ platformBlocked = $false } })).State | Should -Be 'NotApplicable'
+            (& $script:Run31 @(& $script:Default @{ androidForWorkRestriction = $null; iosRestriction = (& $script:Rx $false $false) })).State | Should -Not -Be 'Satisfied'
+        }
+        It 'no priority-0 default, a failed beta read, or an older results file is not assessed' {
+            $f = & $script:Run31 @(& $script:Default @{ priority = 5 })
+            $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match '_DefaultPlatformRestrictions'
+            Clear-TPState
+            Set-TPRawData -Key 'Intune-DeviceCompliance' -Data @{ Success = $true; Data = @{ EnrollmentRestrictions = @(@{ Type = '#microsoft.graph.deviceEnrollmentPlatformRestrictionsConfiguration'; Restrictions = @(@{ Platform = 'ios'; PlatformBlocked = $true }) }) } }
+            (Verdict 'Test-TPControlIntuneEnrollmentRestrictions' 'INT-3.1').State | Should -Be 'NotApplicable' -Because 'a results file from before the beta read cannot show the default restriction'
+            Clear-TPState
+            Set-TPRawData -Key 'Intune-DeviceCompliance' -Data @{ Success = $true; Data = @{ DefaultPlatformRestriction = $null; SectionStatus = @{ DefaultPlatformRestriction = 'Failed' } } }
+            (Verdict 'Test-TPControlIntuneEnrollmentRestrictions' 'INT-3.1').Detail | Should -Match 'failed'
+        }
+        It 'INT-3.1 cites CIS Microsoft 365 v7.0.0 4.2' {
+            (Get-TPControlById -ControlId 'INT-3.1').References.CIS | Should -Be '4.2'
+        }
     }
     It 'INT-4.2 reads the WHfB state, not the presence of the default configuration, and a disabled tenant-wide policy is not assessed, never a Gap' {
         # Microsoft: the tenant-wide policy "is usually disabled and Windows Hello for Business is

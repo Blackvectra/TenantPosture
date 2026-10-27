@@ -818,7 +818,35 @@ function Test-TPControlDefenderDLPSITs {
     $unknownRules = @($states | Where-Object { $_.State -eq 'Unknown' })
     $testRules   = @($states | Where-Object { $_.State -eq 'TestMode' })
     $unknownSit  = @($unknownRules | Where-Object { @($_.SITs).Count -gt 0 })
-    $withSITs    = @($activeRules | Where-Object { @($_.SITs).Count -gt 0 })
+    $sitRules    = @($activeRules | Where-Object { @($_.SITs).Count -gt 0 })
+    # LOCATION: the rule's policy has to reach mail or files, Exchange, SharePoint, OneDrive or Teams
+    # (CIS Microsoft 365 Foundations v7.0.0 3.2.1, the same reading PVW-1.3 applies). An enforcing
+    # Endpoint-only or Copilot-only policy protects neither. A policy whose workloads were not
+    # recorded (an older results file) is not established either way.
+    $core = @('Exchange', 'SharePoint', 'OneDriveForBusiness', 'Teams')
+    $wlByPolicy = @{}
+    foreach ($p in $dlpPolicies) {
+        $pn = [string](Get-TPObjectField -Item $p -Key 'Name' -Default '')
+        if ($pn) { $wlByPolicy[$pn] = @(@(Get-TPObjectField -Item $p -Key 'Workloads' -Default @()) | Where-Object { $_ } | ForEach-Object { [string]$_ }) }
+    }
+    $wlOf      = { param($r) if ($wlByPolicy.ContainsKey([string]$r.Policy)) { @($wlByPolicy[[string]$r.Policy]) } else { @() } }
+    $withSITs  = @($sitRules | Where-Object { @(& $wlOf $_ | Where-Object { $_ -in $core }).Count -gt 0 })
+    $sitWlUnk  = @($sitRules | Where-Object { @(& $wlOf $_).Count -eq 0 })
+    $sitOther  = @($sitRules | Where-Object { @(& $wlOf $_).Count -gt 0 -and @(& $wlOf $_ | Where-Object { $_ -in $core }).Count -eq 0 })
+
+    if ($withSITs.Count -eq 0 -and $sitWlUnk.Count -gt 0) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "$($sitWlUnk.Count) enabled rule(s) in enforcing policies match sensitive information types, but which workloads their policies cover was not recorded ($((@($sitWlUnk | ForEach-Object { $_.Policy } | Sort-Object -Unique)) -join ', ')), so whether any protects Exchange, SharePoint, OneDrive or Teams is not established; not assessed."
+        return
+    }
+    if ($withSITs.Count -eq 0 -and $sitOther.Count -gt 0) {
+        $otherWl = @($sitOther | ForEach-Object { & $wlOf $_ } | Sort-Object -Unique) -join ', '
+        Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -ShortfallState Gap `
+            -Shortfalls @("$($sitOther.Count) enabled rule(s) in enforcing policies match sensitive information types, but their policies cover none of Exchange, SharePoint, OneDrive and Teams (they cover: $otherWl), so sensitive information in mail and files is not inspected.") `
+            -CurrentValue "0 enforcing rules with sensitive information types on Exchange, SharePoint, OneDrive or Teams" `
+            -RequiredValue 'An enabled rule matching sensitive information types in an enforced DLP policy covering Exchange, SharePoint, OneDrive or Teams'
+        return
+    }
 
     if ($withSITs.Count -gt 0) {
         $sitNames = @($withSITs | ForEach-Object { $_.SITs } | Sort-Object -Unique)
@@ -827,7 +855,8 @@ function Test-TPControlDefenderDLPSITs {
         $blocking = @($withSITs | Where-Object { $_.Blocks -eq $true }).Count
         $unread   = @($withSITs | Where-Object { $null -eq $_.Blocks }).Count
         $enf = if ($unread -eq $withSITs.Count) { 'Whether they block or only notify was not read.' } else { "$blocking of $($withSITs.Count) block access; the rest notify or audit." }
-        $verified = @("$($withSITs.Count) of $($activeRules.Count) enabled rule(s) in enforcing policies match on sensitive information types: $shown$more.", $enf)
+        $wlCovered = @($withSITs | ForEach-Object { & $wlOf $_ } | Where-Object { $_ -in $core } | Sort-Object -Unique) -join ', '
+        $verified = @("$($withSITs.Count) of $($activeRules.Count) enabled rule(s) in enforcing policies covering $wlCovered match on sensitive information types: $shown$more.", $enf)
         if ($testRules.Count -gt 0) {
             $tSits = @($testRules | ForEach-Object { $_.SITs } | Sort-Object -Unique)
             $verified += "Not counted (policy in test mode or off): $($testRules.Count) rule(s)$(if ($tSits.Count) { " that would detect $(@($tSits | Select-Object -First 6) -join ', ')" }) in $((@($testRules | ForEach-Object { $_.Policy } | Sort-Object -Unique)) -join ', ')."

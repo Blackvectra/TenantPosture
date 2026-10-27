@@ -163,10 +163,13 @@ Describe 'Coverage is judged on who is protected, not on which policies exist' {
             (V 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Partial'
             $real = Pol -Name 'Generic policy' -Grant @() -StrengthId '00000000-0000-0000-0000-000000000004' -StrengthName 'Phishing-resistant MFA'
             Ca @($real)
-            (V 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Satisfied'
+            # An All users policy is credited for the coverage; CIS 5.2.2.5's audit
+            # looks for the administrator roles by name, so it stays Partial.
+            $v = V 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3'
+            $v.State | Should -Be 'Partial'; $v.Detail | Should -Match 'Verified: Phishing-resistant MFA .* by: Generic policy'; $v.Detail | Should -Match 'does not pass that recommendation'
         }
         It 'AAD-1.3: a role-scoped policy with no role catalog read is not assessed (never Satisfied, never a Gap)' {
-            Ca @(Pol -Name 'admins' -Users @() -IncludeRoles @('ROLE-A') -StrengthId '00000000-0000-0000-0000-000000000004' -StrengthName 'Phishing-resistant MFA')
+            Ca @(Pol -Name 'admins' -Users @() -IncludeRoles @(& (Get-Module TenantPosture) { @($script:TPCis5225AdminRoles.Keys) }) -StrengthId '00000000-0000-0000-0000-000000000004' -StrengthName 'Phishing-resistant MFA')
             $v = V 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3'
             $v.State | Should -Be 'NotApplicable'; $v.Detail | Should -Match 'role catalog was not read'
         }
@@ -263,6 +266,29 @@ Describe 'Coverage is judged on who is protected, not on which policies exist' {
             Clear-TPState
             & $script:Pvw @($script:Enf) @(@{ Name = 'r1'; ParentPolicyName = 'PII'; Disabled = $false; BlockAccess = $true; SensitiveInfoTypes = @('U.S. Social Security Number (SSN)') })
             (V 'Test-TPControlDefenderDLPSITs' 'DEF-4.2').Detail | Should -Match '1 of 1 block access'
+        }
+        It 'DEF-4.2: the rule''s enforced policy must cover Exchange, SharePoint, OneDrive or Teams (CIS Microsoft 365 v7.0.0 3.2.1)' {
+            $ssn = @('U.S. Social Security Number (SSN)')
+            foreach ($wl in @('Exchange', 'SharePoint', 'OneDriveForBusiness', 'Teams')) {
+                Clear-TPState
+                & $script:Pvw @(@{ Name = 'One'; Mode = 'Enable'; Enabled = $true; Workloads = @($wl) }) @(@{ Name = 'r'; ParentPolicyName = 'One'; Disabled = $false; SensitiveInfoTypes = $ssn })
+                (V 'Test-TPControlDefenderDLPSITs' 'DEF-4.2').State | Should -Be 'Satisfied' -Because "$wl is a 3.2.1 location"
+            }
+            Clear-TPState
+            & $script:Pvw @(@{ Name = 'Devices'; Mode = 'Enable'; Enabled = $true; Workloads = @('EndpointDevices') }) @(@{ Name = 'r'; ParentPolicyName = 'Devices'; Disabled = $false; SensitiveInfoTypes = $ssn })
+            $v = V 'Test-TPControlDefenderDLPSITs' 'DEF-4.2'
+            $v.State | Should -Be 'Gap' -Because 'an Endpoint-only policy inspects no mail or files in Exchange, SharePoint, OneDrive or Teams'
+            $v.Detail | Should -Match 'EndpointDevices'
+            Clear-TPState
+            & $script:Pvw @(@{ Name = 'Old'; Mode = 'Enable'; Enabled = $true }) @(@{ Name = 'r'; ParentPolicyName = 'Old'; Disabled = $false; SensitiveInfoTypes = $ssn })
+            $v = V 'Test-TPControlDefenderDLPSITs' 'DEF-4.2'
+            $v.State | Should -Be 'NotApplicable' -Because 'a results file without the policy workloads cannot show the location'
+            $v.Detail | Should -Match 'not recorded'
+            Clear-TPState
+            & $script:Pvw @(@{ Name = 'Devices'; Mode = 'Enable'; Enabled = $true; Workloads = @('EndpointDevices') }, @{ Name = 'Mail'; Mode = 'TestWithNotifications'; Enabled = $false; Workloads = @('Exchange') }) `
+                @(@{ Name = 'r1'; ParentPolicyName = 'Devices'; Disabled = $false; SensitiveInfoTypes = $ssn }, @{ Name = 'r2'; ParentPolicyName = 'Mail'; Disabled = $false; SensitiveInfoTypes = $ssn })
+            (V 'Test-TPControlDefenderDLPSITs' 'DEF-4.2').State | Should -Be 'Gap' -Because 'the Exchange policy is in test mode and the enforced one covers only devices'
+            (Get-TPControlById -ControlId 'DEF-4.2').References.CIS | Should -Be '3.2.1'
         }
         It 'sensitive information types are read from flat entries AND from grouped template conditions' {
             (Get-TPDlpSensitiveTypeNames -Conditions @(@{ name = 'Credit Card Number'; id = 'x'; mincount = 1 })) | Should -Be @('Credit Card Number')

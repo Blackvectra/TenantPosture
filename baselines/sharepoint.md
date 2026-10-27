@@ -56,19 +56,20 @@ Set-SPOTenant -SharingCapability ExistingExternalUserSharingOnly
 **License required:** Included (M365 Business Standard+)
 
 **Description:**
-Default sharing link type is Internal or Specific people — not Anyone.
+The tenant default sharing link type (Get-SPOTenant DefaultSharingLinkType) is Direct (specific people) or Internal (people in the organization). Read from the SharePoint Online Management Shell; Anyone links being disabled tenant-wide does not by itself satisfy it, and a value not read is not assessed.
 
 **Business risk:**
 Defaulting to anonymous links means users create them accidentally, without understanding the exposure.
 
 **Remediation:**
-Set-SPOTenant -DefaultSharingLinkType Internal
+Set-SPOTenant -DefaultSharingLinkType Direct (specific people), or Internal (people in the organization)
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.7 |
 | CIS Controls v8.1 | 3.3 |
 | CISA SCuBA | MS.SHAREPOINT.2.1v1 |
 | CMMC 2.0 | AC.L2-3.1.3 |

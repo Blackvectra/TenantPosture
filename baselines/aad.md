@@ -87,19 +87,20 @@ CA policy: Users = All, Apps = All cloud apps, Grant = Require MFA. Without Micr
 **License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-CA policy requires phishing-resistant MFA (Authentication Strength: FIDO2, CBA, or Windows Hello) for all privileged directory roles.
+A Conditional Access policy that is On requires the phishing-resistant MFA authentication strength (only FIDO2 security keys, Windows Hello for Business and certificate-based MFA) on all resources with no exclusion and no narrowing condition, and names every administrator role CIS 5.2.2.5 lists (Application, Authentication, Billing, Cloud Application, Conditional Access, Exchange, Global, Helpdesk, Password, Privileged Authentication, Privileged Role, Security, SharePoint and User Administrator, and Global Reader) as well as every privileged role in the tenant's own role catalog. A policy for All users protects administrators but does not on its own pass CIS 5.2.2.5's audit, which looks for the roles by name.
 
 **Business risk:**
 Standard MFA is bypassed by AiTM proxy phishing attacks. Attackers use Evilginx2 to steal session tokens even when MFA is completed.
 
 **Remediation:**
-CA policy targeting privileged roles with Authentication Strength = Phishing-resistant MFA. Must cover Global Administrator at minimum.
+Create a Conditional Access policy that includes, under Users > Directory roles, every administrator role CIS 5.2.2.5 lists and every other privileged role the tenant uses; targets All resources with no exclusions and no platform, location, client app, device filter, risk or authentication flow condition; and grants access only with Require authentication strength = Phishing-resistant MFA. Exclude emergency access accounts and record them as approved exceptions.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2(1), IA-2(2), IA-2(6) |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.2.5 |
 | CIS Controls v8.1 | 6.5 |
 | CISA SCuBA | MS.AAD.3.6v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
@@ -118,19 +119,20 @@ CA policy targeting privileged roles with Authentication Strength = Phishing-res
 **License required:** Entra ID P2
 
 **Description:**
-CA policy enforces MFA or blocks access when sign-in risk is elevated. Requires Entra ID P2.
+Enabled Conditional Access policies respond to high and medium sign-in risk for all users on all applications (each level judged on who it protects), and one enabled policy meets CIS 5.2.2.7: it selects both high and medium sign-in risk, covers all users, all applications and every client app type with no other condition, and either blocks access or requires MFA (or an authentication strength) with sign-in frequency set to every time. Requires Entra ID P2.
 
 **Business risk:**
 Without sign-in risk policies, compromised credentials and impossible travel go unchallenged.
 
 **Remediation:**
-CA policy: Condition = Sign-in risk high/medium, Grant = Require MFA or Block. Requires Entra P2.
+CA policy: Users = All users (exclude emergency access accounts only), Target resources = All resources, Conditions > Sign-in risk = High and Medium, Client apps not limited, Grant = Require multifactor authentication (or an authentication strength), Session > Sign-in frequency = Every time; or Grant = Block access. Requires Entra P2.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-7, IA-2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.2.7 |
 | CIS Controls v8.1 | 6.7 |
 | CISA SCuBA | MS.AAD.2.3v1 |
 | CMMC 2.0 | AC.L2-3.1.8 |
@@ -149,19 +151,20 @@ CA policy: Condition = Sign-in risk high/medium, Grant = Require MFA or Block. R
 **License required:** Entra ID P2
 
 **Description:**
-CA policy enforces password change or blocks access when user risk is elevated.
+Enabled Conditional Access policies respond to high user risk for all users on all applications, and one enabled policy meets CIS 5.2.2.6: it selects high user risk, covers all users, all applications and every client app type with no other condition, requires a password change AND MFA (or an authentication strength), and sets sign-in frequency to every time. Microsoft's newer 'Require risk remediation' grant is reported but does not meet CIS 5.2.2.6, which audits the password-change grant.
 
 **Business risk:**
 High user risk indicates credential compromise. Without automated response, compromised accounts remain active.
 
 **Remediation:**
-CA policy: Condition = User risk high, Grant = Require password change. Requires Entra P2.
+CA policy: Users = All users (exclude emergency access accounts only), Target resources = All resources, Conditions > User risk = High, Client apps not limited, Grant = Require multifactor authentication (or an authentication strength) AND Require password change (Require all the selected controls), Session > Sign-in frequency = Every time. Requires Entra P2.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-7, IA-5 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.2.6 |
 | CIS Controls v8.1 | 6.7 |
 | CISA SCuBA | MS.AAD.2.1v1 |
 | CMMC 2.0 | AC.L2-3.1.8 |
@@ -1045,19 +1048,20 @@ CA policy: Condition = User risk = High, Grant = Require password change. Requir
 **License required:** Included (all plans)
 
 **Description:**
-All privileged role holders use separate cloud-only accounts, not their day-to-day synced accounts.
+No account holding a directory role whose name contains "Administrator", or Global Reader, is synchronized from on-premises Active Directory (onPremisesSyncEnabled), judged from the tenant's own role catalog over active and, where read, PIM-eligible assignments: administrators use separate cloud-only accounts.
 
 **Business risk:**
 Using the same account for email and admin work means email phishing can compromise admin credentials. Dedicated admin accounts separate the blast radius.
 
 **Remediation:**
-Create dedicated .admin or .onmicrosoft.com accounts for all privileged role holders. Remove privileged roles from on-premises synced accounts.
+Create dedicated cloud-only administrator accounts (for example on the .onmicrosoft.com domain) for every holder of a role whose name contains "Administrator", or Global Reader, move the role assignments to them, and remove those roles from on-premises synced accounts.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6(5) |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 1.1.1 |
 | CIS Controls v8.1 | 5.4 |
 | CISA SCuBA | MS.AAD.7.3v1 |
 | CMMC 2.0 | AC.L2-3.1.6 |
@@ -1107,19 +1111,20 @@ Create a Sentinel or Defender XDR alert rule for sign-in from break-glass accoun
 **License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-CA policy enforces sign-in frequency to limit the lifetime of stolen session tokens.
+Enabled CA policies set a sign-in frequency of 4 hours or less with a persistent browser session of never persistent for every privileged role (the tool's list, Microsoft's isPrivileged roles and the administrative roles CIS 5.2.2.4 lists, named in the policy's roles, on all applications), with at least one such policy naming every role CIS 5.2.2.4 lists, and 24 hours or less (or every time) for guest or external users, limiting the lifetime of stolen session tokens.
 
 **Business risk:**
 Stolen tokens (from AiTM, token theft via malware) remain valid for the full session lifetime. Sign-in frequency limits re-use to the configured window.
 
 **Remediation:**
-CA policy: Session controls > Sign-in frequency > set to 1 hour for privileged users, 8 hours for standard users.
+CA policy for the privileged directory roles (Users > Directory roles: every privileged role, including Application, Authentication, Billing, Cloud Application, Conditional Access, Exchange, Global, Helpdesk, Password, Privileged Authentication, Privileged Role, Security, SharePoint and User Administrator and Global Reader), Target resources = All resources: Session > Sign-in frequency > Periodic reauthentication, 4 hours or less, and Session > Persistent browser session > Never persistent. CA policy for Guest or external users: Session > Sign-in frequency, 24 hours or less (or Every time).
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-12 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.2.4 |
 | CIS Controls v8.1 | 4.3 |
 | CMMC 2.0 | AC.L2-3.1.10 |
 | ISO/IEC 27001:2022 | A.5.17, A.8.3 |
@@ -1228,19 +1233,20 @@ Entra ID > Identity Protection > Risky workload identities. Investigate and reme
 **License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-CA policy enforces token protection to bind tokens to the originating device, blocking replay attacks.
+CA policy enforces token protection for Office 365 Exchange Online, Office 365 SharePoint Online and Microsoft Teams Services on Windows mobile apps and desktop clients, binding tokens to the originating device and blocking replay attacks.
 
 **Business risk:**
 AiTM (adversary-in-the-middle) phishing steals authenticated session tokens. Without token binding, stolen tokens work from any device — effectively bypassing MFA entirely.
 
 **Remediation:**
-CA policy: Session controls > Token protection. Enable for Exchange Online and SharePoint Online at minimum. Requires Entra ID P1+. Note: may cause issues with non-compliant clients — test in report-only mode first.
+CA policy: Users = the users in scope (not None), Target resources = Select resources: Office 365 Exchange Online, Office 365 SharePoint Online and Microsoft Teams Services only (not All resources or the Office 365 group), Conditions > Device platforms = Windows, Client apps = Mobile apps and desktop clients only, Session > Require token protection for sign-in sessions. Requires Entra ID P1+. Note: unsupported clients are blocked; test in report-only mode first.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-12, IA-2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.2.16 |
 | CMMC 2.0 | AC.L2-3.1.10 |
 | ISO/IEC 27001:2022 | A.5.17 |
 | SOC 2 | CC6.1 |
@@ -1618,19 +1624,20 @@ Entra ID > Enterprise applications > All applications > Permissions. For each ap
 **License required:** Included (Entra ID Free)
 
 **Description:**
-App registration client secrets and certificates are unexpired and issued with a bounded lifetime.
+App registration client secrets and certificates are unexpired and issued with a bounded lifetime, and the tenant's default application management policy is enabled and limits new client secrets (passwordLifetime) and certificates (asymmetricKeyLifetime) to 180 days or less for every application registration and every service principal, with no created-after date and no exempted actors.
 
 **Business risk:**
 A client secret is a standing bearer credential to everything its application can reach. No MFA applies to it, no Conditional Access evaluates it, and no sign-in risk is scored against it. A long-lived secret keeps working for everyone who has ever seen it — a departed administrator, a stale runbook, a CI variable, a chat message — until somebody rotates it, and nothing forces rotation. An expired credential is the other half of the same problem: the fix under outage pressure is a new secret with the longest lifetime available and no reminder set.
 
 **Remediation:**
-Entra admin center > App registrations > Certificates and secrets. Remove expired credentials rather than leaving them in place. Reissue anything with a lifetime beyond 180 days at a shorter term and record the rotation date. Prefer certificate credentials or workload identity federation over client secrets where the application supports them.
+Entra admin center > App registrations > Certificates and secrets. Remove expired credentials rather than leaving them in place. Reissue anything with a lifetime beyond 180 days at a shorter term and record the rotation date. Prefer certificate credentials or workload identity federation over client secrets where the application supports them. Enable the tenant default application management policy (Microsoft Graph /policies/defaultAppManagementPolicy) with passwordLifetime and asymmetricKeyLifetime restrictions of 180 days or less (P180D) under both applicationRestrictions and servicePrincipalRestrictions, and no restrictForAppsCreatedAfterDateTime.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-5, IA-5(1), AC-2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.5.4 |
 | CIS Controls v8.1 | 5.4, 6.2 |
 | CMMC 2.0 | IA.L2-3.5.10, AC.L1-3.1.1 |
 | MITRE ATT&CK | T1078.004, T1550.001, T1098.001 |

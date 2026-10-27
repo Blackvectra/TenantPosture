@@ -35,15 +35,17 @@ Describe 'False-pass paths from the 2026-10-11 review' {
             param([string] $Name = 'p', [string] $State = 'enabled', [string[]] $Users = @('All'), [string[]] $Groups = @(), [string[]] $Roles = @(),
                   [string[]] $ExUsers = @(), [string[]] $ExGroups = @(), [string[]] $Apps = @('All'), [string[]] $ExApps = @(),
                   [string[]] $ClientApps = @('all'), [string[]] $Grant = @(), [string] $Op = 'OR', [string[]] $Custom = @(),
-                  [string] $StrengthId = '', [string[]] $Combos = @(), [string[]] $SignInRisk = @(), [string[]] $UserRisk = @(), [string[]] $Platforms = @())
+                  [string] $StrengthId = '', [string[]] $Combos = @(), [string[]] $SignInRisk = @(), [string[]] $UserRisk = @(), [string[]] $Platforms = @(), [hashtable] $Session = @{})
             @{ Id = $Name; DisplayName = $Name; State = $State
                Conditions = @{ ClientAppTypes = $ClientApps; SignInRiskLevels = $SignInRisk; UserRiskLevels = $UserRisk; AuthFlows = @(); Platforms = $Platforms; ExcludePlatforms = @()
                                Users = @{ IncludeUsers = $Users; IncludeGroups = $Groups; IncludeRoles = $Roles; ExcludeUsers = $ExUsers; ExcludeGroups = $ExGroups; ExcludeRoles = @() }
                                Applications = @{ Include = $Apps; Exclude = $ExApps; UserActions = @() }
                                Locations = @{ Include = @(); Exclude = @() }; Devices = @{ FilterMode = ''; FilterRule = '' }; ClientApplications = @{ IncludeServicePrincipals = @() } }
                GrantControls = @{ Operator = $Op; BuiltInControls = $Grant; CustomControls = $Custom; AuthStrengthId = $StrengthId; AuthStrengthName = ''; AuthStrengthCombinations = $Combos; TermsOfUse = @() }
-               SessionControls = @{} }
+               SessionControls = $Session }
         }
+        # Sign-in frequency every time, as the collector stores it (CIS 5.2.2.6 / 5.2.2.7).
+        $script:EveryTime = @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'everyTime'; Value = $null; Type = '' }; PersistentBrowser = $null }
         function script:Ca([object[]] $Policies) {
             Clear-TPState
             Set-TPRawData -Key 'AAD-CAPolicies' -Data (Bag @{ Policies = @($Policies); SectionStatus = @{ TokenProtection = 'Collected'; NamedLocations = 'Collected' } })
@@ -116,12 +118,12 @@ Describe 'False-pass paths from the 2026-10-11 review' {
         It 'AAD-1.3: a browser-only phishing-resistant admin policy is a shortfall, never Satisfied' {
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{ RoleDefinitions = @(@{ Id = $script:GA; DisplayName = 'Global Administrator'; IsPriv = $true }) })
             $roles = Get-TPRawData -Key 'AAD-DirectoryRoles'
-            Ca @(Pol -Name 'admin-fido' -Users @() -Roles @($script:GA) -ClientApps @('browser') -StrengthId '00000000-0000-0000-0000-000000000004' -Combos @('fido2'))
+            Ca @(Pol -Name 'admin-fido' -Users @() -Roles @(& (Get-Module TenantPosture) { @($script:TPCis5225AdminRoles.Keys) }) -ClientApps @('browser') -StrengthId '00000000-0000-0000-0000-000000000004' -Combos @('fido2'))
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data $roles
             $v = V 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3'
             $v.State | Should -Be 'Gap' -Because "only a narrower policy delivers it (got: $($v.Detail))"
             $v.Detail | Should -Match 'limited to some client app types'
-            Ca @(Pol -Name 'admin-fido' -Users @() -Roles @($script:GA) -StrengthId '00000000-0000-0000-0000-000000000004' -Combos @('fido2'))
+            Ca @(Pol -Name 'admin-fido' -Users @() -Roles @(& (Get-Module TenantPosture) { @($script:TPCis5225AdminRoles.Keys) }) -StrengthId '00000000-0000-0000-0000-000000000004' -Combos @('fido2'))
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data $roles
             (V 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Satisfied'
         }
@@ -164,7 +166,11 @@ Describe 'False-pass paths from the 2026-10-11 review' {
             $v.State | Should -Be 'Partial' -Because "High is tenant-wide, Medium only for a pilot group (got: $($v.Detail))"
             $v.Detail | Should -Match 'Verified: A responding policy applies to high sign-in risk for all users on all applications by: high-all'
             $v.Detail | Should -Match "Shortfall: .*'medium-pilot' also delivers it but applies to only some users"
-            Ca @((Pol -Name 'high-all' -SignInRisk @('high') -Grant @('mfa')), (Pol -Name 'medium-all' -SignInRisk @('medium') -Grant @('block')))
+            Ca @((Pol -Name 'high-all' -SignInRisk @('high') -Grant @('mfa') -Session $script:EveryTime), (Pol -Name 'medium-all' -SignInRisk @('medium') -Grant @('block')))
+            $v = V 'Test-TPControlAADSignInRisk' 'AAD-1.4'
+            $v.State | Should -Be 'Partial' -Because 'both levels are covered tenant-wide, but CIS 5.2.2.7 audits one policy selecting both'
+            $v.Detail | Should -Match "No enabled policy meets CIS 5.2.2.7 .*'high-all' does not select medium risk"
+            Ca @(Pol -Name 'both-all' -SignInRisk @('high', 'medium') -Grant @('mfa') -Session $script:EveryTime)
             (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Satisfied'
             Ca @(Pol -Name 'high-only' -SignInRisk @('high') -Grant @('mfa'))
             $h = V 'Test-TPControlAADSignInRisk' 'AAD-1.4'; $h.State | Should -Be 'Partial'; $h.Detail | Should -Match 'No enabled policy responds to medium sign-in risk'
@@ -172,14 +178,14 @@ Describe 'False-pass paths from the 2026-10-11 review' {
         It 'AAD-1.5: a group-scoped high user-risk policy is a Gap; tenant-wide passes; different exclusions in two policies are not assessed' {
             Ca @(Pol -Name 'pilot' -Users @() -Groups @('g-pilot') -UserRisk @('high') -Grant @('riskRemediation'))
             (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Gap'
-            Ca @(Pol -Name 'all' -UserRisk @('high') -Grant @('riskRemediation'))
+            Ca @(Pol -Name 'all' -UserRisk @('high') -Grant @('passwordChange', 'mfa') -Op 'AND' -Session $script:EveryTime)
             (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied'
-            Ca @((Pol -Name 'a' -ExGroups @('g-1') -UserRisk @('high') -Grant @('riskRemediation')), (Pol -Name 'b' -ExGroups @('g-2') -UserRisk @('high') -Grant @('block')))
+            Ca @((Pol -Name 'a' -ExGroups @('g-1') -UserRisk @('high') -Grant @('passwordChange', 'mfa') -Op 'AND' -Session $script:EveryTime), (Pol -Name 'b' -ExGroups @('g-2') -UserRisk @('high') -Grant @('passwordChange', 'mfa') -Op 'AND' -Session $script:EveryTime))
             $u = V 'Test-TPControlAADUserRisk' 'AAD-1.5'
             $u.State | Should -Be 'NotApplicable' -Because "whether anyone is excluded from both was not resolved (got: $($u.Detail))"
             $u.Detail | Should -Match 'Not assessed: whether any user is excluded from every one of these policies'
-            Ca @((Pol -Name 'a' -ExGroups @('g-1') -UserRisk @('high') -Grant @('riskRemediation')), (Pol -Name 'b' -UserRisk @('high') -Grant @('block')))
-            (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied' -Because 'the second policy covers everyone the first excludes'
+            Ca @((Pol -Name 'a' -ExGroups @('g-1') -UserRisk @('high') -Grant @('riskRemediation')), (Pol -Name 'b' -UserRisk @('high') -Grant @('passwordChange', 'mfa') -Op 'AND' -Session $script:EveryTime))
+            (V 'Test-TPControlAADUserRisk' 'AAD-1.5').State | Should -Be 'Satisfied' -Because 'the second policy covers everyone the first excludes and meets CIS 5.2.2.6'
         }
         It 'AAD-1.4 / 1.5: the report-only qualification applies the same client-app rule' {
             Ca @(Pol -Name 'ro' -State 'enabledForReportingButNotEnforced' -ClientApps @('browser') -SignInRisk @('high', 'medium') -Grant @('mfa'))

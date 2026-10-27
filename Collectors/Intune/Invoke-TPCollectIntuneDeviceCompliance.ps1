@@ -8,7 +8,10 @@
 #
 # Returns: structured hashtable under key 'Intune-DeviceCompliance' via Set-TPRawData.
 # Reads:   deviceCompliancePolicies (with assignments and scheduledActionsForRule), deviceConfigurations,
-#          deviceEnrollmentConfigurations, managedDevices.
+#          deviceEnrollmentConfigurations, managedDevices; beta deviceEnrollmentConfigurations
+#          for the priority-0 default platform restriction (DefaultPlatformRestriction, INT-3.1),
+#          because v1.0 does not return its Android Enterprise work profile row.
+#          Scope: DeviceManagementServiceConfig.Read.All (already requested).
 #
 # NIST SP 800-53: CM-2 (baseline configuration), CM-6 (configuration settings),
 #                 CM-8 (component inventory), SI-2 (flaw remediation),
@@ -104,6 +107,37 @@ function Get-TPWufbRingSettings {
     return $out
 }
 
+# The priority-0 default device platform restriction ("All users and all devices",
+# id ending _DefaultPlatformRestrictions) as the beta deviceEnrollmentConfigurations
+# list returns it, reduced to the five platforms CIS Microsoft 365 Foundations
+# v7.0.0 4.2 audits. Graph v1.0 omits androidForWorkRestriction, which is why this
+# row is read from beta. Each platform keeps whether its restriction object was
+# returned and each flag only when Graph returned a boolean ($null = not read).
+function Get-TPDefaultPlatformRestriction {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([AllowNull()] [AllowEmptyCollection()] [object[]] $Configurations)
+    $def = @($Configurations | Where-Object {
+        $null -ne $_ -and
+        [string](Get-TPObjectField -Item $_ -Key 'id' -Default '') -match '_DefaultPlatformRestrictions$' -and
+        "$(Get-TPObjectField -Item $_ -Key 'priority' -Default '')" -eq '0' })
+    if ($def.Count -ne 1) { return @{ Found = $false; Count = $def.Count; Id = ''; Platforms = [ordered]@{} } }
+    $d = $def[0]
+    $flag = { param($o, [string] $k) $v = Get-TPObjectField -Item $o -Key $k -Default $null; if ($v -is [bool]) { $v } else { $null } }
+    $platforms = [ordered]@{}
+    foreach ($pair in @(@('Windows', 'windowsRestriction'), @('iOS/iPadOS', 'iosRestriction'), @('macOS', 'macOSRestriction'),
+                         @('Android Enterprise (work profile)', 'androidForWorkRestriction'), @('Android device administrator', 'androidRestriction'))) {
+        $r = Get-TPObjectField -Item $d -Key $pair[1] -Default $null
+        $platforms[$pair[0]] = @{
+            Property        = $pair[1]
+            Returned        = ($null -ne $r)
+            PlatformBlocked = $(if ($null -ne $r) { & $flag $r 'platformBlocked' } else { $null })
+            PersonalBlocked = $(if ($null -ne $r) { & $flag $r 'personalDeviceEnrollmentBlocked' } else { $null })
+        }
+    }
+    return @{ Found = $true; Count = 1; Id = [string](Get-TPObjectField -Item $d -Key 'id' -Default ''); Platforms = $platforms }
+}
+
 function Invoke-TPCollectIntuneDeviceCompliance {
     [CmdletBinding()] param()
     $result = @{
@@ -115,6 +149,7 @@ function Invoke-TPCollectIntuneDeviceCompliance {
             WindowsHelloPolicies   = @()
             EnrollmentRestrictions = @()
             EnrollmentConfig       = @()
+            DefaultPlatformRestriction = $null
             OSComplianceSummary    = @{
                 TotalCount       = 0
                 CompliantCount   = 0
@@ -135,6 +170,7 @@ function Invoke-TPCollectIntuneDeviceCompliance {
                 WindowsHelloPolicies   = 'Collected'
                 EnrollmentRestrictions = 'Collected'
                 EnrollmentConfig       = 'Collected'
+                DefaultPlatformRestriction = 'NotRun'
                 OSComplianceSummary    = 'Collected'
             }
         }
@@ -330,6 +366,19 @@ function Invoke-TPCollectIntuneDeviceCompliance {
             $result.Data.SectionStatus['EnrollmentRestrictions'] = 'Failed'
             if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                 Register-TPException -Source 'Intune-DeviceCompliance-Enrollment' -Message $_.Exception.Message
+            }
+        }
+
+        # ── Default platform restriction (beta: INT-3.1, CIS 4.2) ───────────
+        # Read separately so a refused beta read leaves only this section unread.
+        try {
+            $betaRows = @(Get-TPGraphAllPages -Uri 'https://graph.microsoft.com/beta/deviceManagement/deviceEnrollmentConfigurations')
+            $result.Data.DefaultPlatformRestriction = Get-TPDefaultPlatformRestriction -Configurations $betaRows
+            $result.Data.SectionStatus['DefaultPlatformRestriction'] = 'Collected'
+        } catch {
+            $result.Data.SectionStatus['DefaultPlatformRestriction'] = 'Failed'
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'Intune-DeviceCompliance-DefaultPlatformRestriction' -Message $_.Exception.Message
             }
         }
 

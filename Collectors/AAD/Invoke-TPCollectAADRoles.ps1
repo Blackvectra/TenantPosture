@@ -163,6 +163,14 @@ function Invoke-TPCollectAADRoles {
             }
         }
 
+        # Was a property returned at all (an explicit null included)? Shape-safe
+        # for the hashtable and PSCustomObject forms Graph responses take.
+        $hasField = { param($o, $k)
+            if ($null -eq $o) { return $false }
+            if ($o -is [System.Collections.IDictionary]) { return [bool]$o.Contains($k) }
+            return ($null -ne $o.PSObject.Properties[$k])
+        }
+
         # Build role ID → name lookup
         $roleMap = @{}
         foreach ($rd in @($result.Data.RoleDefinitions)) {
@@ -213,6 +221,10 @@ function Invoke-TPCollectAADRoles {
                     DirectoryScopeId     = [string](Get-TPObjectField -Item $a -Key 'directoryScopeId' -Default '/')
                     IsPriv               = ($privRoleNames -contains $roleName)
                     OnPremisesSyncEnabled = (Get-TPObjectField -Item $pr -Key 'onPremisesSyncEnabled' -Default $null)
+                    # $null is Graph's value for an account never synchronized and
+                    # also what an absent property reads as; AAD-10.2 credits a
+                    # cloud-only account only when the property was returned.
+                    OnPremisesSyncReturned = (& $hasField $pr 'onPremisesSyncEnabled')
                 }
             }
 
@@ -286,6 +298,7 @@ function Invoke-TPCollectAADRoles {
                     DirectoryScopeId     = [string](Get-TPObjectField -Item $e -Key 'directoryScopeId' -Default '/')
                     IsPriv               = ($privRoleNames -contains $roleName)
                     OnPremisesSyncEnabled= (Get-TPObjectField -Item $pr -Key 'onPremisesSyncEnabled' -Default $null)
+                    OnPremisesSyncReturned = (& $hasField $pr 'onPremisesSyncEnabled')
                     StartDateTime        = [string](Get-TPNestedProperty -Object $e -Path 'scheduleInfo.startDateTime' -Default '')
                     EndDateTime          = [string](Get-TPNestedProperty -Object $e -Path 'scheduleInfo.expiration.endDateTime' -Default '')
                     MemberType           = [string](Get-TPObjectField -Item $e -Key 'memberType' -Default 'Direct')

@@ -354,19 +354,20 @@ In Intune, create a Settings Catalog configuration profile for Windows 10 and la
 **License required:** M365 Business Premium or Intune Plan 1
 
 **Description:**
-Intune enrollment restrictions limit which platforms, ownership types, and OS versions can enroll.
+The default (priority 0, All users and all devices) Intune device platform restriction blocks personally owned devices, or blocks the platform, on Windows, iOS/iPadOS, macOS, Android Enterprise (work profile) and Android device administrator. A minimum OS version or a block in a custom restriction does not meet it; a platform whose restriction was not read is not assessed.
 
 **Business risk:**
 Without enrollment restrictions, any device — including unmanaged personal or obsolete devices — can enroll and receive corporate app access.
 
 **Remediation:**
-Intune > Devices > Enrollment > Enrollment restrictions > Create policy restricting to managed platforms and minimum OS versions.
+Intune > Devices > Enrollment > Device platform restriction: edit the default All users and all devices restriction for each of Windows, iOS/iPadOS, macOS and Android (Android Enterprise work profile and device administrator) and set Personally owned devices to Block, or set the platform to Block where it is not used. Enroll corporate devices through Autopilot, Automated Device Enrollment or corporate identifiers first.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | CM-7, AC-3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 4.2 |
 | CIS Controls v8.1 | 4.1 |
 | CMMC 2.0 | CM.L2-3.4.1 |
 | ISO/IEC 27001:2022 | A.8.1 |

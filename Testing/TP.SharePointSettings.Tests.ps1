@@ -48,8 +48,25 @@ Describe 'SharePoint settings are read for the control that names them' {
         It 'SPO-1.2 (default link not Anyone) is decided by the default link type, not legacy auth' {
             (Run 'Test-TPControlSharePoint' 'SPO-1.2' @{ IsLegacyAuthProtocolsEnabled = $false } @{ DefaultSharingLinkType = 'AnonymousAccess' }).State | Should -Be 'Gap'
             (Run 'Test-TPControlSharePoint' 'SPO-1.2' @{} @{ DefaultSharingLinkType = 'Internal' }).State | Should -Be 'Satisfied'
-            (Run 'Test-TPControlSharePoint' 'SPO-1.2' @{ SharingCapability = 'externalUserSharingOnly' }).State | Should -Be 'Satisfied' -Because 'Anyone links are off, so the default cannot be Anyone'
             (Run 'Test-TPControlSharePoint' 'SPO-1.2').State | Should -Be 'NotApplicable' -Because 'Anyone links on and the link type was not read'
+        }
+        It 'SPO-1.2 passes only what CIS v7.0.0 7.2.7 passes: DefaultSharingLinkType Direct or Internal, whatever the sharing capability' {
+            foreach ($cap in @('disabled','existingExternalUserSharingOnly','externalUserSharingOnly','externalUserAndGuestSharing')) {
+                (Run 'Test-TPControlSharePoint' 'SPO-1.2' @{ SharingCapability = $cap } @{ DefaultSharingLinkType = 'Direct' }).State   | Should -Be 'Satisfied' -Because "$cap with Direct"
+                (Run 'Test-TPControlSharePoint' 'SPO-1.2' @{ SharingCapability = $cap } @{ DefaultSharingLinkType = 'Internal' }).State | Should -Be 'Satisfied' -Because "$cap with Internal"
+                (Run 'Test-TPControlSharePoint' 'SPO-1.2' @{ SharingCapability = $cap } @{ DefaultSharingLinkType = 'AnonymousAccess' }).State | Should -Be 'Gap' -Because "$cap with AnonymousAccess fails 7.2.7"
+                (Run 'Test-TPControlSharePoint' 'SPO-1.2' @{ SharingCapability = $cap } @{ DefaultSharingLinkType = 'None' }).State | Should -Be 'Gap' -Because "$cap with None fails 7.2.7"
+            }
+        }
+        It 'SPO-1.2 does not pass from Anyone links being off: the link type unread is not assessed' {
+            $f = Run 'Test-TPControlSharePoint' 'SPO-1.2' @{ SharingCapability = 'externalUserSharingOnly' }
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'IncludeSharePointShell'
+            (Run 'Test-TPControlSharePoint' 'SPO-1.2' @{ SharingCapability = 'disabled' } @{ DefaultSharingLinkType = '' }).State | Should -Be 'NotApplicable'
+            (Run 'Test-TPControlSharePoint' 'SPO-1.2' @{} @{ DefaultSharingLinkType = 'Teammates' }).State | Should -Be 'NotApplicable' -Because 'an unrecognized value is not judged'
+        }
+        It 'SPO-1.2 cites CIS Microsoft 365 v7.0.0 7.2.7' {
+            (Get-TPControlById -ControlId 'SPO-1.2').References.CIS | Should -Be '7.2.7'
         }
         It 'SPO-1.4 (guest expiration) is decided by ExternalUserExpirationRequired' {
             (Run 'Test-TPControlSharePoint' 'SPO-1.4' @{} @{ ExternalUserExpirationRequired = $false; ExternalUserExpireInDays = 0 }).State | Should -Be 'Gap'
