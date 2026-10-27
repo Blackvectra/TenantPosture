@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **[MCP] Local, read-only MCP server over saved results (`Start-TPMcpServer.ps1`, `Mcp/`).** An AI assistant
+  registered with it (Claude Code, Claude Desktop) can list runs, summarize a run, list and read findings, describe a
+  control (benchmark mapping, operational impact, baseline row), compare two runs of the same tenant, and read the
+  baseline rows and the scope section. JSON-RPC 2.0 over stdio, protocol revisions up to 2025-11-25, no SDK and no new
+  module. It connects to nothing, writes nothing, addresses runs by `(folder, id)` through `Resolve-TPWebRunPath`
+  (new `-Kind Results`), never serves incident-response output, never returns raw data, exceptions, the tenant ID or
+  paths, and pseudonymizes identities unless started with `-IncludeIdentities`. Off by default; the module does not
+  load `Mcp/`, so its exports are unchanged. See `docs/TP-MCP-SERVER.md`.
 - **[Evaluators] Ten controls tightened to earn their CIS Microsoft 365 v7.0.0 citation (85 controls cite 65
   recommendations).** AAD-1.3 (5.2.2.5), AAD-1.4 (5.2.2.7), AAD-1.5 (5.2.2.6), AAD-10.4 (5.2.2.4), AAD-11.4 (5.2.2.16),
   AAD-10.2 (1.1.1), AAD-14.1 (5.1.5.4), SPO-1.2 (7.2.7), DEF-4.2 (3.2.1) and INT-3.1 (4.2) now pass only when the CIS
