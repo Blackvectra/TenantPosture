@@ -182,6 +182,7 @@ $script:ExportedFunctions = @(
     'Get-TPCoverageScore',
     'Invoke-TPCollectAADAppPermissions',
     'Invoke-TPCollectAADSignInEvidence',
+    'Invoke-TPCollectAADDirectorySettings',
     'Test-TPControlAppPermTenantTakeover', 'Test-TPControlAppPermDataAccess',
     'Get-TPAppPermissionRiskCatalog', 'Get-TPAppPermissionContext', 'Get-TPAppPermissionTierMap',
     'Get-TPAssessmentScope',
@@ -269,6 +270,7 @@ $script:ExportedFunctions = @(
     'Test-TPControlAADGuestInvite', 'Test-TPControlAADExternalCollab',
     'Test-TPControlAADGuestPermissions', 'Test-TPControlAADSSPR',
     'Test-TPControlAADSSPRMethods', 'Test-TPControlAADUserAppReg', 'Test-TPControlAADAgentBlueprintCreation',
+    'Test-TPControlEntraSecurityGroupCreation', 'Test-TPControlEntraM365GroupCreation', 'Test-TPControlEntraDeviceJoinRestricted', 'Test-TPControlEntraDeviceQuota', 'Test-TPControlEntraJoinGlobalAdminLocalAdmin', 'Test-TPControlEntraJoinRegisteringUserLocalAdmin', 'Test-TPControlEntraLapsEnabled', 'Test-TPControlEntraBitLockerKeyRecovery',
     'Test-TPControlAADUserConsent', 'Test-TPControlAADAdminConsentWorkflow',
     'Test-TPControlAADPasswordProtection', 'Test-TPControlAADLockoutDuration', 'Test-TPControlAADBannedPasswords', 'Test-TPControlAADPasswordExpiry', 'Test-TPControlAADBreakGlass',
     'Test-TPControlAADPIMAlerts', 'Test-TPControlAADAccessReviews',
@@ -280,6 +282,7 @@ $script:ExportedFunctions = @(
     'Test-TPControlAADContinuousAccess', 'Test-TPControlAADCrossTenantAccess',
     'Test-TPControlAADPrivilegedWorkstation', 'Test-TPControlAADTermsOfUse',
     'Test-TPControlAADWorkloadIdentityCA',
+    'Test-TPControlAADAppPasswordAdditionBlocked', 'Test-TPControlAADAppCustomPasswordBlocked', 'Test-TPControlAADWeakAuthMethodsDisabled', 'Test-TPControlAADSystemPreferredMfa', 'Test-TPControlAADEmailOtpDisabled', 'Test-TPControlAADAuthenticatorCompanionAppsDisabled',
 
     # ── Evaluators — DNS ──────────────────────────────────────────────────────
     'Test-TPControlDNSSPF', 'Test-TPControlDNSDKIM', 'Test-TPControlDNSDMARC',
@@ -308,6 +311,7 @@ $script:ExportedFunctions = @(
     'Test-TPControlEXOSafeSenderOverride',
     'Test-TPControlEXOMailboxForwarding', 'Test-TPControlEXOInboxRulesForwarding',
     'Test-TPControlEXOAuditDisabledMailboxes', 'Test-TPControlEXOSmtpAuthExceptions',
+    'Test-TPControlEXOCalendarSharing', 'Test-TPControlEXOOwaStorageProviders', 'Test-TPControlEXOConnectionIPAllowList',
 
     # ── Evaluators — Defender ─────────────────────────────────────────────────
     'Test-TPControlDefender',
@@ -320,6 +324,8 @@ $script:ExportedFunctions = @(
     'Test-TPControlDefenderRiskyAppAlerts', 'Test-TPControlDefenderPriorityAccounts',
     'Test-TPControlDefenderEndpointDLP', 'Test-TPControlDefenderAttackSim',
     'Test-TPControlDefenderSafeLinksOffice',
+    'Test-TPControlDefenderInternalMalwareNotify', 'Test-TPControlDefenderOutboundSpamNotify',
+    'Test-TPControlDefenderComprehensiveAttachments', 'Test-TPControlDefenderTeamsZap',
 
     # ── Evaluators — SharePoint ───────────────────────────────────────────────
     'Test-TPControlSharePoint',
@@ -338,6 +344,8 @@ $script:ExportedFunctions = @(
     'Test-TPControlTeamsExternalChat', 'Test-TPControlTeamsPSTN',
     'Test-TPControlTeamsWatermarks', 'Test-TPControlTeamsAutoAdmit',
     'Test-TPControlTeamsMeetingChat', 'Test-TPControlTeamsChatCopy',
+    'Test-TPControlTeamsConsumerInbound', 'Test-TPControlTeamsTrialTenants', 'Test-TPControlTeamsPresenterRole', 'Test-TPControlTeamsExternalMeetingChat', 'Test-TPControlTeamsCloudRecording', 'Test-TPControlTeamsSecurityReporting',
+    'Test-TPControlSPOInfectedFileDownload', 'Test-TPControlSPOB2BIntegration', 'Test-TPControlSPOOneDriveSharing', 'Test-TPControlSPOGuestResharing', 'Test-TPControlSPODomainAllowList', 'Test-TPControlSPOSharingGroups', 'Test-TPControlSPODefaultLinkPermission',
     'Test-TPControlTeamsMeetingRecordingScope', 'Test-TPControlTeamsAnonymousStart',
     'Test-TPControlTeamsFederationAllowlist', 'Test-TPControlTeamsLiveEvents', 'Test-TPControlTeamsRecordingRetention',
 

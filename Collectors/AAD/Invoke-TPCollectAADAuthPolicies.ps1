@@ -6,7 +6,8 @@
 #
 # Collects: Authentication Methods Policy, Authorization Policy (consent settings,
 # guest invite permissions, SSPR), Password Protection Policy, Security Defaults,
-# domain password validity periods (AAD-7.5).
+# domain password validity periods (AAD-7.5), beta Authentication Methods Policy
+# (system-preferred MFA and Authenticator on companion apps, AAD-17.4 / AAD-17.6).
 #
 # Required Graph scopes: Policy.Read.All, Directory.Read.All
 #
@@ -30,7 +31,8 @@ function Invoke-TPCollectAADAuthPolicies {
             RiskyServicePrincipals  = $null
             Domains                 = @()
             AgentBlueprintCreation  = $null
-            SectionStatus           = @{ Domains = 'NotRun'; AgentBlueprintCreation = 'NotRun' }
+            AuthMethodsPolicyBeta   = $null
+            SectionStatus           = @{ Domains = 'NotRun'; AgentBlueprintCreation = 'NotRun'; AuthMethodsPolicyBeta = 'NotRun' }
         }
     }
 
@@ -155,6 +157,55 @@ function Invoke-TPCollectAADAuthPolicies {
             $result.Data.SectionStatus.AgentBlueprintCreation = 'Failed'
             if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                 Register-TPException -Source 'AAD-AgentBlueprintCreation' -Message $_.Exception.Message
+            }
+        }
+
+        # The two authentication methods settings Graph v1.0 does not define
+        # (AAD-17.4, AAD-17.6): systemCredentialPreferences (system-preferred MFA)
+        # on the policy, and featureSettings.companionAppAllowedState on the
+        # Microsoft Authenticator method (Authenticator on companion apps). Both
+        # exist on the beta resource only. Same scope (Policy.Read.All); its own
+        # section, so a failure leaves only these two settings unread. A property
+        # the response omits is stored as $null, never as a value.
+        # https://learn.microsoft.com/graph/api/resources/systemcredentialpreferences?view=graph-rest-beta
+        # https://learn.microsoft.com/graph/api/resources/microsoftauthenticatorfeaturesettings?view=graph-rest-beta
+        try {
+            $ampBeta = Invoke-TPGraphRequest -Method GET `
+                -Uri 'https://graph.microsoft.com/beta/policies/authenticationMethodsPolicy' `
+                -ErrorAction Stop
+            $targetIds = { param($list) @(@($list) | Where-Object { $null -ne $_ } | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'id' -Default '') } | Where-Object { $_ }) }
+            $scp = Get-TPObjectField -Item $ampBeta -Key 'systemCredentialPreferences' -Default $null
+            $scpOut = $null
+            if ($null -ne $scp) {
+                $scpOut = [ordered]@{
+                    State            = [string](Get-TPObjectField -Item $scp -Key 'state' -Default '')
+                    IncludeTargetIds = [string[]]@(& $targetIds (Get-TPObjectField -Item $scp -Key 'includeTargets' -Default @()))
+                    ExcludeTargetIds = [string[]]@(& $targetIds (Get-TPObjectField -Item $scp -Key 'excludeTargets' -Default @()))
+                }
+            }
+            $authr = @(@(Get-TPObjectField -Item $ampBeta -Key 'authenticationMethodConfigurations' -Default @()) | Where-Object { $null -ne $_ -and [string](Get-TPObjectField -Item $_ -Key 'id' -Default '') -eq 'MicrosoftAuthenticator' }) | Select-Object -First 1
+            $companion = $null
+            if ($null -ne $authr) {
+                $cas = Get-TPNestedProperty -Object $authr -Path 'featureSettings.companionAppAllowedState' -Default $null
+                if ($null -ne $cas) {
+                    $companion = [ordered]@{
+                        State           = [string](Get-TPObjectField -Item $cas -Key 'state' -Default '')
+                        IncludeTargetId = [string](Get-TPNestedProperty -Object $cas -Path 'includeTarget.id' -Default '')
+                        ExcludeTargetId = [string](Get-TPNestedProperty -Object $cas -Path 'excludeTarget.id' -Default '')
+                    }
+                }
+            }
+            $result.Data.AuthMethodsPolicyBeta = [ordered]@{
+                SystemCredentialPreferences  = $scpOut
+                AuthenticatorConfigReturned  = ($null -ne $authr)
+                AuthenticatorState           = $(if ($null -ne $authr) { [string](Get-TPObjectField -Item $authr -Key 'state' -Default '') } else { '' })
+                CompanionAppAllowedState     = $companion
+            }
+            $result.Data.SectionStatus.AuthMethodsPolicyBeta = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.AuthMethodsPolicyBeta = 'Failed'
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'AAD-AuthMethodsPolicyBeta' -Message $_.Exception.Message
             }
         }
 

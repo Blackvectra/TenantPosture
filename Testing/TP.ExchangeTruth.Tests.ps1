@@ -1313,3 +1313,294 @@ Describe 'Exchange and Defender controls judge the settings they claim' {
         }
     }
 }
+
+Describe 'CIS v7.0.0 Exchange and Defender settings no control read before (EXO-10.x, DEF-6.x)' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
+        $script:Mod = Get-Module 'TenantPosture'
+        function script:KRaw { param([hashtable] $Data, [bool] $Success = $true) [ordered]@{ CollectorId = 'x'; CollectedAt = '2026-10-27T00:00:00Z'; Success = $Success; Data = $Data } }
+        function script:KVerdict { param([string] $Fn, [string] $Cid) & $Fn | Out-Null; @(Get-TPFindings | Where-Object { $_.ControlId -eq $Cid }) }
+        # Cmdlet stand-ins in MODULE scope; the bodies are raw cmdlet output shapes.
+        function script:KInject { param([string] $Name, [string] $Body)
+            & $script:Mod { param($n, $b) Set-Item -Path "function:script:$n" -Value ([scriptblock]::Create($b)) } $Name $Body }
+        function script:KRemove { param([string[]] $Name)
+            foreach ($n in $Name) { & $script:Mod { param($x) Remove-Item -Path "function:script:$x" -ErrorAction SilentlyContinue } $n } }
+        function script:KCollectExo { param([hashtable] $Cmds)
+            foreach ($k in $Cmds.Keys) { KInject $k $Cmds[$k] }
+            try { $r = Invoke-TPCollectEXOMailboxConfig } finally { KRemove @($Cmds.Keys) }
+            $r }
+        function script:KCollectDefender { param([hashtable] $Cmds)
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -MockWith { [pscustomobject]@{ Command = $null; Source = 'ExchangeOnline' } }
+            foreach ($k in $Cmds.Keys) { KInject $k $Cmds[$k] }
+            try { $r = Invoke-TPCollectDefender } finally { KRemove @($Cmds.Keys) }
+            $r.Success | Should -BeTrue
+            $r }
+        $script:CisTypes = @((Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Config/cis-m365-comprehensive-attachment-types.json') -Raw | ConvertFrom-Json).Values)
+    }
+    BeforeEach { Clear-TPState }
+    AfterAll   { Clear-TPState; Remove-Module 'TenantPosture' -Force -ErrorAction SilentlyContinue }
+
+    Context 'Every new control is defined, exported and cites its CIS recommendation' {
+        It '<Cid> cites CIS <Cis> and names <Fn>' -TestCases @(
+            @{ Cid = 'EXO-10.1'; Cis = '1.3.3';  Fn = 'Test-TPControlEXOCalendarSharing' }
+            @{ Cid = 'EXO-10.2'; Cis = '6.5.3';  Fn = 'Test-TPControlEXOOwaStorageProviders' }
+            @{ Cid = 'EXO-10.3'; Cis = '2.1.12'; Fn = 'Test-TPControlEXOConnectionIPAllowList' }
+            @{ Cid = 'DEF-6.1';  Cis = '2.1.3';  Fn = 'Test-TPControlDefenderInternalMalwareNotify' }
+            @{ Cid = 'DEF-6.2';  Cis = '2.1.6';  Fn = 'Test-TPControlDefenderOutboundSpamNotify' }
+            @{ Cid = 'DEF-6.3';  Cis = '2.1.11'; Fn = 'Test-TPControlDefenderComprehensiveAttachments' }
+            @{ Cid = 'DEF-6.4';  Cis = '2.4.4';  Fn = 'Test-TPControlDefenderTeamsZap' }
+        ) {
+            $c = Get-TPControlById -ControlId $Cid
+            $c | Should -Not -BeNullOrEmpty
+            $c.References.CIS | Should -Be $Cis
+            $c.EvaluatorFunction | Should -Be $Fn
+            (Get-Command $Fn -Module 'TenantPosture' -ErrorAction SilentlyContinue) | Should -Not -BeNullOrEmpty -Because 'the evaluator is exported'
+        }
+        It 'every new evaluator with no data is not assessed and keeps its citations' {
+            foreach ($fn in 'Test-TPControlEXOCalendarSharing', 'Test-TPControlEXOOwaStorageProviders', 'Test-TPControlEXOConnectionIPAllowList',
+                            'Test-TPControlDefenderInternalMalwareNotify', 'Test-TPControlDefenderOutboundSpamNotify',
+                            'Test-TPControlDefenderComprehensiveAttachments', 'Test-TPControlDefenderTeamsZap') { & $fn | Out-Null }
+            $f = @(Get-TPFindings | Where-Object { $_.ControlId -match '^(EXO-10|DEF-6)\.' })
+            $f.Count | Should -Be 7
+            @($f | Where-Object { $_.State -ne 'NotApplicable' }).Count | Should -Be 0
+            @($f | Where-Object { -not $_.FrameworkIds }).Count | Should -Be 0
+        }
+        It 'the CIS 2.1.11 list holds 186 distinct types' {
+            @($script:CisTypes | ForEach-Object { $_.ToLowerInvariant() } | Select-Object -Unique).Count | Should -Be 186
+        }
+    }
+
+    Context 'EXO-10.1 external calendar sharing (CIS 1.3.3), through the real collector' {
+        It 'the Default Sharing Policy enabled is a Gap naming what it shares' {
+            $r = KCollectExo @{ 'Get-SharingPolicy' = '[pscustomobject]@{ Name = "Default Sharing Policy"; Default = $true; Enabled = $true; Domains = @("*:CalendarSharingFreeBusySimple", "Anonymous:CalendarSharingFreeBusyReviewer") }' }
+            $r.Data.SectionStatus.SharingPolicies | Should -Be 'Collected'
+            $f = @(KVerdict 'Test-TPControlEXOCalendarSharing' 'EXO-10.1')[0]
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'Anonymous:CalendarSharingFreeBusyReviewer'
+        }
+        It 'the default enabled with partner domains only is still a Gap: CIS audits the switch, not the domains' {
+            KCollectExo @{ 'Get-SharingPolicy' = '[pscustomobject]@{ Name = "Default Sharing Policy"; Default = $true; Enabled = $true; Domains = @("fabrikam.com:CalendarSharingFreeBusyDetail") }' } | Out-Null
+            @(KVerdict 'Test-TPControlEXOCalendarSharing' 'EXO-10.1')[0].State | Should -Be 'Gap'
+        }
+        It 'the default disabled is Satisfied; another enabled policy limited to a partner domain does not change that' {
+            KCollectExo @{ 'Get-SharingPolicy' = '[pscustomobject]@{ Name = "Default Sharing Policy"; Default = $true; Enabled = $false; Domains = @("*:CalendarSharingFreeBusySimple") }; [pscustomobject]@{ Name = "Partners"; Default = $false; Enabled = $true; Domains = @("fabrikam.com:CalendarSharingFreeBusyDetail, ContactsSharing") }' } | Out-Null
+            @(KVerdict 'Test-TPControlEXOCalendarSharing' 'EXO-10.1')[0].State | Should -Be 'Satisfied'
+        }
+        It 'the default disabled beside another enabled policy that publishes anonymously is Partial, naming it' {
+            KCollectExo @{ 'Get-SharingPolicy' = '[pscustomobject]@{ Name = "Default Sharing Policy"; Default = $true; Enabled = $false; Domains = @() }; [pscustomobject]@{ Name = "Publishing"; Default = $false; Enabled = $true; Domains = @("Anonymous:CalendarSharingFreeBusySimple") }' } | Out-Null
+            $f = @(KVerdict 'Test-TPControlEXOCalendarSharing' 'EXO-10.1')[0]
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match "Publishing"
+        }
+        It 'Enabled not returned is not assessed, never a pass' {
+            KCollectExo @{ 'Get-SharingPolicy' = '[pscustomobject]@{ Name = "Default Sharing Policy"; Default = $true; Domains = @() }' } | Out-Null
+            @(KVerdict 'Test-TPControlEXOCalendarSharing' 'EXO-10.1')[0].State | Should -Be 'NotApplicable'
+        }
+        It 'a failed read is not assessed, and so is an older results file without the section' {
+            $r = KCollectExo @{ 'Get-SharingPolicy' = 'throw "The term Get-SharingPolicy is not recognized"' }
+            $r.Data.SectionStatus.SharingPolicies | Should -Be 'Failed'
+            @(KVerdict 'Test-TPControlEXOCalendarSharing' 'EXO-10.1')[0].State | Should -Be 'NotApplicable'
+            Clear-TPState
+            Set-TPRawData -Key 'EXO-MailboxConfig' -Data (KRaw @{ SectionStatus = @{ TransportConfig = 'Collected' } })
+            @(KVerdict 'Test-TPControlEXOCalendarSharing' 'EXO-10.1')[0].State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'EXO-10.2 additional storage providers in Outlook on the web (CIS 6.5.3), through the real collector' {
+        It "Microsoft's default (True) on the default policy is a Gap" {
+            $r = KCollectExo @{ 'Get-OwaMailboxPolicy' = '[pscustomobject]@{ Name = "OwaMailboxPolicy-Default"; IsDefault = $true; AdditionalStorageProvidersAvailable = $true }' }
+            $r.Data.SectionStatus.OwaMailboxPolicies | Should -Be 'Collected'
+            @(KVerdict 'Test-TPControlEXOOwaStorageProviders' 'EXO-10.2')[0].State | Should -Be 'Gap'
+        }
+        It 'every policy False is Satisfied' {
+            KCollectExo @{ 'Get-OwaMailboxPolicy' = '[pscustomobject]@{ Name = "OwaMailboxPolicy-Default"; IsDefault = $true; AdditionalStorageProvidersAvailable = $false }; [pscustomobject]@{ Name = "Kiosk"; IsDefault = $false; AdditionalStorageProvidersAvailable = $false }' } | Out-Null
+            @(KVerdict 'Test-TPControlEXOOwaStorageProviders' 'EXO-10.2')[0].State | Should -Be 'Satisfied'
+        }
+        It 'the default restricted but another policy allowing providers is Partial, naming it' {
+            KCollectExo @{ 'Get-OwaMailboxPolicy' = '[pscustomobject]@{ Name = "OwaMailboxPolicy-Default"; IsDefault = $true; AdditionalStorageProvidersAvailable = $false }; [pscustomobject]@{ Name = "Sales"; IsDefault = $false; AdditionalStorageProvidersAvailable = $true }' } | Out-Null
+            $f = @(KVerdict 'Test-TPControlEXOOwaStorageProviders' 'EXO-10.2')[0]
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Sales'
+        }
+        It 'the property not returned is not assessed' {
+            KCollectExo @{ 'Get-OwaMailboxPolicy' = '[pscustomobject]@{ Name = "OwaMailboxPolicy-Default"; IsDefault = $true }' } | Out-Null
+            @(KVerdict 'Test-TPControlEXOOwaStorageProviders' 'EXO-10.2')[0].State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'EXO-10.3 connection filter IP Allow List (CIS 2.1.12), through the real collector' {
+        BeforeEach {
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand { [pscustomobject]@{ Command = $null; Source = 'ExchangeOnline' } }
+        }
+        It 'an IP Allow List with entries is a Gap naming them' {
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-HostedConnectionFilterPolicy' } {
+                [pscustomobject]@{ Command = { [pscustomobject]@{ Name = 'Default'; IsDefault = $true; EnableSafeList = $false; IPAllowList = @('192.0.2.10', '198.51.100.0/24') } }; Source = 'ExchangeOnline' } }
+            (Invoke-TPCollectEXOConnectionFilter).Success | Should -BeTrue
+            $f = @(KVerdict 'Test-TPControlEXOConnectionIPAllowList' 'EXO-10.3')[0]
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match '198\.51\.100\.0/24'
+        }
+        It 'an empty IP Allow List is Satisfied' {
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-HostedConnectionFilterPolicy' } {
+                [pscustomobject]@{ Command = { [pscustomobject]@{ Name = 'Default'; IsDefault = $true; EnableSafeList = $false; IPAllowList = @() } }; Source = 'ExchangeOnline' } }
+            Invoke-TPCollectEXOConnectionFilter | Out-Null
+            @(KVerdict 'Test-TPControlEXOConnectionIPAllowList' 'EXO-10.3')[0].State | Should -Be 'Satisfied'
+        }
+        It 'IPAllowList omitted from the output is not assessed: an omitted list reads as empty' {
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-HostedConnectionFilterPolicy' } {
+                [pscustomobject]@{ Command = { [pscustomobject]@{ Name = 'Default'; IsDefault = $true; EnableSafeList = $false } }; Source = 'ExchangeOnline' } }
+            $r = Invoke-TPCollectEXOConnectionFilter
+            $r.Data.ConnectionFilter[0].IPAllowListReturned | Should -BeFalse
+            @(KVerdict 'Test-TPControlEXOConnectionIPAllowList' 'EXO-10.3')[0].State | Should -Be 'NotApplicable'
+        }
+        It 'an older results file (no IPAllowListReturned) is not assessed' {
+            Set-TPRawData -Key 'EXO-ConnectionFilter' -Data (KRaw @{ ConnectionFilter = @(@{ Name = 'Default'; IsDefault = $true; IPAllowList = @(); EnableSafeList = $false }) })
+            @(KVerdict 'Test-TPControlEXOConnectionIPAllowList' 'EXO-10.3')[0].State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'DEF-6.1 internal malware sender notifications (CIS 2.1.3), through the real collector' {
+        It 'the default policy notifying an administrator is Satisfied' {
+            $r = KCollectDefender @{
+                'Get-MalwareFilterPolicy' = '[pscustomobject]@{ Name = "Default"; IsDefault = $true; EnableFileFilter = $true; FileTypes = @("exe"); EnableInternalSenderAdminNotifications = $true; InternalSenderAdminAddress = "secops@contoso.com" }'
+                'Get-MalwareFilterRule'   = '@()' }
+            $r.Data.MalwareFilter.Policies[0].InternalSenderAdminAddress | Should -Be 'secops@contoso.com'
+            $r.Data.MalwareFilter.AdminAddressRead | Should -BeTrue
+            Set-TPRawData -Key 'Defender-Policies' -Data $r
+            @(KVerdict 'Test-TPControlDefenderInternalMalwareNotify' 'DEF-6.1')[0].State | Should -Be 'Satisfied'
+        }
+        It 'notifications on with no administrator address is a Gap' {
+            $r = KCollectDefender @{
+                'Get-MalwareFilterPolicy' = '[pscustomobject]@{ Name = "Default"; IsDefault = $true; EnableFileFilter = $true; FileTypes = @(); EnableInternalSenderAdminNotifications = $true; InternalSenderAdminAddress = $null }'
+                'Get-MalwareFilterRule'   = '@()' }
+            Set-TPRawData -Key 'Defender-Policies' -Data $r
+            @(KVerdict 'Test-TPControlDefenderInternalMalwareNotify' 'DEF-6.1')[0].State | Should -Be 'Gap'
+        }
+        It 'a custom policy with an enabled rule that does not notify, beside a default that does, is Partial' {
+            $r = KCollectDefender @{
+                'Get-MalwareFilterPolicy' = '[pscustomobject]@{ Name = "Default"; IsDefault = $true; EnableFileFilter = $true; FileTypes = @(); EnableInternalSenderAdminNotifications = $true; InternalSenderAdminAddress = "secops@contoso.com" }; [pscustomobject]@{ Name = "Finance"; IsDefault = $false; EnableFileFilter = $true; FileTypes = @(); EnableInternalSenderAdminNotifications = $false; InternalSenderAdminAddress = $null }'
+                'Get-MalwareFilterRule'   = '[pscustomobject]@{ Name = "Finance"; MalwareFilterPolicy = "Finance"; State = "Enabled"; SentToMemberOf = @("finance@contoso.com") }' }
+            Set-TPRawData -Key 'Defender-Policies' -Data $r
+            $f = @(KVerdict 'Test-TPControlDefenderInternalMalwareNotify' 'DEF-6.1')[0]
+            $f.State  | Should -Be 'Partial'
+            $f.Detail | Should -Match 'Finance'
+        }
+        It 'an older results file without the administrator address is not assessed' {
+            Set-TPRawData -Key 'Defender-Policies' -Data (KRaw @{ MalwareFilter = @{ Available = $true; Rules = @()
+                Policies = @(@{ Name = 'Default'; IsDefault = $true; EnableInternalSenderAdminNotifications = $true }) } })
+            @(KVerdict 'Test-TPControlDefenderInternalMalwareNotify' 'DEF-6.1')[0].State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'DEF-6.2 outbound spam notifications (CIS 2.1.6), through the real collector' {
+        It 'Bcc copy and notification both on with recipients is Satisfied' {
+            KCollectExo @{ 'Get-HostedOutboundSpamFilterPolicy' = '[pscustomobject]@{ Name = "Default"; IsDefault = $true; Enabled = $true; AutoForwardingMode = "Off"; BccSuspiciousOutboundMail = $true; BccSuspiciousOutboundAdditionalRecipients = @("secops@contoso.com"); NotifyOutboundSpam = $true; NotifyOutboundSpamRecipients = @("secops@contoso.com") }'
+                           'Get-HostedOutboundSpamFilterRule' = '@()' } | Out-Null
+            @(KVerdict 'Test-TPControlDefenderOutboundSpamNotify' 'DEF-6.2')[0].State | Should -Be 'Satisfied'
+        }
+        It 'notification on without the Bcc copy is a Gap: CIS audits both' {
+            KCollectExo @{ 'Get-HostedOutboundSpamFilterPolicy' = '[pscustomobject]@{ Name = "Default"; IsDefault = $true; Enabled = $true; BccSuspiciousOutboundMail = $false; BccSuspiciousOutboundAdditionalRecipients = @(); NotifyOutboundSpam = $true; NotifyOutboundSpamRecipients = @("secops@contoso.com") }'
+                           'Get-HostedOutboundSpamFilterRule' = '@()' } | Out-Null
+            $f = @(KVerdict 'Test-TPControlDefenderOutboundSpamNotify' 'DEF-6.2')[0]
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'User restricted from sending email'
+        }
+        It 'switches on with no recipient address is a Gap' {
+            KCollectExo @{ 'Get-HostedOutboundSpamFilterPolicy' = '[pscustomobject]@{ Name = "Default"; IsDefault = $true; Enabled = $true; BccSuspiciousOutboundMail = $true; BccSuspiciousOutboundAdditionalRecipients = @(); NotifyOutboundSpam = $true; NotifyOutboundSpamRecipients = @() }'
+                           'Get-HostedOutboundSpamFilterRule' = '@()' } | Out-Null
+            @(KVerdict 'Test-TPControlDefenderOutboundSpamNotify' 'DEF-6.2')[0].State | Should -Be 'Gap'
+        }
+        It 'NotifyOutboundSpam not returned is not assessed, though the stored flag defaults to False' {
+            KCollectExo @{ 'Get-HostedOutboundSpamFilterPolicy' = '[pscustomobject]@{ Name = "Default"; IsDefault = $true; Enabled = $true; BccSuspiciousOutboundMail = $true; BccSuspiciousOutboundAdditionalRecipients = @("secops@contoso.com") }'
+                           'Get-HostedOutboundSpamFilterRule' = '@()' } | Out-Null
+            @(KVerdict 'Test-TPControlDefenderOutboundSpamNotify' 'DEF-6.2')[0].State | Should -Be 'NotApplicable'
+        }
+    }
+
+    Context 'DEF-6.3 comprehensive attachment filtering (CIS 2.1.11), through the real collector' {
+        It 'every listed type blocked (with leading dots and mixed case) is Satisfied' {
+            $types = (@($script:CisTypes | ForEach-Object { '"' + '.' + $_.ToUpperInvariant() + '"' }) -join ',')
+            $r = KCollectDefender @{ 'Get-MalwareFilterPolicy' = "[pscustomobject]@{ Name = 'Default'; IsDefault = `$true; EnableFileFilter = `$true; FileTypes = @($types); EnableInternalSenderAdminNotifications = `$false }"
+                                     'Get-MalwareFilterRule' = '@()' }
+            Set-TPRawData -Key 'Defender-Policies' -Data $r
+            @(KVerdict 'Test-TPControlDefenderComprehensiveAttachments' 'DEF-6.3')[0].State | Should -Be 'Satisfied'
+        }
+        It "Microsoft's default list alone is a Gap naming the missing types" {
+            $r = KCollectDefender @{ 'Get-MalwareFilterPolicy' = '[pscustomobject]@{ Name = "Default"; IsDefault = $true; EnableFileFilter = $true; FileTypes = @("ace","ani","apk","app","exe","iso"); EnableInternalSenderAdminNotifications = $false }'
+                                     'Get-MalwareFilterRule' = '@()' }
+            Set-TPRawData -Key 'Defender-Policies' -Data $r
+            $f = @(KVerdict 'Test-TPControlDefenderComprehensiveAttachments' 'DEF-6.3')[0]
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match '6 of 186'
+            $f.Detail | Should -Match '7z'
+        }
+        It 'the full list with the filter off is a Gap' {
+            $types = (@($script:CisTypes | ForEach-Object { '"' + $_ + '"' }) -join ',')
+            $r = KCollectDefender @{ 'Get-MalwareFilterPolicy' = "[pscustomobject]@{ Name = 'Default'; IsDefault = `$true; EnableFileFilter = `$false; FileTypes = @($types); EnableInternalSenderAdminNotifications = `$false }"
+                                     'Get-MalwareFilterRule' = '@()' }
+            Set-TPRawData -Key 'Defender-Policies' -Data $r
+            @(KVerdict 'Test-TPControlDefenderComprehensiveAttachments' 'DEF-6.3')[0].State | Should -Be 'Gap'
+        }
+        It 'a comprehensive custom policy whose rule is disabled applies to nobody; the default decides' {
+            $types = (@($script:CisTypes | ForEach-Object { '"' + $_ + '"' }) -join ',')
+            $r = KCollectDefender @{ 'Get-MalwareFilterPolicy' = "[pscustomobject]@{ Name = 'Default'; IsDefault = `$true; EnableFileFilter = `$true; FileTypes = @('exe'); EnableInternalSenderAdminNotifications = `$false }; [pscustomobject]@{ Name = 'CIS L2'; IsDefault = `$false; EnableFileFilter = `$true; FileTypes = @($types); EnableInternalSenderAdminNotifications = `$false }"
+                                     'Get-MalwareFilterRule' = '[pscustomobject]@{ Name = "CIS L2"; MalwareFilterPolicy = "CIS L2"; State = "Disabled"; RecipientDomainIs = @("contoso.com") }' }
+            Set-TPRawData -Key 'Defender-Policies' -Data $r
+            $f = @(KVerdict 'Test-TPControlDefenderComprehensiveAttachments' 'DEF-6.3')[0]
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Not -Match 'CIS L2'
+        }
+        It 'malware policies not read is not assessed' {
+            $r = KCollectDefender @{ 'Get-MalwareFilterPolicy' = 'throw "Access denied"' }
+            Set-TPRawData -Key 'Defender-Policies' -Data $r
+            $f = @(KVerdict 'Test-TPControlDefenderComprehensiveAttachments' 'DEF-6.3')[0]
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'Access denied'
+        }
+    }
+
+    Context 'DEF-6.4 zero-hour auto purge for Microsoft Teams (CIS 2.4.4), through the real collector' {
+        It 'ZapEnabled True is Satisfied and the rule exceptions are reported for review' {
+            $r = KCollectDefender @{ 'Get-TeamsProtectionPolicy' = '[pscustomobject]@{ Name = "Teams Protection Policy"; ZapEnabled = $true }'
+                                     'Get-TeamsProtectionPolicyRule' = '[pscustomobject]@{ Name = "Teams Protection Policy Rule"; ExceptIfSentToMemberOf = @("research@contoso.com"); ExceptIfSentTo = $null; ExceptIfRecipientDomainIs = $null }' }
+            $r.Data.TeamsProtection.Available | Should -BeTrue
+            Set-TPRawData -Key 'Defender-Policies' -Data $r
+            $f = @(KVerdict 'Test-TPControlDefenderTeamsZap' 'DEF-6.4')[0]
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'ExceptIfSentToMemberOf \(1\)'
+        }
+        It 'ZapEnabled False is a Gap' {
+            $r = KCollectDefender @{ 'Get-TeamsProtectionPolicy' = '[pscustomobject]@{ Name = "Teams Protection Policy"; ZapEnabled = $false }'
+                                     'Get-TeamsProtectionPolicyRule' = '@()' }
+            Set-TPRawData -Key 'Defender-Policies' -Data $r
+            @(KVerdict 'Test-TPControlDefenderTeamsZap' 'DEF-6.4')[0].State | Should -Be 'Gap'
+        }
+        It 'ZapEnabled not returned is not assessed; a rule read that failed is named, not read as no exceptions' {
+            $r = KCollectDefender @{ 'Get-TeamsProtectionPolicy' = '[pscustomobject]@{ Name = "Teams Protection Policy" }'
+                                     'Get-TeamsProtectionPolicyRule' = 'throw "rule read failed"' }
+            $r.Data.TeamsProtection.Rules | Should -BeNullOrEmpty
+            Set-TPRawData -Key 'Defender-Policies' -Data $r
+            @(KVerdict 'Test-TPControlDefenderTeamsZap' 'DEF-6.4')[0].State | Should -Be 'NotApplicable'
+            Clear-TPState
+            $r = KCollectDefender @{ 'Get-TeamsProtectionPolicy' = '[pscustomobject]@{ Name = "Teams Protection Policy"; ZapEnabled = $true }'
+                                     'Get-TeamsProtectionPolicyRule' = 'throw "rule read failed"' }
+            Set-TPRawData -Key 'Defender-Policies' -Data $r
+            $f = @(KVerdict 'Test-TPControlDefenderTeamsZap' 'DEF-6.4')[0]
+            $f.State  | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'rule was not read'
+        }
+        It 'the cmdlet unavailable is not assessed, and an older results file is too' {
+            $r = KCollectDefender @{ 'Get-TeamsProtectionPolicy' = 'throw "The term Get-TeamsProtectionPolicy is not recognized"' }
+            $r.Data.TeamsProtection.Available | Should -BeFalse
+            Set-TPRawData -Key 'Defender-Policies' -Data $r
+            @(KVerdict 'Test-TPControlDefenderTeamsZap' 'DEF-6.4')[0].State | Should -Be 'NotApplicable'
+            Clear-TPState
+            Set-TPRawData -Key 'Defender-Policies' -Data (KRaw @{ MalwareFilter = @{ Available = $true; Policies = @() } })
+            $f = @(KVerdict 'Test-TPControlDefenderTeamsZap' 'DEF-6.4')[0]
+            $f.State  | Should -Be 'NotApplicable'
+            @($f.FrameworkIds).Count | Should -BeGreaterThan 0
+        }
+    }
+}

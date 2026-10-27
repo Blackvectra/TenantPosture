@@ -2,7 +2,7 @@
 
 Generated from `Config/controls.json` (CIS Microsoft 365 and ScubaGear citations), `Config/scuba-alignment.json` and `Config/benchmark-mappings.json` on 2026-10-26; `Get-TPBenchmarkMapping` returns the same view and `Testing/TP.BenchmarkMapping.Tests.ps1` fails when a control is in neither list.
 
-**162 of 209 controls are mapped to at least one configuration benchmark; 47 are not, each with the reason.** A control cites a benchmark item only when its evaluator judges the setting the item audits and every state it scores Satisfied passes that audit: a similar topic is not enough, so a control with no such item is listed below rather than given a near-miss. Relations: Equivalent (same setting and threshold), Subset (part of what the item requires; the rest is named in the mapping file), Stricter (passes only when the item passes, can fail where it passes); ScubaGear relations are the ones recorded in `Config/scuba-alignment.json`.
+**196 of 243 controls are mapped to at least one configuration benchmark; 47 are not, each with the reason.** A control cites a benchmark item only when its evaluator judges the setting the item audits and every state it scores Satisfied passes that audit: a similar topic is not enough, so a control with no such item is listed below rather than given a near-miss. Relations: Equivalent (same setting and threshold), Subset (part of what the item requires; the rest is named in the mapping file), Stricter (passes only when the item passes, can fail where it passes); ScubaGear relations are the ones recorded in `Config/scuba-alignment.json`.
 
 Control frameworks (NIST SP 800-53, CIS Controls v8.1, CMMC, ISO 27001, SOC 2, HIPAA, PCI DSS, MITRE ATT&CK) are mapped separately in `References` and are not configuration benchmarks.
 
@@ -54,6 +54,20 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | AAD-14.1 | Application Credentials Current and Short-Lived | CIS M365 v7.0.0 5.1.5.4; ScubaGear 2.0.0 MS.AAD.5.6v1 (Equivalent); Microsoft Zero Trust: Application certificates must be rotated on a regular basis (Zero Trust Assessment test 21992) (Subset) |
 | AAD-15.1 | No Application Holds Tenant-Takeover Permissions | ScubaGear 2.0.0 MS.AAD.5.2v1 (Unsupported) |
 | AAD-15.2 | Applications with Tenant-Wide Data Permissions — Named List | ScubaGear 2.0.0 MS.AAD.5.2v1 (Unsupported) |
+| AAD-16.1 | Users Cannot Create Security Groups | CIS M365 v7.0.0 5.1.3.1 |
+| AAD-16.2 | Users Cannot Create Microsoft 365 Groups | CIS M365 v7.0.0 5.1.3.4 |
+| AAD-16.3 | Joining Devices to Microsoft Entra Restricted | CIS M365 v7.0.0 5.1.4.1 |
+| AAD-16.4 | Maximum Devices per User Limited | CIS M365 v7.0.0 5.1.4.2 |
+| AAD-16.5 | Global Administrators Not Local Admins on Joined Devices | CIS M365 v7.0.0 5.1.4.3 |
+| AAD-16.6 | Registering Users Not Local Admins on Joined Devices | CIS M365 v7.0.0 5.1.4.4 |
+| AAD-16.7 | Microsoft Entra LAPS Enabled | CIS M365 v7.0.0 5.1.4.5 |
+| AAD-16.8 | Users Cannot Recover BitLocker Keys of Their Devices | CIS M365 v7.0.0 5.1.4.6 |
+| AAD-17.1 | Password Addition Blocked for Applications | CIS M365 v7.0.0 5.1.5.3 |
+| AAD-17.2 | New Application Passwords System-Generated | CIS M365 v7.0.0 5.1.5.5 |
+| AAD-17.3 | SMS and Voice Call Authentication Methods Disabled | CIS M365 v7.0.0 5.2.3.5 |
+| AAD-17.4 | System-Preferred MFA Enabled for All Users | CIS M365 v7.0.0 5.2.3.6 |
+| AAD-17.5 | Email OTP Authentication Method Disabled | CIS M365 v7.0.0 5.2.3.7 |
+| AAD-17.6 | Authenticator on Companion Applications Disabled | CIS M365 v7.0.0 5.2.3.10 |
 | AAD-2.1 | Conditional Access Policies Deployed | ScubaGear 2.0.0 MS.AAD.1.1v1 (Partial) |
 | AAD-2.2 | Named Locations Defined | CIS M365 v7.0.0 5.2.2.14 |
 | AAD-2.3 | Device Compliance Enforced via CA | ScubaGear 2.0.0 MS.AAD.3.7v1 (Partial) |
@@ -105,6 +119,10 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | DEF-4.4 | Priority Accounts Tagged in Defender | CIS M365 v7.0.0 2.4.1 |
 | DEF-4.5 | Endpoint DLP Policy Active on Managed Devices | ScubaGear 2.0.0 MS.SECURITYSUITE.3.2v1 (Partial) |
 | DEF-4.7 | Safe Links Protects Office Applications | CIS M365 v7.0.0 2.1.1; ScubaGear 2.0.0 MS.SECURITYSUITE.7.1v1 (Partial) |
+| DEF-6.1 | Administrators Notified When Internal Users Send Malware | CIS M365 v7.0.0 2.1.3 |
+| DEF-6.2 | Outbound Spam Policies Notify Administrators | CIS M365 v7.0.0 2.1.6 |
+| DEF-6.3 | Comprehensive Attachment Filtering Applied | CIS M365 v7.0.0 2.1.11 |
+| DEF-6.4 | Zero-Hour Auto Purge for Microsoft Teams Enabled | CIS M365 v7.0.0 2.4.4 |
 
 ### DNS
 
@@ -128,6 +146,9 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | EXO-1.5 | Anti-Phishing Impersonation Protection Enabled | ScubaGear 2.0.0 MS.SECURITYSUITE.2.1v1 (Partial) |
 | EXO-1.6 | Modern Authentication Enabled | CIS M365 v7.0.0 6.5.1 |
 | EXO-1.7 | Honor DMARC Policy Enabled | CIS M365 v7.0.0 2.1.7 |
+| EXO-10.1 | External Calendar Sharing Not Available | CIS M365 v7.0.0 1.3.3 |
+| EXO-10.2 | Additional Storage Providers Restricted in Outlook on the Web | CIS M365 v7.0.0 6.5.3 |
+| EXO-10.3 | Connection Filter IP Allow List Not Used | CIS M365 v7.0.0 2.1.12 |
 | EXO-2.5 | Customer Lockbox Enabled | CIS M365 v7.0.0 1.3.6 |
 | EXO-2.6 | Shared Mailboxes Block Direct Sign-In | CIS M365 v7.0.0 1.2.2 |
 | EXO-3.1 | Connection Filter Safe List Bypass Disabled | CIS M365 v7.0.0 2.1.13 |
@@ -216,6 +237,13 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | SPO-2.7 | Reauthentication Required for Sharing Links | CIS M365 v7.0.0 7.2.10; ScubaGear 2.0.0 MS.SHAREPOINT.3.3v2 (Partial) |
 | SPO-3.3 | OneDrive Version History Enabled | Microsoft Learn recommended values: Overview of version history limits for document libraries and OneDrive > Types of version limits, note 1 (Equivalent) |
 | SPO-3.4 | SharePoint Guest Access Expiration Required | CIS M365 v7.0.0 7.2.9 |
+| SPO-5.1 | SharePoint Infected Files Cannot Be Downloaded | CIS M365 v7.0.0 7.3.1 |
+| SPO-5.2 | SharePoint and OneDrive Integration With Entra B2B Enabled | CIS M365 v7.0.0 7.2.2 |
+| SPO-5.3 | OneDrive Content Sharing Restricted | CIS M365 v7.0.0 7.2.4 |
+| SPO-5.4 | SharePoint Guests Cannot Share Items They Do Not Own | CIS M365 v7.0.0 7.2.5 |
+| SPO-5.5 | SharePoint External Sharing Limited to Allowed Domains | CIS M365 v7.0.0 7.2.6 |
+| SPO-5.6 | SharePoint External Sharing Restricted by Security Group | CIS M365 v7.0.0 7.2.8 |
+| SPO-5.7 | SharePoint Default Sharing Link Permission Is View | CIS M365 v7.0.0 7.2.11 |
 
 ### TMS
 
@@ -234,6 +262,12 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | TMS-3.3 | Meeting Chat Disabled for Anonymous Participants | CIS M365 v7.0.0 8.5.5 |
 | TMS-4.2 | Anonymous Users Cannot Start Meetings | CIS M365 v7.0.0 8.5.2; ScubaGear 2.0.0 MS.TEAMS.1.2v2 (Equivalent) |
 | TMS-4.3 | Teams External Domain Federation Restricted to Allowlist | CIS M365 v7.0.0 8.2.1; ScubaGear 2.0.0 MS.TEAMS.2.1v2 (Equivalent) |
+| TMS-5.1 | External Unmanaged Teams Users Cannot Initiate Conversations | CIS M365 v7.0.0 8.2.3 |
+| TMS-5.2 | Communication With Trial-Only Teams Tenants Blocked | CIS M365 v7.0.0 8.2.4 |
+| TMS-5.3 | Only Organizers and Co-organizers Can Present | CIS M365 v7.0.0 8.5.6 |
+| TMS-5.4 | External Meeting Chat Disabled | CIS M365 v7.0.0 8.5.8 |
+| TMS-5.5 | Meeting Recording Off by Default | CIS M365 v7.0.0 8.5.9 |
+| TMS-5.6 | Users Can Report Security Concerns in Teams | CIS M365 v7.0.0 8.6.1 |
 
 ## Controls with no benchmark item
 

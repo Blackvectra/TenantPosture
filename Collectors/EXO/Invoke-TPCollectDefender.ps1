@@ -6,7 +6,8 @@
 # (cmdlets throw if unlicensed; caught per-section, registered as exceptions).
 #
 # Required session: Exchange Online (Connect-ExchangeOnline)
-# Also reads: Get-User -IsVIP and Get-EmailTenantSettings (priority accounts, DEF-4.4)
+# Also reads: Get-User -IsVIP and Get-EmailTenantSettings (priority accounts, DEF-4.4),
+#             Get-TeamsProtectionPolicy / Get-TeamsProtectionPolicyRule (ZAP for Teams, DEF-6.4)
 # Requires Defender for Office 365 Plan 1 or Plan 2 for Safe Attachments/Links.
 #
 # NIST SP 800-53: SI-3 (malicious code protection), SI-4 (system monitoring), SI-8 (spam protection)
@@ -241,6 +242,52 @@ function Invoke-TPCollectDefender {
             }
         }
 
+        # ── User reported settings (TMS-5.6, CIS 8.6.1) ──────────────────
+        # Get-ReportSubmissionPolicy holds where user-reported email and Teams
+        # messages go (Microsoft Learn, "User reported settings in Microsoft
+        # Teams" and Set-ReportSubmissionPolicy). Its own section: a refused or
+        # absent cmdlet leaves it unread (Available = $false, reason kept),
+        # never "not configured". A tenant that returns no policy is recorded
+        # as Exists = $false, which the evaluator reports. Pinned to Exchange
+        # Online, where Microsoft documents the cmdlet.
+        try {
+            $rspCmd = (Get-TPExoCommand -Name 'Get-ReportSubmissionPolicy' -Session ExchangeOnline).Command
+            if (-not $rspCmd) { throw 'Get-ReportSubmissionPolicy is not available in the Exchange Online session.' }
+            $rsp = @(& $rspCmd -ErrorAction Stop | Where-Object { $null -ne $_ }) | Select-Object -First 1
+            # A switch is True/False (bool, or the string form); anything else is not read ($null).
+            $rspBool = { param([string] $k)
+                $v = Get-TPObjectField -Item $rsp -Key $k -Default $null
+                if ($v -is [bool]) { $v } elseif ([string]$v -in @('True', 'False')) { [string]$v -eq 'True' } else { $null } }
+            # An address list: $null when the property was not returned, else the non-blank entries.
+            $rspList = { param([string] $k)
+                $present = if ($rsp -is [System.Collections.IDictionary]) { $rsp.Contains($k) } else { $null -ne $rsp.PSObject.Properties[$k] }
+                if (-not $present) { return $null }
+                ,@(@(Get-TPObjectField -Item $rsp -Key $k -Default @()) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ }) }
+            if ($null -eq $rsp) {
+                $result.Data['ReportSubmissionPolicy'] = @{ Available = $true; Exists = $false }
+            } else {
+                $result.Data['ReportSubmissionPolicy'] = @{
+                    Available                                   = $true
+                    Exists                                      = $true
+                    Identity                                    = [string](Get-TPObjectField -Item $rsp -Key 'Identity' -Default '')
+                    ReportJunkToCustomizedAddress               = (& $rspBool 'ReportJunkToCustomizedAddress')
+                    ReportNotJunkToCustomizedAddress            = (& $rspBool 'ReportNotJunkToCustomizedAddress')
+                    ReportPhishToCustomizedAddress              = (& $rspBool 'ReportPhishToCustomizedAddress')
+                    ReportJunkAddresses                         = (& $rspList 'ReportJunkAddresses')
+                    ReportNotJunkAddresses                      = (& $rspList 'ReportNotJunkAddresses')
+                    ReportPhishAddresses                        = (& $rspList 'ReportPhishAddresses')
+                    ReportChatMessageEnabled                    = (& $rspBool 'ReportChatMessageEnabled')
+                    ReportChatMessageToCustomizedAddressEnabled = (& $rspBool 'ReportChatMessageToCustomizedAddressEnabled')
+                    ReportChatMessageAddresses                  = (& $rspList 'ReportChatMessageAddresses')
+                }
+            }
+        } catch {
+            $result.Data['ReportSubmissionPolicy'] = @{ Available = $false; Error = $_.Exception.Message }
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'Defender-ReportSubmissionPolicy' -Message $_.Exception.Message
+            }
+        }
+
         # ── Preset security policy rules ──────────────────────────────────
         # Standard / Strict presets are switched on and scoped by these rules
         # (EOP = anti-spam/anti-phish/anti-malware, ATP = Safe Links /
@@ -312,14 +359,56 @@ function Invoke-TPCollectDefender {
                         FileTypes                = @($_.FileTypes ?? @())
                         Action                   = [string](Get-TPObjectField -Item $_ -Key 'Action' -Default 'DeleteAttachmentAndUseDefaultAlertText')
                         EnableInternalSenderAdminNotifications = [bool]($_.EnableInternalSenderAdminNotifications ?? $false)
+                        # DEF-6.1 (CIS 2.1.3): the address the internal-sender notification goes to.
+                        InternalSenderAdminAddress = $($adm = [string](Get-TPObjectField -Item $_ -Key 'InternalSenderAdminAddress' -Default ''); if ($adm) { $adm } else { $null })
                     }
                 })
                 FileFilterEnabledCount = @($mfPolicies | Where-Object { $_.EnableFileFilter }).Count
+                # Results files written before DEF-6.1 carry no InternalSenderAdminAddress;
+                # this marks that the address was read (an empty one is $null above).
+                AdminAddressRead = $true
             }
         } catch {
             $result.Data['MalwareFilter'] = @{ Available = $false; Error = $_.Exception.Message }
             if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                 Register-TPException -Source 'Defender-MalwareFilter' -Message $_.Exception.Message
+            }
+        }
+
+        # ── ZAP for Microsoft Teams — DEF-6.4 (CIS 2.4.4) ─────────────────
+        # One Teams protection policy per organization (ZapEnabled); its rule
+        # holds the recipient exceptions. Defender for Office 365 Plan 1 or 2.
+        # A failed rule read leaves Rules $null, never an empty list.
+        try {
+            $tpPolicies = @(Get-TeamsProtectionPolicy -ErrorAction Stop)
+            $tpRules = $null
+            try { $tpRules = @(Get-TeamsProtectionPolicyRule -ErrorAction Stop) } catch {
+                if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                    Register-TPException -Source 'Defender-TeamsProtectionRule' -Message $_.Exception.Message
+                }
+            }
+            $strs = { param($o, $k) @(@(Get-TPObjectField -Item $o -Key $k -Default @()) | Where-Object { $_ } | ForEach-Object { [string]$_ }) }
+            $result.Data['TeamsProtection'] = @{
+                Available = $true
+                Policies  = @($tpPolicies | ForEach-Object {
+                    @{
+                        Name       = [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '')
+                        ZapEnabled = (Get-TPObjectField -Item $_ -Key 'ZapEnabled' -Default $null)
+                    }
+                })
+                Rules     = $(if ($null -eq $tpRules) { $null } else { @($tpRules | ForEach-Object {
+                    @{
+                        Name                      = [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '')
+                        ExceptIfSentTo            = @(& $strs $_ 'ExceptIfSentTo')
+                        ExceptIfSentToMemberOf    = @(& $strs $_ 'ExceptIfSentToMemberOf')
+                        ExceptIfRecipientDomainIs = @(& $strs $_ 'ExceptIfRecipientDomainIs')
+                    }
+                }) })
+            }
+        } catch {
+            $result.Data['TeamsProtection'] = @{ Available = $false; Error = $_.Exception.Message }
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'Defender-TeamsProtection' -Message $_.Exception.Message
             }
         }
 

@@ -165,3 +165,163 @@ Describe 'Teams controls read the setting they name' {
         (Verdict 'Test-TPControlTeamsChatCopy' 'TMS-3.4').State | Should -Be 'NotApplicable'
     }
 }
+
+# CIS Microsoft 365 v7.0.0 Teams recommendations no earlier control read (TMS-5.x,
+# Evaluators/Test-TPControlCollabCis.ps1). Each case drives the REAL Teams collector
+# (and, for TMS-5.6, the real Defender collector) with raw cmdlet shapes and pins the
+# boundary between the value the CIS audit passes and the rest.
+Describe 'CIS v7 Teams settings (TMS-5.1 .. TMS-5.6)' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
+        $script:Mod = Get-Module 'TenantPosture'
+        $script:Cmds = @('Get-CsTenantFederationConfiguration','Get-CsExternalAccessPolicy','Get-CsTeamsMeetingPolicy','Get-CsTeamsMessagingPolicy')
+        # Each stand-in is a scriptblock literal created inside the module, so it reads the
+        # module-scope object named after the command it was installed as.
+        foreach ($n in $script:Cmds) {
+            & $script:Mod { param($n) Set-Item -Path "function:script:$n" -Value { param($Identity) $script:TeamsObj[$MyInvocation.MyCommand.Name] } } $n
+        }
+        function script:Collect { param([hashtable] $Objects)
+            Clear-TPState
+            & $script:Mod { param($o) $script:TeamsObj = $o } $Objects
+            Invoke-TPCollectTeams | Out-Null
+        }
+        function script:Verdict { param([string] $Fn, [string] $Cid) & $Fn | Out-Null; @(Get-TPFindings | Where-Object { $_.ControlId -eq $Cid })[-1] }
+        # Microsoft defaults as Get-Cs* returns them.
+        function script:Defaults {
+            @{
+                'Get-CsTenantFederationConfiguration' = [pscustomobject]@{ AllowFederatedUsers = $true; AllowTeamsConsumer = $true; AllowTeamsConsumerInbound = $true; AllowedDomains = [pscustomobject]@{}; BlockedDomains = @(); ExternalAccessWithTrialTenants = 'Blocked' }
+                'Get-CsExternalAccessPolicy' = [pscustomobject]@{ Identity = 'Global'; EnableFederationAccess = $true; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true }
+                'Get-CsTeamsMeetingPolicy' = [pscustomobject]@{ DesignatedPresenterRoleMode = 'EveryoneUserOverride'; AllowExternalNonTrustedMeetingChat = $true; AllowCloudRecording = $true }
+                'Get-CsTeamsMessagingPolicy' = [pscustomobject]@{ Identity = 'Global'; AllowSecurityEndUserReporting = $true }
+            }
+        }
+        # The Defender collector with Get-ReportSubmissionPolicy stood in for, through
+        # Get-TPExoCommand, as the DEF-4.4 cases do. Every other Defender read fails
+        # (no Exchange session here) and is caught by its own section.
+        function script:CollectRsp { param([object] $Policy, [switch] $NoCmdlet)
+            $row = $Policy
+            $cmd = { [CmdletBinding()] param() $row }.GetNewClosure()
+            Mock -ModuleName 'TenantPosture' Get-TPExoCommand -MockWith { [pscustomobject]@{ Command = $null; Source = 'ExchangeOnline' } }
+            if (-not $NoCmdlet) {
+                Mock -ModuleName 'TenantPosture' Get-TPExoCommand -ParameterFilter { $Name -eq 'Get-ReportSubmissionPolicy' } -MockWith {
+                    [pscustomobject]@{ Source = 'ExchangeOnline'; Command = $cmd }
+                }.GetNewClosure()
+            }
+            Invoke-TPCollectDefender 3>$null | Out-Null
+        }
+        # A report submission policy that meets CIS 8.6.1.
+        function script:GoodRsp {
+            [pscustomobject]@{ Identity = 'DefaultReportSubmissionPolicy'; ReportJunkToCustomizedAddress = $true; ReportNotJunkToCustomizedAddress = $true; ReportPhishToCustomizedAddress = $true
+                ReportJunkAddresses = @('reports@contoso.com'); ReportNotJunkAddresses = @('reports@contoso.com'); ReportPhishAddresses = @('reports@contoso.com')
+                ReportChatMessageEnabled = $false; ReportChatMessageToCustomizedAddressEnabled = $true; ReportChatMessageAddresses = @('reports@contoso.com') }
+        }
+    }
+    AfterAll {
+        foreach ($n in $script:Cmds) { & $script:Mod { param($n) Remove-Item -Path "function:script:$n" -ErrorAction SilentlyContinue } $n }
+        Clear-TPState
+    }
+
+    It 'TMS-5.1 (8.2.3): inbound contact blocked by the organization, the parent switch or the Global policy passes; all three open is a Gap' {
+        $o = Defaults; Collect $o
+        (Verdict 'Test-TPControlTeamsConsumerInbound' 'TMS-5.1').State | Should -Be 'Gap'
+        $o = Defaults; $o['Get-CsTenantFederationConfiguration'].AllowTeamsConsumerInbound = $false; Collect $o
+        (Verdict 'Test-TPControlTeamsConsumerInbound' 'TMS-5.1').State | Should -Be 'Satisfied'
+        $o = Defaults; $o['Get-CsTenantFederationConfiguration'].AllowTeamsConsumer = $false; Collect $o
+        (Verdict 'Test-TPControlTeamsConsumerInbound' 'TMS-5.1').State | Should -Be 'Satisfied' -Because 'turning the parent off also stops unmanaged accounts starting a conversation'
+        $o = Defaults; $o['Get-CsExternalAccessPolicy'].EnableTeamsConsumerInbound = $false; Collect $o
+        (Verdict 'Test-TPControlTeamsConsumerInbound' 'TMS-5.1').State | Should -Be 'Satisfied' -Because 'the CIS audit accepts the Global external access policy'
+    }
+    It 'TMS-5.1: an open organization with the Global policy unread is not assessed, never a Gap' {
+        $o = Defaults; $o.Remove('Get-CsExternalAccessPolicy'); Collect $o
+        $f = Verdict 'Test-TPControlTeamsConsumerInbound' 'TMS-5.1'
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Match 'EnableTeamsConsumerInbound was not collected'
+        @($f.FrameworkIds).Count | Should -BeGreaterThan 0
+    }
+    It 'TMS-5.2 (8.2.4): Blocked passes, Allowed is a Gap, not returned (module before 6.4.0) is not assessed' {
+        $o = Defaults; Collect $o
+        (Verdict 'Test-TPControlTeamsTrialTenants' 'TMS-5.2').State | Should -Be 'Satisfied'
+        $o['Get-CsTenantFederationConfiguration'].ExternalAccessWithTrialTenants = 'Allowed'; Collect $o
+        (Verdict 'Test-TPControlTeamsTrialTenants' 'TMS-5.2').State | Should -Be 'Gap'
+        $o = Defaults; $o['Get-CsTenantFederationConfiguration'] = [pscustomobject]@{ AllowFederatedUsers = $true; AllowedDomains = [pscustomobject]@{}; BlockedDomains = @() }; Collect $o
+        (Get-TPRawData -Key 'Teams').Data.FederationConfig.ExternalAccessWithTrialTenants | Should -BeNullOrEmpty
+        (Verdict 'Test-TPControlTeamsTrialTenants' 'TMS-5.2').State | Should -Be 'NotApplicable'
+    }
+    It 'TMS-5.3 (8.5.6): only OrganizerOnlyUserOverride passes; people-in-org is part-way; Everyone is a Gap; unknown is not assessed' {
+        foreach ($case in @(@('OrganizerOnlyUserOverride','Satisfied'), @('EveryoneInCompanyUserOverride','Partial'), @('EveryoneUserOverride','Gap'), @('SomethingNew','NotApplicable'))) {
+            $o = Defaults; $o['Get-CsTeamsMeetingPolicy'].DesignatedPresenterRoleMode = $case[0]; Collect $o
+            (Verdict 'Test-TPControlTeamsPresenterRole' 'TMS-5.3').State | Should -Be $case[1] -Because $case[0]
+        }
+    }
+    It 'TMS-5.4 (8.5.8) and TMS-5.5 (8.5.9): False passes, True is a Gap, not returned is not assessed' {
+        $o = Defaults; Collect $o
+        (Verdict 'Test-TPControlTeamsExternalMeetingChat' 'TMS-5.4').State | Should -Be 'Gap'
+        (Verdict 'Test-TPControlTeamsCloudRecording' 'TMS-5.5').State | Should -Be 'Gap'
+        $o['Get-CsTeamsMeetingPolicy'].AllowExternalNonTrustedMeetingChat = $false; $o['Get-CsTeamsMeetingPolicy'].AllowCloudRecording = $false; Collect $o
+        (Verdict 'Test-TPControlTeamsExternalMeetingChat' 'TMS-5.4').State | Should -Be 'Satisfied'
+        (Verdict 'Test-TPControlTeamsCloudRecording' 'TMS-5.5').State | Should -Be 'Satisfied'
+        $o['Get-CsTeamsMeetingPolicy'] = [pscustomobject]@{ AutoAdmittedUsers = 'OrganizerOnly' }; Collect $o
+        (Verdict 'Test-TPControlTeamsExternalMeetingChat' 'TMS-5.4').State | Should -Be 'NotApplicable'
+        (Verdict 'Test-TPControlTeamsCloudRecording' 'TMS-5.5').State | Should -Be 'NotApplicable'
+    }
+    It 'TMS-5.6 (8.6.1): the Teams switch and every report submission component pass together' {
+        $o = Defaults; Collect $o
+        CollectRsp -Policy (GoodRsp)
+        $rsp = (Get-TPRawData -Key 'Defender-Policies').Data['ReportSubmissionPolicy']
+        $rsp.Available | Should -BeTrue
+        @($rsp.ReportPhishAddresses) | Should -Be @('reports@contoso.com')
+        (Verdict 'Test-TPControlTeamsSecurityReporting' 'TMS-5.6').State | Should -Be 'Satisfied'
+    }
+    It 'TMS-5.6: reports sent to Microsoft, an empty reporting address list or the Teams switch off are shortfalls' {
+        $o = Defaults; Collect $o
+        $p = GoodRsp; $p.ReportChatMessageEnabled = $true; CollectRsp -Policy $p
+        $f = Verdict 'Test-TPControlTeamsSecurityReporting' 'TMS-5.6'
+        $f.State  | Should -Be 'Partial'
+        $f.Detail | Should -Match 'ReportChatMessageEnabled = True'
+        $p = GoodRsp; $p.ReportPhishAddresses = @(); CollectRsp -Policy $p
+        $f = Verdict 'Test-TPControlTeamsSecurityReporting' 'TMS-5.6'
+        $f.State  | Should -Be 'Partial'
+        $f.Detail | Should -Match 'ReportPhishAddresses is empty'
+        $o['Get-CsTeamsMessagingPolicy'].AllowSecurityEndUserReporting = $false; Collect $o
+        CollectRsp -Policy (GoodRsp)
+        (Verdict 'Test-TPControlTeamsSecurityReporting' 'TMS-5.6').State | Should -Be 'Partial'
+    }
+    It 'TMS-5.6: a cmdlet missing from the session, an unreturned switch or a results file without the read is not assessed' {
+        $o = Defaults; Collect $o
+        CollectRsp -NoCmdlet
+        (Get-TPRawData -Key 'Defender-Policies').Data['ReportSubmissionPolicy'].Available | Should -BeFalse
+        @(Get-TPExceptions | Where-Object { $_.Source -eq 'Defender-ReportSubmissionPolicy' }).Count | Should -Be 1
+        $f = Verdict 'Test-TPControlTeamsSecurityReporting' 'TMS-5.6'
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Match 'not available in the Exchange Online session'
+        $p = GoodRsp; $p.PSObject.Properties.Remove('ReportJunkAddresses'); $p.PSObject.Properties.Remove('ReportChatMessageEnabled'); CollectRsp -Policy $p
+        $f = Verdict 'Test-TPControlTeamsSecurityReporting' 'TMS-5.6'
+        $f.State  | Should -Be 'NotApplicable'
+        $f.Detail | Should -Match 'ReportJunkAddresses was not returned'
+        $f.Detail | Should -Match 'ReportChatMessageEnabled was not returned'
+        Collect $o
+        Set-TPRawData -Key 'Defender-Policies' -Data @{ Success = $true; Data = @{ SafeAttachments = @{ Available = $true } } }
+        (Verdict 'Test-TPControlTeamsSecurityReporting' 'TMS-5.6').Detail | Should -Match 'predates'
+    }
+    It 'TMS-5.6: a report submission policy replayed from JSON keeps an empty address list as empty, never unread' {
+        $o = Defaults; Collect $o
+        $p = GoodRsp; $p.ReportJunkAddresses = @(); CollectRsp -Policy $p
+        $def = (Get-TPRawData -Key 'Defender-Policies') | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+        Set-TPRawData -Key 'Defender-Policies' -Data $def
+        $f = Verdict 'Test-TPControlTeamsSecurityReporting' 'TMS-5.6'
+        $f.State  | Should -Be 'Partial'
+        $f.Detail | Should -Match 'ReportJunkAddresses is empty'
+    }
+    It 'no Teams data at all: every TMS-5.x control is not assessed with its citations' {
+        Clear-TPState
+        foreach ($p in @(@('Test-TPControlTeamsConsumerInbound','TMS-5.1'), @('Test-TPControlTeamsTrialTenants','TMS-5.2'), @('Test-TPControlTeamsPresenterRole','TMS-5.3'),
+                         @('Test-TPControlTeamsExternalMeetingChat','TMS-5.4'), @('Test-TPControlTeamsCloudRecording','TMS-5.5'), @('Test-TPControlTeamsSecurityReporting','TMS-5.6'))) {
+            $f = Verdict $p[0] $p[1]
+            $f.State | Should -Be 'NotApplicable' -Because $p[1]
+            $f.Detail | Should -Match 'not assessed|Not assessed'
+            @($f.FrameworkIds).Count | Should -BeGreaterThan 0 -Because $p[1]
+        }
+    }
+}
