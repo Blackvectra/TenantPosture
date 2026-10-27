@@ -138,8 +138,8 @@ function Get-ConnectionInformation { @() }
         It 'no publisher failed' {
             $script:Live.Output | Should -Not -Match 'publish failed' -Because $script:Live.Output
         }
-        It 'wrote the HTML report, the Markdown summary, the playbook, the NIST matrix, the SSP and the onboarding report (-AllFiles implies it)' {
-            foreach ($pattern in '*-assessment.html', '*-assessment.md', '*-playbook.md', '*-executive.md', '*-nist-800-53-matrix.md', '*-ssp-800-171.md', '*-nist-improvement-plan.md', '*-onboarding.html', '*-onboarding.md') {
+        It 'wrote the HTML report, the Markdown summary, the playbook, the NIST matrix, the SSP, the BOD 25-01 view and the onboarding report (-AllFiles implies it)' {
+            foreach ($pattern in '*-assessment.html', '*-assessment.md', '*-playbook.md', '*-executive.md', '*-nist-800-53-matrix.md', '*-ssp-800-171.md', '*-nist-improvement-plan.md', '*-onboarding.html', '*-onboarding.md', '*-bod-25-01.md') {
                 @(Get-ChildItem -LiteralPath $script:LiveOut -Filter $pattern -ErrorAction SilentlyContinue).Count | Should -BeGreaterThan 0 -Because "$pattern was not written"
             }
         }
