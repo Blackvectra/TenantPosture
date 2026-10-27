@@ -6780,6 +6780,218 @@
         "PCIDSS": "Req 8.5"
       },
       "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "EXO-10.1",
+      "Title": "External Calendar Sharing Not Available",
+      "Description": "The Default Sharing Policy is disabled (Enabled = False), so users cannot share their calendars with people outside the organization, and no other enabled sharing policy shares calendars with every domain (*) or through anonymous published links (Anonymous).",
+      "BusinessRisk": "A calendar shared outside the organization tells an attacker who works with whom, when an executive is traveling or out of the office, and which meetings to imitate, the reconnaissance behind a convincing business email compromise or a well-timed payment fraud.",
+      "Severity": "Low",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-MailboxConfig",
+      "EvaluatorFunction": "Test-TPControlEXOCalendarSharing",
+      "Remediation": "Microsoft 365 admin center > Settings > Org settings > Services > Calendar: clear 'Let your users share their calendars with people outside of your organization'. Or: Set-SharingPolicy -Identity 'Default Sharing Policy' -Enabled $false. Review any other enabled sharing policy that shares calendars with * or Anonymous and disable it or limit it to named partner domains.",
+      "References": {
+        "CIS": "1.3.3",
+        "SCuBA": "",
+        "NIST": "AC-3",
+        "CMMC": "AC.L2-3.1.3",
+        "MITRE": [
+          "T1591"
+        ],
+        "CISControls": [
+          "3.3"
+        ],
+        "ISO27001": "A.5.14",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "EXO-10.2",
+      "Title": "Additional Storage Providers Restricted in Outlook on the Web",
+      "Description": "The default Outlook on the web mailbox policy, and every other Outlook on the web mailbox policy, sets AdditionalStorageProvidersAvailable = False, so users cannot open or attach files from third-party storage services (Box, Dropbox, Google Drive, personal OneDrive and others) in Outlook on the web.",
+      "BusinessRisk": "Third-party storage services sit outside the organization's control and data protection: a user can attach company files from, or save them to, a personal account, and a file from an untrusted service reaches the mailbox without the organization's own scanning and sharing rules.",
+      "Severity": "Medium",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-MailboxConfig",
+      "EvaluatorFunction": "Test-TPControlEXOOwaStorageProviders",
+      "Remediation": "Set-OwaMailboxPolicy -Identity OwaMailboxPolicy-Default -AdditionalStorageProvidersAvailable $false, and the same on any other Outlook on the web mailbox policy (Get-OwaMailboxPolicy).",
+      "References": {
+        "CIS": "6.5.3",
+        "SCuBA": "",
+        "NIST": "AC-20, CM-7",
+        "CMMC": "AC.L1-3.1.20",
+        "MITRE": [
+          "T1567.002"
+        ],
+        "CISControls": [
+          "4.8"
+        ],
+        "ISO27001": "A.5.23",
+        "HIPAA": "§164.308(a)(4)(ii)(B)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 12.3.4"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "EXO-10.3",
+      "Title": "Connection Filter IP Allow List Not Used",
+      "Description": "The IP Allow List of the connection filter policy is empty, so no source IP address skips spam filtering and sender authentication checks.",
+      "BusinessRisk": "Mail from an IP address on the allow list skips spam filtering and SPF, DKIM and DMARC checks; only malware and high confidence phishing are still filtered. A shared or compromised sending service on the list delivers spoofed and phishing mail straight to the inbox.",
+      "Severity": "Medium",
+      "Workload": "EXO",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-ConnectionFilter",
+      "EvaluatorFunction": "Test-TPControlEXOConnectionIPAllowList",
+      "Remediation": "Microsoft Defender portal > Email & collaboration > Policies & rules > Threat policies > Anti-spam > Connection filter policy (Default) > Edit connection filter policy: remove every entry under 'Always allow messages from the following IP addresses or address range'. Or: Set-HostedConnectionFilterPolicy -Identity Default -IPAllowList @{}. Allow a trusted sender with a mail flow rule that also checks authentication, not by IP alone.",
+      "References": {
+        "CIS": "2.1.12",
+        "SCuBA": "",
+        "NIST": "SI-8",
+        "CMMC": "SI.L1-3.14.2",
+        "MITRE": [
+          "T1566"
+        ],
+        "CISControls": [
+          "9.7"
+        ],
+        "ISO27001": "A.8.7",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4.1"
+      },
+      "LicenseRequirement": "Included (EOP)"
+    },
+    {
+      "ControlId": "DEF-6.1",
+      "Title": "Administrators Notified When Internal Users Send Malware",
+      "Description": "Every anti-malware policy in force has EnableInternalSenderAdminNotifications = True and an InternalSenderAdminAddress, so an administrator is notified when an internal user sends a message that contains malware.",
+      "BusinessRisk": "An internal user sending malware usually means a compromised account or device. Without the notification nobody is told, and the malware keeps spreading inside the organization and to its partners until someone reports it.",
+      "Severity": "Low",
+      "Workload": "DEF",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "Defender-Policies",
+      "EvaluatorFunction": "Test-TPControlDefenderInternalMalwareNotify",
+      "Remediation": "Microsoft Defender portal > Email & collaboration > Policies & rules > Threat policies > Anti-malware > open each policy in force > Edit protection settings: turn on 'Notify an admin about undelivered messages from internal senders' and enter the administrator's address. Or: Set-MalwareFilterPolicy -Identity <policy> -EnableInternalSenderAdminNotifications $true -InternalSenderAdminAddress <address>.",
+      "References": {
+        "CIS": "2.1.3",
+        "SCuBA": "",
+        "NIST": "SI-4, IR-6",
+        "CMMC": "SI.L2-3.14.6",
+        "MITRE": [
+          "T1534"
+        ],
+        "CISControls": [
+          "13.1"
+        ],
+        "ISO27001": "A.8.16",
+        "HIPAA": "§164.308(a)(6)(ii)",
+        "SOC2": "CC7.2",
+        "PCIDSS": "Req 12.10.5"
+      },
+      "LicenseRequirement": "Included (EOP)"
+    },
+    {
+      "ControlId": "DEF-6.2",
+      "Title": "Outbound Spam Policies Notify Administrators",
+      "Description": "Every outbound spam policy in force copies messages from a sender over the sending limits to an administrator (BccSuspiciousOutboundMail = True with BccSuspiciousOutboundAdditionalRecipients set) and notifies administrators when a sender is blocked for outbound spam (NotifyOutboundSpam = True with NotifyOutboundSpamRecipients set).",
+      "BusinessRisk": "A user blocked for sending spam is a strong sign the account has been taken over and is being used to send phishing or spam. Without the copy and the notification, the compromise is discovered from a partner's complaint or a blocklisted domain instead of the same day.",
+      "Severity": "Low",
+      "Workload": "DEF",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "EXO-MailboxConfig",
+      "EvaluatorFunction": "Test-TPControlDefenderOutboundSpamNotify",
+      "Remediation": "Microsoft Defender portal > Email & collaboration > Policies & rules > Threat policies > Anti-spam > Anti-spam outbound policy (Default) > Edit protection settings > Notifications: select 'Send a copy of suspicious outbound messages that exceed these limits to these users and groups' and 'Notify these users and groups if a sender is blocked due to sending outbound spam', each with an administrator address. Or: Set-HostedOutboundSpamFilterPolicy -Identity Default -BccSuspiciousOutboundMail $true -BccSuspiciousOutboundAdditionalRecipients <address> -NotifyOutboundSpam $true -NotifyOutboundSpamRecipients <address>. Microsoft also recommends keeping the default alert policy 'User restricted from sending email' on.",
+      "References": {
+        "CIS": "2.1.6",
+        "SCuBA": "",
+        "NIST": "SI-4, IR-6",
+        "CMMC": "SI.L2-3.14.6",
+        "MITRE": [
+          "T1078.004"
+        ],
+        "CISControls": [
+          "13.1"
+        ],
+        "ISO27001": "A.8.16",
+        "HIPAA": "§164.308(a)(6)(ii)",
+        "SOC2": "CC7.2",
+        "PCIDSS": "Req 12.10.5"
+      },
+      "LicenseRequirement": "Included (EOP)"
+    },
+    {
+      "ControlId": "DEF-6.3",
+      "Title": "Comprehensive Attachment Filtering Applied",
+      "Description": "Every anti-malware policy in force has the common attachments filter on (EnableFileFilter = True) and blocks all 186 file types CIS Microsoft 365 Foundations Benchmark v7.0.0 recommendation 2.1.11 lists (Config/cis-m365-comprehensive-attachment-types.json), a superset of Microsoft's 53-type default.",
+      "BusinessRisk": "Legacy Office formats, scripts, archives, disk images and installer packages are common ways to deliver malware past content scanning. Blocking them by type stops a new or obfuscated sample that signature scanning does not yet recognize.",
+      "Severity": "Medium",
+      "Workload": "DEF",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "Defender-Policies",
+      "EvaluatorFunction": "Test-TPControlDefenderComprehensiveAttachments",
+      "Remediation": "Create an anti-malware policy with EnableFileFilter $true and the 186 CIS 2.1.11 file types in FileTypes (New-MalwareFilterPolicy -Name <name> -EnableFileFilter $true -FileTypes <list>), and apply it with a malware filter rule that covers every accepted domain (New-MalwareFilterRule -Name <name> -MalwareFilterPolicy <name> -RecipientDomainIs <domains>). Or add the missing types to each policy in force with Set-MalwareFilterPolicy -FileTypes. Agree beforehand which listed types the business needs to exchange by email and how they will be sent instead.",
+      "References": {
+        "CIS": "2.1.11",
+        "SCuBA": "",
+        "NIST": "SI-3",
+        "CMMC": "SI.L1-3.14.2",
+        "MITRE": [
+          "T1566.001",
+          "T1204.002"
+        ],
+        "CISControls": [
+          "9.6"
+        ],
+        "ISO27001": "A.8.7",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.2"
+      },
+      "LicenseRequirement": "Included (EOP)"
+    },
+    {
+      "ControlId": "DEF-6.4",
+      "Title": "Zero-Hour Auto Purge for Microsoft Teams Enabled",
+      "Description": "Zero-hour auto purge is on for Microsoft Teams (the Teams protection policy has ZapEnabled = True), so a Teams chat message later identified as malware or high confidence phishing is removed from the chat. Exceptions on the Teams protection policy rule are reported for review.",
+      "BusinessRisk": "Teams chats are a delivery channel for phishing links and malicious files. Without zero-hour auto purge a message identified as malicious after it was delivered stays in the chat for everyone in it.",
+      "Severity": "Medium",
+      "Workload": "DEF",
+      "Category": "Email",
+      "Automated": true,
+      "CollectorDependency": "Defender-Policies",
+      "EvaluatorFunction": "Test-TPControlDefenderTeamsZap",
+      "Remediation": "Microsoft Defender portal > Settings > Email & collaboration > Microsoft Teams protection: set Zero-hour auto purge (ZAP) to On. Or: Set-TeamsProtectionPolicy -Identity 'Teams Protection Policy' -ZapEnabled $true. Review the exclusions under 'Exclude these participants'. Requires Defender for Office 365 Plan 1 or Plan 2.",
+      "References": {
+        "CIS": "2.4.4",
+        "SCuBA": "",
+        "NIST": "SI-3",
+        "CMMC": "SI.L1-3.14.2",
+        "MITRE": [
+          "T1566"
+        ],
+        "CISControls": [
+          "9.7",
+          "10.1"
+        ],
+        "ISO27001": "A.8.7",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 5.4.2"
+      },
+      "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)"
     }
   ]
 }

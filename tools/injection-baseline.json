@@ -238,7 +238,7 @@
       "Path": "Testing/TP.ExchangeTruth.Tests.ps1",
       "Rule": "InjectionRisk.Create",
       "Text": "[scriptblock]::Create($b)",
-      "Count": 2,
+      "Count": 3,
       "Reason": "Test harness: the script block is built from code written in the test or from this repository's own parsed source, to stand in for a command or bind a parameter; no tenant or external input reaches it."
     },
     {

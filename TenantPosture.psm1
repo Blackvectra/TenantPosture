@@ -311,6 +311,7 @@ $script:ExportedFunctions = @(
     'Test-TPControlEXOSafeSenderOverride',
     'Test-TPControlEXOMailboxForwarding', 'Test-TPControlEXOInboxRulesForwarding',
     'Test-TPControlEXOAuditDisabledMailboxes', 'Test-TPControlEXOSmtpAuthExceptions',
+    'Test-TPControlEXOCalendarSharing', 'Test-TPControlEXOOwaStorageProviders', 'Test-TPControlEXOConnectionIPAllowList',
 
     # ── Evaluators — Defender ─────────────────────────────────────────────────
     'Test-TPControlDefender',
@@ -323,6 +324,8 @@ $script:ExportedFunctions = @(
     'Test-TPControlDefenderRiskyAppAlerts', 'Test-TPControlDefenderPriorityAccounts',
     'Test-TPControlDefenderEndpointDLP', 'Test-TPControlDefenderAttackSim',
     'Test-TPControlDefenderSafeLinksOffice',
+    'Test-TPControlDefenderInternalMalwareNotify', 'Test-TPControlDefenderOutboundSpamNotify',
+    'Test-TPControlDefenderComprehensiveAttachments', 'Test-TPControlDefenderTeamsZap',
 
     # ── Evaluators — SharePoint ───────────────────────────────────────────────
     'Test-TPControlSharePoint',

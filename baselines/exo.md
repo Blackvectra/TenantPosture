@@ -1098,4 +1098,97 @@ Set-Mailbox -Identity <UPN> -RetainDeletedItemsFor 30. Apply tenant-wide with: G
 
 ---
 
+### EXO-10.1 — External Calendar Sharing Not Available
+
+**Severity:** Low  |  **Category:** Email  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+The Default Sharing Policy is disabled (Enabled = False), so users cannot share their calendars with people outside the organization, and no other enabled sharing policy shares calendars with every domain (*) or through anonymous published links (Anonymous).
+
+**Business risk:**
+A calendar shared outside the organization tells an attacker who works with whom, when an executive is traveling or out of the office, and which meetings to imitate, the reconnaissance behind a convincing business email compromise or a well-timed payment fraud.
+
+**Remediation:**
+Microsoft 365 admin center > Settings > Org settings > Services > Calendar: clear 'Let your users share their calendars with people outside of your organization'. Or: Set-SharingPolicy -Identity 'Default Sharing Policy' -Enabled $false. Review any other enabled sharing policy that shares calendars with * or Anonymous and disable it or limit it to named partner domains.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-3 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 1.3.3 |
+| CIS Controls v8.1 | 3.3 |
+| CMMC 2.0 | AC.L2-3.1.3 |
+| ISO/IEC 27001:2022 | A.5.14 |
+| SOC 2 | CC6.7 |
+| HIPAA | §164.308(a)(4)(ii)(B) |
+| PCI DSS v4.0 | Req 7.2 |
+| MITRE ATT&CK | T1591 |
+
+---
+
+### EXO-10.2 — Additional Storage Providers Restricted in Outlook on the Web
+
+**Severity:** Medium  |  **Category:** Email  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+The default Outlook on the web mailbox policy, and every other Outlook on the web mailbox policy, sets AdditionalStorageProvidersAvailable = False, so users cannot open or attach files from third-party storage services (Box, Dropbox, Google Drive, personal OneDrive and others) in Outlook on the web.
+
+**Business risk:**
+Third-party storage services sit outside the organization's control and data protection: a user can attach company files from, or save them to, a personal account, and a file from an untrusted service reaches the mailbox without the organization's own scanning and sharing rules.
+
+**Remediation:**
+Set-OwaMailboxPolicy -Identity OwaMailboxPolicy-Default -AdditionalStorageProvidersAvailable $false, and the same on any other Outlook on the web mailbox policy (Get-OwaMailboxPolicy).
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-20, CM-7 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 6.5.3 |
+| CIS Controls v8.1 | 4.8 |
+| CMMC 2.0 | AC.L1-3.1.20 |
+| ISO/IEC 27001:2022 | A.5.23 |
+| SOC 2 | CC6.7 |
+| HIPAA | §164.308(a)(4)(ii)(B) |
+| PCI DSS v4.0 | Req 12.3.4 |
+| MITRE ATT&CK | T1567.002 |
+
+---
+
+### EXO-10.3 — Connection Filter IP Allow List Not Used
+
+**Severity:** Medium  |  **Category:** Email  |  **Automated:** Yes
+
+**License required:** Included (EOP)
+
+**Description:**
+The IP Allow List of the connection filter policy is empty, so no source IP address skips spam filtering and sender authentication checks.
+
+**Business risk:**
+Mail from an IP address on the allow list skips spam filtering and SPF, DKIM and DMARC checks; only malware and high confidence phishing are still filtered. A shared or compromised sending service on the list delivers spoofed and phishing mail straight to the inbox.
+
+**Remediation:**
+Microsoft Defender portal > Email & collaboration > Policies & rules > Threat policies > Anti-spam > Connection filter policy (Default) > Edit connection filter policy: remove every entry under 'Always allow messages from the following IP addresses or address range'. Or: Set-HostedConnectionFilterPolicy -Identity Default -IPAllowList @{}. Allow a trusted sender with a mail flow rule that also checks authentication, not by IP alone.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | SI-8 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 2.1.12 |
+| CIS Controls v8.1 | 9.7 |
+| CMMC 2.0 | SI.L1-3.14.2 |
+| ISO/IEC 27001:2022 | A.8.7 |
+| SOC 2 | CC6.8 |
+| HIPAA | §164.308(a)(5)(ii)(B) |
+| PCI DSS v4.0 | Req 5.4.1 |
+| MITRE ATT&CK | T1566 |
+
+---
+
 *Generated from `Config/controls.json` · NRG Technology Services / NextLayerSec LLC*

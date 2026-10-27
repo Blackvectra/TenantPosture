@@ -444,7 +444,14 @@
     "AAD-17.3": "auth-prompt",
     "AAD-17.4": "auth-prompt",
     "AAD-17.5": "external-collab-friction",
-    "AAD-17.6": "auth-prompt"
+    "AAD-17.6": "auth-prompt",
+    "EXO-10.1": "external-collab-friction",
+    "EXO-10.2": "external-collab-friction",
+    "EXO-10.3": "mail-flow-quarantine",
+    "DEF-6.1": "admin-review-workload",
+    "DEF-6.2": "admin-review-workload",
+    "DEF-6.3": "mail-flow-quarantine",
+    "DEF-6.4": "none-visible"
   },
   "deviceControls": {
     "DEV-1.1": "device-encryption",
@@ -647,6 +654,42 @@
       "Summary": "Sign-ins can no longer be approved from Outlook mobile or another companion application; only the Microsoft Authenticator app approves.",
       "Watchouts": "Users who registered only Authenticator Lite in Outlook need the Microsoft Authenticator app registered first, or they lose their MFA method.",
       "Reversible": "Yes."
+    },
+    "EXO-10.1": {
+      "Summary": "Users can no longer share their calendars with people outside the organization, and calendars already shared or published stop returning data.",
+      "Users": "External free/busy and published calendar links stop working as soon as the policy is disabled. Internal calendar sharing and meeting invitations to external attendees are not affected.",
+      "Watchouts": "Find who relies on it first (assistants sharing an executive's calendar with an outside firm, published booking calendars). A partner that genuinely needs free/busy is better served by an organization relationship than by reopening sharing for everyone.",
+      "Reversible": "Yes. Re-enabling the policy restores sharing, but recipients have to be invited again."
+    },
+    "EXO-10.2": {
+      "Summary": "Users can no longer add or open files from third-party storage services (Box, Dropbox, Google Drive, personal OneDrive) in Outlook on the web.",
+      "Users": "The third-party storage locations disappear from the attach dialog in Outlook on the web; attaching from the organization's own OneDrive and SharePoint is unchanged.",
+      "Watchouts": "Ask first whether a department exchanges files with a client through a third-party service; the change can take up to an hour to apply.",
+      "Reversible": "Yes."
+    },
+    "EXO-10.3": {
+      "Summary": "Mail from the servers on the IP Allow List goes through spam filtering and sender authentication again.",
+      "Users": "Mail from a listed sender that fails SPF, DKIM or DMARC, or looks like spam, may land in Junk or quarantine instead of the inbox.",
+      "Watchouts": "Find out why each address is on the list (a scanner, a line-of-business application, a third-party sender) and fix that sender's authentication, or allow it with a mail flow rule that also checks authentication, before removing it.",
+      "Reversible": "Yes. Re-adding an address restores the bypass."
+    },
+    "DEF-6.1": {
+      "Summary": "An administrator receives a message whenever an internal user sends malware.",
+      "Watchouts": "Send it to a monitored shared mailbox or ticketing address, not one person's inbox, and decide who investigates the sender's account and device."
+    },
+    "DEF-6.2": {
+      "Summary": "An administrator is copied on suspicious outbound mail and notified when a user is blocked for sending spam.",
+      "Watchouts": "The Bcc copies can be numerous during an incident; route them to a monitored shared mailbox. A blocked user stays blocked until an administrator releases them, so the notification needs an owner."
+    },
+    "DEF-6.3": {
+      "Summary": "Messages carrying any of the 186 listed file types are blocked, including legacy Office formats, archives, HTML and calendar files.",
+      "Users": "Attachments such as .zip, .7z, .rar, .doc, .xls, .htm, .ics and .rtf are rejected or quarantined; senders and recipients have to exchange those files another way.",
+      "Watchouts": "This list blocks types many businesses still exchange by email. Pilot the policy on a group first, agree which types the business needs and how they will be sent instead (a sharing link), and expect quarantine release requests in the first weeks.",
+      "Reversible": "Yes. Removing a type from the list stops blocking it for new mail."
+    },
+    "DEF-6.4": {
+      "Summary": "Teams chat messages later identified as malware or high confidence phishing are removed from the chat for everyone in it.",
+      "Users": "Nothing, until a message is purged; then it is replaced by a notice that it was blocked. Quarantined Teams messages are available to administrators only."
     }
   }
 }

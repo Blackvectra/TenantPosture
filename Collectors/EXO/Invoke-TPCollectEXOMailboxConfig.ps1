@@ -1,7 +1,9 @@
 #Requires -Version 7.0
 #
 # Invoke-TPCollectEXOMailboxConfig.ps1  (v4.5.5)
-# Collects Exchange Online transport, mailbox audit, SMTP AUTH, and accepted domain data.
+# Collects Exchange Online transport, mailbox audit, SMTP AUTH, and accepted domain data,
+# sharing policies (Get-SharingPolicy) and Outlook on the web mailbox policies
+# (Get-OwaMailboxPolicy).
 # READ-ONLY. Uses EXO V3 Get-* cmdlets only.
 #
 # Required session: Exchange Online (Connect-ExchangeOnline)
@@ -33,6 +35,8 @@ function Invoke-TPCollectEXOMailboxConfig {
             OutboundSpamRules        = $null
             AdminAuditLogConfig      = $null
             ExternalInOutlook        = $null
+            SharingPolicies          = @()
+            OwaMailboxPolicies       = @()
             # Each of these seven sections runs its own independent try/catch
             # below so one query failing does not abort the rest, and Success
             # is set $true for the whole collector regardless. That makes an
@@ -53,6 +57,8 @@ function Invoke-TPCollectEXOMailboxConfig {
                 CASMailboxProtocols  = 'NotRun'
                 AdminAuditLogConfig  = 'NotRun'
                 ExternalInOutlook    = 'NotRun'
+                SharingPolicies      = 'NotRun'
+                OwaMailboxPolicies   = 'NotRun'
             }
         }
     }
@@ -94,6 +100,12 @@ function Invoke-TPCollectEXOMailboxConfig {
                     # EXO-3.2: admin notification on outbound spam (CIS/MDO recommend $true)
                     NotifyOutboundSpam            = [bool](Get-TPObjectField -Item $_ -Key 'NotifyOutboundSpam' -Default $false)
                     NotifyOutboundSpamRecipients  = @(Get-TPObjectField -Item $_ -Key 'NotifyOutboundSpamRecipients' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
+                    # DEF-6.2 (CIS 2.1.6): whether NotifyOutboundSpam was returned at all
+                    # (the field above defaults to $false), and the Bcc copy of messages
+                    # from a sender over the limits. Not returned stays $null.
+                    NotifyOutboundSpamReturned    = ($null -ne (Get-TPObjectField -Item $_ -Key 'NotifyOutboundSpam' -Default $null))
+                    BccSuspiciousOutboundMail     = (Get-TPObjectField -Item $_ -Key 'BccSuspiciousOutboundMail' -Default $null)
+                    BccSuspiciousOutboundAdditionalRecipients = @(Get-TPObjectField -Item $_ -Key 'BccSuspiciousOutboundAdditionalRecipients' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
                     # EXO-3.2: the sending limits, kept as returned. An absent or unreadable
                     # value stays $null (not read), never 0, which is Exchange's own value
                     # for "use the service default" and would be judged as such.
@@ -436,6 +448,47 @@ function Invoke-TPCollectEXOMailboxConfig {
             }
         }
 
+        # Sharing policies (EXO-10.1, CIS 1.3.3): which policies let users share
+        # calendars outside the organization. Domains are kept as returned
+        # ("<domain>:<action>, <action>", with * for every domain and Anonymous
+        # for published links); Enabled and Default are $null when not returned.
+        try {
+            $sp = @(Get-SharingPolicy -ErrorAction Stop)
+            $result.Data.SharingPolicies = @($sp | ForEach-Object {
+                @{
+                    Name    = [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '')
+                    Default = (Get-TPObjectField -Item $_ -Key 'Default' -Default $null)
+                    Enabled = (Get-TPObjectField -Item $_ -Key 'Enabled' -Default $null)
+                    Domains = @(@(Get-TPObjectField -Item $_ -Key 'Domains' -Default @()) | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_ })
+                }
+            })
+            $result.Data.SectionStatus.SharingPolicies = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.SharingPolicies = 'Failed'
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'EXO-SharingPolicies' -Message $_.Exception.Message
+            }
+        }
+
+        # Outlook on the web mailbox policies (EXO-10.2, CIS 6.5.3):
+        # AdditionalStorageProvidersAvailable, $null when not returned.
+        try {
+            $owa = @(Get-OwaMailboxPolicy -ErrorAction Stop)
+            $result.Data.OwaMailboxPolicies = @($owa | ForEach-Object {
+                @{
+                    Name      = [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '')
+                    IsDefault = (Get-TPObjectField -Item $_ -Key 'IsDefault' -Default $null)
+                    AdditionalStorageProvidersAvailable = (Get-TPObjectField -Item $_ -Key 'AdditionalStorageProvidersAvailable' -Default $null)
+                }
+            })
+            $result.Data.SectionStatus.OwaMailboxPolicies = 'Collected'
+        } catch {
+            $result.Data.SectionStatus.OwaMailboxPolicies = 'Failed'
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'EXO-OwaMailboxPolicies' -Message $_.Exception.Message
+            }
+        }
+
         $result.Success = $true
         if (Get-Command Register-TPCoverage -ErrorAction SilentlyContinue) {
             Register-TPCoverage -Family 'EXO-MailboxConfig' -Status 'Collected'
@@ -471,6 +524,9 @@ function Invoke-TPCollectEXOConnectionFilter {
                 Name            = [string](Get-TPObjectField -Item $_ -Key 'Name' -Default '')
                 IsDefault       = [bool](Get-TPObjectField -Item $_ -Key 'IsDefault' -Default $false)
                 IPAllowList     = @(@(Get-TPObjectField -Item $_ -Key 'IPAllowList' -Default @()) | ForEach-Object { [string]$_ })
+                # EXO-10.3 (CIS 2.1.12): an empty list above is also what an
+                # omitted property reads as, so record whether it was returned.
+                IPAllowListReturned = ($null -ne $_ -and $_.PSObject.Properties.Name -contains 'IPAllowList') -or ($_ -is [System.Collections.IDictionary] -and $_.Contains('IPAllowList'))
                 IPBlockList     = @(@(Get-TPObjectField -Item $_ -Key 'IPBlockList' -Default @()) | ForEach-Object { [string]$_ })
                 EnableSafeList  = Get-TPObjectField -Item $_ -Key 'EnableSafeList' -Default $null
             }
