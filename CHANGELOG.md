@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **[Evaluators] Ten controls tightened to earn their CIS Microsoft 365 v7.0.0 citation (85 controls cite 65
+  recommendations).** AAD-1.3 (5.2.2.5), AAD-1.4 (5.2.2.7), AAD-1.5 (5.2.2.6), AAD-10.4 (5.2.2.4), AAD-11.4 (5.2.2.16),
+  AAD-10.2 (1.1.1), AAD-14.1 (5.1.5.4), SPO-1.2 (7.2.7), DEF-4.2 (3.2.1) and INT-3.1 (4.2) now pass only when the CIS
+  audit passes, and replace their manual rows in the NRG Security Baseline (191 rows: 85 tool-checked, 106 manual).
+  Verdicts move: an All-users phishing-resistant policy alone is Partial, risk policies need sign-in frequency Every
+  time, token protection must name Exchange, SharePoint and Teams Services, a synced Global Reader is a Gap, application
+  lifetime limits must cover service principals, SPO-1.2 needs the SharePoint shell, and Intune's default enrollment
+  restriction (which allows personal devices) is now Partial or a Gap. No new Graph scope.
 - **[Controls] AAD-6.4: users cannot create agent identity blueprints (209 controls).** Microsoft Entra Agent ID lets any
   user create agent identity blueprints by default from November 2026, and the app-registration restriction (AAD-6.1)
   does not cover them. AAD-6.4 reads `allowedToCreateAgentIdentityBlueprints` from the beta authorization policy: False

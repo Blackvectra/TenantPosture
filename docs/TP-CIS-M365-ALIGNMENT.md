@@ -16,11 +16,13 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 | Subset | The evaluator checks some of the settings R lists, and every pass meets R for those settings. R can still fail on a setting the tool does not read. | 19 |
 | Not cited | No v7.0.0 recommendation describes the check, or the evaluator passes something R fails. | 134 |
 
-75 controls cite 56 of the 160 recommendations. The CIS card in the report scores only those controls, so it is a narrower number than before, and an honest one: it covers what the tool verified against this benchmark.
+85 controls cite 65 of the 160 recommendations. The CIS card in the report scores only those controls, so it is a narrower number than before, and an honest one: it covers what the tool verified against this benchmark.
 
 **Scope differences kept as citations.** EXO-1.3, EXO-5.3, EXO-8.2 and DEF-2.3 judge the policies and rules in force (`Get-TPInForcePolicies`; enabled transport rules), while the CIS audit reads every policy, or only the Default malware policy. A disabled rule or a policy no recipient falls under changes nothing about what happens to mail, so the judgment is the same requirement; it is recorded here because a CIS audit run by hand can disagree with the tool on such a tenant.
 
 **Evaluators tightened to earn a citation (2026-10-25).** DEF-1.5 requires phishing threshold 3 (it accepted 2); AAD-12.1 judges `isMfaCapable` (it read `isMfaRegistered`); EXO-1.4 requires DKIM `Status = Valid` on every accepted domain, relay domains included (it judged authoritative domains on `Enabled` alone); SPO-1.4 and SPO-3.4 require guest expiry of 30 days (any expiry passed); SPO-2.6 and SPO-2.7 require re-verification within 15 days (any period, and 30, passed); PVW-1.3 requires the enforced DLP policy to cover Exchange, SharePoint, OneDrive or Teams (an Endpoint-only policy passed); AAD-3.1 allows two to four Global Administrators (it allowed eight; the NRG baseline moved to v1.1 with it, by the owner's decision). Each changes verdicts: a tenant that passed before can now fail.
+
+**Evaluators tightened to earn a citation (2026-10-27).** AAD-1.3 names the 15 administrator roles 5.2.2.5 lists (an All-users policy alone is Partial); AAD-1.4 and AAD-1.5 need one policy selecting the levels CIS audits, with sign-in frequency Every time and, for user risk, password change together with MFA; AAD-10.4 requires persistent browser Never and the 15 CIS roles in one policy; AAD-11.4 requires Exchange Online, SharePoint Online and Teams Services named (All resources no longer passes), the Windows platform and desktop clients only; AAD-10.2 judges every role named "Administrator" plus Global Reader, active and eligible; AAD-14.1 requires the lifetime limits on service principals as well as applications; SPO-1.2 judges DefaultSharingLinkType; DEF-4.2 requires the policy to be enforced on Exchange, SharePoint, OneDrive or Teams; INT-3.1 requires the default restriction to block personal devices on the five platforms CIS lists. Each changes verdicts: a tenant that passed before can now fail.
 
 ## Cited controls
 
@@ -45,6 +47,13 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 | AAD-9.1 Authenticator Number Matching Enabled | 5.2.3.1 | Ensure Microsoft Authenticator is configured to protect against MFA fatigue (Automated) | Subset | Always NotApplicable "Enforced by the platform" for Authenticator number matching, which 5.2.3.1's subject (Authenticator MFA-fatigue protection) notes as platform-enforced; it never passes, but it does not read the app-name/location settings R audits (the collector already reads displayAppInformationRequiredState). |
 | AAD-10.3 Break-Glass Account Sign-In Monitoring | 2.2.1 | Ensure emergency access account activity is monitored (Manual) | Equivalent | Always NotApplicable manual verification that an alert fires on any break-glass sign-in; same subject as 2.2.1 (Manual), never passes. |
 | AAD-12.1 Users Without MFA — Named List | 5.2.3.4 | Ensure all member users are 'MFA capable' (Automated) | Equivalent | Satisfied requires every enabled member user (the directory-sync account excluded, as 5.2.3.4's note allows) to be isMfaCapable in the registration report, the value 5.2.3.4 audits (since 2026-10-25; it read isMfaRegistered before); a results file without the value is not assessed. |
+| AAD-1.3 Phishing-Resistant MFA Required for Admins | 5.2.2.5 | Ensure 'Phishing-resistant MFA strength' is required for Administrators (Automated) | Stricter | Satisfied needs an enabled CA policy that names all 15 roles 5.2.2.5 lists (and every privileged role in the tenant catalog), on All resources with no app exclusion or narrowing condition, requiring only the phishing-resistant strength (fido2, Windows Hello for Business or certificate MFA) with no block beside it; an All-users policy without a role-scoped one is Partial. Insider-risk conditions are not stored and not judged. |
+| AAD-1.4 Sign-in Risk CA Policy | 5.2.2.7 | Enable Identity Protection sign-in risk policies (Automated) | Stricter | Satisfied needs one enabled policy for all users, all resources and every client app type that selects high and medium sign-in risk and either blocks or requires MFA or an authentication strength with sign-in frequency Every time, which is 5.2.2.7's audit; the per-level all-user coverage the tool already judged is required as well. |
+| AAD-1.5 User Risk CA Policy | 5.2.2.6 | Enable Identity Protection user risk policies (Automated) | Stricter | Satisfied needs one enabled policy for all users, all resources and every client app type that selects high user risk and requires password change AND MFA or an authentication strength, with sign-in frequency Every time, which is 5.2.2.6's audit; a risk-remediation grant still counts toward coverage but is named as a CIS shortfall. |
+| AAD-10.2 Privileged Accounts Use Dedicated Cloud-Only Accounts | 1.1.1 | Ensure Administrative accounts are cloud-only (Automated) | Stricter | Satisfied only when the role catalog was read and no active or PIM-eligible holder of any role whose name contains 'Administrator', or Global Reader, has onPremisesSyncEnabled true; a holder whose property was not returned is not assessed. 1.1.1's audit reads the same property for the same roles. |
+| AAD-10.4 Short Sign-in Frequency for Admins and Guests | 5.2.2.4 | Ensure Sign-in frequency is enabled and browser sessions are not persistent for Administrative users (Automated) | Stricter | Satisfied needs one enabled policy on all resources naming all 15 CIS administrative roles with sign-in frequency of 4 hours or less and persistent browser Never, which passes 5.2.2.4; it also judges every privileged role and guests (24 hours or less), and does not accept 'Every time' for the admin half. |
+| AAD-11.4 Token Protection (Session Binding) Enforced | 5.2.2.16 | Ensure Token Protection is enforced for session tokens (Automated) | Equivalent | Satisfied needs an enabled CA policy with token protection, users not None, Exchange Online, SharePoint Online and Teams Services selected (not All resources), the Windows platform listed, and client apps limited to mobile apps and desktop clients, which is 5.2.2.16's audit. |
+| AAD-14.1 Application Credentials Current and Short-Lived | 5.1.5.4 | Ensure password lifetime for applications does not exceed 180 days (Automated) | Stricter | Satisfied needs the default app management policy enabled with passwordLifetime and asymmetricKeyLifetime restrictions of 180 days or less for both applications and service principals, no created-after date and no exempted actors, plus credential hygiene; every pass also passes 5.1.5.6 (certificate lifetime), which is not cited separately. |
 | DEF-1.1 Safe Attachments Enabled with Block Action | 2.1.4 | Ensure Safe Attachments policy is enabled (Automated) | Subset | Satisfied requires Enable = True and Action = Block in every Safe Attachments policy in force, meeting 2.1.4's Enable/Action values; QuarantineTag = AdminOnlyAccessPolicy is not judged. |
 | DEF-1.2 Safe Links Enabled and Hardened | 2.1.1 | Ensure Safe Links for Office Applications is Enabled (Automated) | Subset | Satisfied requires EnableSafeLinksForEmail True, AllowClickThrough False, TrackClicks True, EnableForInternalSenders True and DisableUrlRewrite not True in every policy in force, matching 2.1.1's values for those five; EnableSafeLinksForTeams/Office, ScanUrls and DeliverMessageAfterScan are not judged. |
 | DEF-1.3 Spoof Intelligence Enabled | 2.1.7 | Ensure that an anti-phishing policy has been created (Automated) | Subset | Satisfied requires EnableSpoofIntelligence = True in every anti-phishing policy in force, matching 2.1.7's EnableSpoofIntelligence True. |
@@ -56,6 +65,7 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 | DEF-4.1 DLP Policy Covers All Key Workloads | 3.2.1 | Ensure DLP policies are enabled (Automated) | Equivalent | Satisfied requires Mode = Enable DLP policies covering Exchange, SharePoint, OneDrive and Teams each with Include All and no exclusions, which meets 3.2.1 (a policy with Mode Enable and at least one of those locations) and also 3.2.2 (Teams, Mode Enable, TeamsLocation All). |
 | DEF-4.4 Priority Accounts Tagged in Defender | 2.4.1 | Ensure Priority account protection is enabled and configured (Automated) | Subset | Satisfied requires at least one account tagged Priority (Get-User -IsVIP) and EnablePriorityAccountProtection not read as False, covering 2.4.1 steps 1-2; the step-3 alert policies are not judged, a Plan 1 tenant where the switch cannot be read still passes, and whether the tagged set matches the organization's priority accounts is left to the reviewer. |
 | DEF-4.7 Safe Links Protects Office Applications | 2.1.1 | Ensure Safe Links for Office Applications is Enabled (Automated) | Subset | Satisfied requires EnableSafeLinksForOffice = True in every Safe Links policy in force, matching 2.1.1's EnableSafeLinksForOffice True (the setting in its title). |
+| DEF-4.2 DLP Policy Uses Sensitive Information Types | 3.2.1 | Ensure DLP policies are enabled (Automated) | Stricter | Satisfied needs an enabled sensitive-information-type rule in a Mode Enable DLP policy covering Exchange, SharePoint, OneDrive or Teams, the enforced-policy reading of 3.2.1 PVW-1.3 already uses, plus the sensitive-information-type condition. |
 | DNS-1.1 SPF Record Published | 2.1.8 | Ensure that SPF records are published for all Exchange Domains (Automated) | Equivalent | Satisfied requires exactly one v=spf1 record whose all term (or redirect target's) is -all with at most 10 lookup terms, for every non-onmicrosoft accepted domain, which meets 2.1.8 (-all or ~all, redirect target compliant); ~all is only Partial, stricter than 2.1.8. |
 | EXO-1.1 Mailbox Audit Logging Enabled | 6.1.1 | Ensure 'AuditDisabled' organizationally is set to 'False' (Automated) | Equivalent | Satisfied requires OrganizationConfig.AuditDisabled = False (plus no Get-MailboxAuditBypassAssociation entry), which meets 6.1.1's AuditDisabled = False; the bypass half also meets 6.1.3, the alternative citation. |
 | EXO-1.2 SMTP Client Authentication Disabled | 6.5.4 | Ensure SMTP AUTH is disabled (Automated) | Equivalent | Satisfied requires Get-TransportConfig SmtpClientAuthenticationDisabled = True and zero per-mailbox re-enables, which meets 6.5.4 (SmtpClientAuthenticationDisabled True). |
@@ -88,6 +98,7 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 | SPO-2.6 Email Attestation Required for Sharing | 7.2.10 | Ensure reauthentication with verification code is restricted (Automated) | Equivalent | Satisfied requires EmailAttestationRequired True with EmailAttestationReAuthDays 15 or fewer, 7.2.10's values (since 2026-10-25; any period passed before). |
 | SPO-2.7 Reauthentication Required for Sharing Links | 7.2.10 | Ensure reauthentication with verification code is restricted (Automated) | Equivalent | Satisfied requires EmailAttestationRequired True with EmailAttestationReAuthDays 1 to 15, 7.2.10's values (since 2026-10-25; it allowed 30 before, which CISA SCuBA MS.SHAREPOINT.3.3v2 still allows). |
 | SPO-3.4 SharePoint Guest Access Expiration Required | 7.2.9 | Ensure guest access to a site or OneDrive will expire automatically (Automated) | Equivalent | Same setting and threshold as SPO-1.4: ExternalUserExpirationRequired True with ExternalUserExpireInDays 30 (since 2026-10-25). |
+| SPO-1.2 Default Sharing Link Not Anonymous | 7.2.7 | Ensure link sharing is restricted in SharePoint and OneDrive (Automated) | Equivalent | Satisfied when Get-SPOTenant DefaultSharingLinkType is Direct or Internal, whatever SharingCapability is; AnonymousAccess or None is a Gap and a value not read is not assessed, which is 7.2.7's audit. |
 | TMS-1.1 External Federation Access Restricted | 8.2.1 | Ensure external domains are restricted in the Teams admin center (Automated) | Equivalent | Satisfied when Get-CsTenantFederationConfiguration AllowFederatedUsers = False or AllowedDomains is a non-empty allow list (open and blocklist are Gap/Partial); both are 8.2.1's org-settings passing states (Off; Allow only specific external domains). Tool does not judge whether listed domains are authorized and scores 8.2.1's third passing state (AllowedDomains empty) as Gap, which is stricter. |
 | TMS-1.2 Teams Consumer Account Access Disabled | 8.2.2 | Ensure communication with unmanaged Teams users is disabled (Automated) | Equivalent | Satisfied only when AllowTeamsConsumer = False, 8.2.2's org-settings passing state; 8.2.3 (AllowTeamsConsumerInbound = False) also states that turning the parent off disables inbound contact, so it is a secondary fit, but the scored setting is 8.2.2's. |
 | TMS-1.3 Anonymous Meeting Join Disabled | 8.5.1 | Ensure anonymous users can't join a meeting (Automated) | Equivalent | Satisfied when the Global meeting policy AllowAnonymousUsersToJoinMeeting = False (8.5.1's audit) or the stricter org-wide DisableAnonymousJoin = True; Partial/Gap otherwise. |
@@ -101,6 +112,7 @@ A control cites recommendation R only when (1) its evaluator judges the setting 
 | TMS-3.3 Meeting Chat Disabled for Anonymous Participants | 8.5.5 | Ensure meeting chat does not allow anonymous users (Automated) | Equivalent | Satisfied when MeetingChatEnabledType = Disabled or matches 'ExceptAnonymous' (EnabledExceptAnonymous / EnabledInMeetingOnlyForAllExceptAnonymous), the values 8.5.5 accepts. |
 | TMS-4.2 Anonymous Users Cannot Start Meetings | 8.5.2 | Ensure anonymous users and dial-in callers can't start a meeting (Automated) | Equivalent | Satisfied only when Global meeting policy AllowAnonymousUsersToStartMeeting = False, exactly 8.5.2's audit. |
 | TMS-4.3 Teams External Domain Federation Restricted to Allowlist | 8.2.1 | Ensure external domains are restricted in the Teams admin center (Automated) | Equivalent | Satisfied when federation mode is AllowList or Disabled (AllowFederatedUsers False, or True with a non-empty AllowedDomains), both 8.2.1 org-settings passing states. |
+| INT-3.1 Device Enrollment Restrictions Configured | 4.2 | Ensure device enrollment for personally owned devices is blocked by default (Automated) | Equivalent | Satisfied when the priority-0 default platform restriction blocks personal devices or the platform on Windows, iOS/iPadOS, macOS, Android Enterprise work profile and Android device administrator, the five platforms 4.2's audit lists; a minimum OS version or a custom restriction does not count. |
 
 ## Controls not cited
 
@@ -108,16 +120,14 @@ The reasons are in `Config/cis-m365-uncited-controls.json`. Several are one chan
 
 - AAD-1.1 (5.2.2.3): CIS audits a Conditional Access policy blocking `exchangeActiveSync` and `other`; the tool also passes Security Defaults, an owner decision recorded in CLAUDE.md.
 - AAD-6.2 (5.1.5.1): CIS requires "Do not allow user consent"; the tool passes `microsoft-user-default-low` by design.
-- AAD-1.3 (5.2.2.5) and AAD-10.2 (1.1.1): the shared privileged-role list lacks Global Reader and Password Administrator, which 5.2.2.5 names; changing it moves several controls at once.
 - DNS-1.3 (2.1.10): CIS requires a `ruf=` reporting address and includes the `.onmicrosoft.com` domain, which the DNS collector does not read.
 
 ## Recommendations no control checks
 
-104 of the 160 recommendations have no citing control. Some are settings the collectors already read and no evaluator scores (5.2.3.3 on-premises password protection, 2.1.12 the connection filter IP allow list); the rest need a new read. Section 9 (Microsoft Fabric) is outside what the tool assesses.
+95 of the 160 recommendations have no citing control. Some are settings the collectors already read and no evaluator scores (5.2.3.3 on-premises password protection, 2.1.12 the connection filter IP allow list); the rest need a new read. Section 9 (Microsoft Fabric) is outside what the tool assesses.
 
-**1. Microsoft 365 admin center** (11)
+**1. Microsoft 365 admin center** (9)
 
-- 1.1.1 Ensure Administrative accounts are cloud-only (Automated)
 - 1.1.4 Ensure administrative accounts use licenses with a reduced application footprint (Automated)
 - 1.2.1 Ensure that only organizationally managed/approved public groups exist (Automated)
 - 1.3.2 Ensure 'Idle session timeout' is set to '3 hours (or less)' for unmanaged devices (Automated)
@@ -128,7 +138,7 @@ The reasons are in `Config/cis-m365-uncited-controls.json`. Several are one chan
 - 1.3.8 Ensure that Sways cannot be shared with people outside of your organization (Manual)
 - 1.3.9 Ensure shared bookings pages are restricted to select users (Automated)
 
-**2. Microsoft 365 Defender** (9)
+**2. Microsoft 365 Defender** (8)
 
 - 2.1.3 Ensure notifications for internal users sending malware is Enabled (Automated)
 - 2.1.6 Ensure Exchange Online Spam Policies are set to notify administrators (Automated)
@@ -144,12 +154,11 @@ The reasons are in `Config/cis-m365-uncited-controls.json`. Several are one chan
 - 3.2.2 Ensure DLP policies are enabled for Microsoft Teams (Automated)
 - 3.2.3 Ensure DLP policies are published for Copilot users (Automated)
 
-**4. Microsoft Intune admin center** (2)
+**4. Microsoft Intune admin center** (1)
 
 - 4.1 Ensure devices without a compliance policy are marked 'not compliant' (Automated)
-- 4.2 Ensure device enrollment for personally owned devices is blocked by default (Automated)
 
-**5. Microsoft Entra admin center** (50)
+**5. Microsoft Entra admin center** (42)
 
 - 5.1.2.1 Ensure 'Per-user MFA' is disabled (Manual)
 - 5.1.2.4 Ensure access to the Entra admin center is restricted (Manual)
@@ -167,17 +176,12 @@ The reasons are in `Config/cis-m365-uncited-controls.json`. Several are one chan
 - 5.1.4.6 Ensure users are restricted from recovering BitLocker keys (Automated)
 - 5.1.5.1 Ensure user consent to apps accessing company data on their behalf is not allowed (Automated)
 - 5.1.5.3 Ensure password addition is blocked for applications (Automated)
-- 5.1.5.4 Ensure password lifetime for applications does not exceed 180 days (Automated)
 - 5.1.5.5 Ensure new application passwords are system-generated (Automated)
 - 5.1.5.6 Ensure maximum certificate lifetime for applications does not exceed 180 days (Automated)
 - 5.1.6.1 Ensure that collaboration invitations are sent to allowed domains only (Automated)
 - 5.1.8.1 Ensure that password hash sync is enabled for hybrid deployments (Automated)
 - 5.2.2.1 Ensure multifactor authentication is enabled for all users in administrative roles (Automated)
 - 5.2.2.3 Enable Conditional Access policies to block legacy authentication (Automated)
-- 5.2.2.4 Ensure Sign-in frequency is enabled and browser sessions are not persistent for Administrative users (Automated)
-- 5.2.2.5 Ensure 'Phishing-resistant MFA strength' is required for Administrators (Automated)
-- 5.2.2.6 Enable Identity Protection user risk policies (Automated)
-- 5.2.2.7 Enable Identity Protection sign-in risk policies (Automated)
 - 5.2.2.8 Ensure 'sign-in risk' is blocked for medium and high risk (Automated)
 - 5.2.2.9 Ensure a managed device is required for authentication (Automated)
 - 5.2.2.10 Ensure a managed device is required to register security information (Automated)
@@ -185,7 +189,6 @@ The reasons are in `Config/cis-m365-uncited-controls.json`. Several are one chan
 - 5.2.2.12 Ensure the device code sign-in flow is blocked (Automated)
 - 5.2.2.13 Ensure that periodic reauthentication is required for all users (Automated)
 - 5.2.2.15 Ensure exclusionary geographic access controls are utilized (Automated)
-- 5.2.2.16 Ensure Token Protection is enforced for session tokens (Automated)
 - 5.2.2.17 Ensure authentication transfer is blocked (Automated)
 - 5.2.3.3 Ensure password protection is enabled for on-prem Active Directory (Automated)
 - 5.2.3.5 Ensure weak authentication methods are disabled (Automated)
@@ -211,13 +214,12 @@ The reasons are in `Config/cis-m365-uncited-controls.json`. Several are one chan
 - 6.5.3 Ensure additional storage providers are restricted in Outlook on the web (Automated)
 - 6.5.5 Ensure Direct Send submissions are rejected (Automated)
 
-**7. SharePoint admin center** (8)
+**7. SharePoint admin center** (7)
 
 - 7.2.2 Ensure SharePoint and OneDrive integration with Azure AD B2B is enabled (Automated)
 - 7.2.4 Ensure OneDrive content sharing is restricted (Automated)
 - 7.2.5 Ensure that SharePoint guest users cannot share items they don't own (Automated)
 - 7.2.6 Ensure SharePoint external sharing is restricted (Automated)
-- 7.2.7 Ensure link sharing is restricted in SharePoint and OneDrive (Automated)
 - 7.2.8 Ensure external sharing is restricted by security group (Automated)
 - 7.2.11 Ensure the SharePoint default sharing link permission is set (Automated)
 - 7.3.1 Ensure Office 365 SharePoint infected files are disallowed for download (Automated)

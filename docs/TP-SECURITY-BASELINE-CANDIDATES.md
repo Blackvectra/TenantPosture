@@ -73,12 +73,12 @@ plus a `BaselineCompliance` summary (counts by observed state, constraint and di
 
 | Tier | Rows | Checked by the tool | Manual (CIS-<number>) |
 |---|---|---|---|
-| Minimum | 115 | 51 | 64 |
-| Standard | 16 | 3 | 13 |
-| Hardened | 59 | 21 | 38 |
-| Assessment-only controls | 134 | | |
+| Minimum | 116 | 57 | 59 |
+| Standard | 16 | 5 | 11 |
+| Hardened | 59 | 23 | 36 |
+| Assessment-only controls | 124 | | |
 
-All 160 v7.0.0 recommendations are represented; 75 rows are tool-checked controls and 115 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
+All 160 v7.0.0 recommendations are represented; 85 rows are tool-checked controls and 106 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
 
 ## Every assessment control
 
@@ -88,7 +88,7 @@ One row per control in `controls.json`; the tier column is what the test compare
 |---|---|---|---|---|---|
 | AAD-1.1 | Legacy Authentication Blocked | Critical | M365 Business Premium or Entra ID P1 | — | **Assessment-only** |
 | AAD-1.2 | MFA Required for All Users | Critical | M365 Business Premium or Entra ID P1 | 5.2.2.2 | **Minimum** |
-| AAD-1.3 | Phishing-Resistant MFA Required for Admins | Critical | M365 Business Premium or Entra ID P1 | — | **Assessment-only** |
+| AAD-1.3 | Phishing-Resistant MFA Required for Admins | Critical | M365 Business Premium or Entra ID P1 | 5.2.2.5 | **Hardened** |
 | AAD-2.1 | Conditional Access Policies Deployed | High | M365 Business Premium or Entra ID P1 | — | **Assessment-only** |
 | AAD-3.1 | Global Administrator Count 2-4, Cloud-Only | High | Included (all plans) | 1.1.3 | **Minimum** |
 | EXO-1.1 | Mailbox Audit Logging Enabled | High | Included (M365 Business Standard+) | 6.1.1 | **Minimum** |
@@ -115,7 +115,7 @@ One row per control in `controls.json`; the tier column is what the test compare
 | DEF-1.5 | Phishing Threshold Level Aggressive | Low | Included (EOP) | 2.1.7 | **Hardened** |
 | DEF-1.6 | First Contact Safety Tip Enabled | Low | Included (EOP) | 2.1.7 | **Hardened** |
 | SPO-1.1 | External Sharing Restricted | High | Included (M365 Business Standard+) | 7.2.3 | **Minimum** |
-| SPO-1.2 | Default Sharing Link Not Anonymous | Medium | Included (M365 Business Standard+) | — | **Assessment-only** |
+| SPO-1.2 | Default Sharing Link Not Anonymous | Medium | Included (M365 Business Standard+) | 7.2.7 | **Minimum** |
 | SPO-1.3 | SharePoint Legacy Authentication Blocked | High | Included (M365 Business Standard+) | 7.2.1 | **Minimum** |
 | SPO-1.4 | Guest Access Expiration Configured | Medium | Included (M365 Business Standard+) | 7.2.9 | **Minimum** |
 | SPO-1.5 | Unmanaged Device Access Restricted | Medium | M365 Business Premium or Entra ID P1 | — | **Assessment-only** |
@@ -141,8 +141,8 @@ One row per control in `controls.json`; the tier column is what the test compare
 | EXO-2.4 | IMAP Access Disabled | Medium | Included (M365 Business Standard+) | — | **Assessment-only** |
 | EXO-2.5 | Customer Lockbox Enabled | Medium | M365 E5 or E5 Compliance add-on | 1.3.6 | **Hardened** |
 | EXO-2.6 | Shared Mailboxes Block Direct Sign-In | High | Included (M365 Business Standard+) | 1.2.2 | **Minimum** |
-| AAD-1.4 | Sign-in Risk CA Policy | High | Entra ID P2 | — | **Assessment-only** |
-| AAD-1.5 | User Risk CA Policy | High | Entra ID P2 | — | **Assessment-only** |
+| AAD-1.4 | Sign-in Risk CA Policy | High | Entra ID P2 | 5.2.2.7 | **Standard** |
+| AAD-1.5 | User Risk CA Policy | High | Entra ID P2 | 5.2.2.6 | **Standard** |
 | AAD-2.2 | Named Locations Defined | Low | M365 Business Premium or Entra ID P1 | 5.2.2.14 | **Hardened** |
 | AAD-2.3 | Device Compliance Enforced via CA | High | M365 Business Premium or Entra ID P1 + Intune | — | **Assessment-only** |
 | AAD-3.2 | No Permanent Admin Role Assignments | High | Entra ID P2 | — | **Assessment-only** |
@@ -208,9 +208,9 @@ One row per control in `controls.json`; the tier column is what the test compare
 | AAD-9.1 | Authenticator Number Matching Enabled | High | Included (all plans) | 5.2.3.1 | **Minimum** |
 | AAD-9.2 | Passwordless Authentication Methods Available | Low | Included (all plans) | — | **Assessment-only** |
 | AAD-10.1 | Identity Protection Risky User Workflow | High | Entra ID P2 | — | **Assessment-only** |
-| AAD-10.2 | Privileged Accounts Use Dedicated Cloud-Only Accounts | High | Included (all plans) | — | **Assessment-only** |
+| AAD-10.2 | Privileged Accounts Use Dedicated Cloud-Only Accounts | High | Included (all plans) | 1.1.1 | **Minimum** |
 | AAD-10.3 | Break-Glass Account Sign-In Monitoring | High | Included (all plans) | 2.2.1 | **Standard** |
-| AAD-10.4 | Short Sign-in Frequency for Admins and Guests | Medium | M365 Business Premium or Entra ID P1 | — | **Assessment-only** |
+| AAD-10.4 | Short Sign-in Frequency for Admins and Guests | Medium | M365 Business Premium or Entra ID P1 | 5.2.2.4 | **Minimum** |
 | EXO-4.1 | Mailbox Audit Log Age Limit Sufficient | Medium | Included (M365 Business Standard+) | — | **Assessment-only** |
 | EXO-4.2 | Admin Audit Log Enabled | High | Included (M365 Business Standard+) | — | **Assessment-only** |
 | EXO-4.3 | Safe Attachments for SharePoint OneDrive Teams Enabled | High | Defender for Office 365 Plan 1 (M365 Business Premium) | 2.1.5 | **Hardened** |
@@ -231,7 +231,7 @@ One row per control in `controls.json`; the tier column is what the test compare
 | PVW-3.2 | eDiscovery Case Management Configured | Medium | M365 Business Premium or E3+ | — | **Assessment-only** |
 | PVW-3.3 | Compliance Score Improvement Actions Tracked | Low | Included (all plans) | — | **Assessment-only** |
 | PVW-3.4 | Sensitive Information Types Used in DLP Policies | High | M365 Business Premium or E3+ | — | **Assessment-only** |
-| INT-3.1 | Device Enrollment Restrictions Configured | Medium | M365 Business Premium or Intune Plan 1 | — | **Assessment-only** |
+| INT-3.1 | Device Enrollment Restrictions Configured | Medium | M365 Business Premium or Intune Plan 1 | 4.2 | **Minimum** |
 | INT-3.2 | Mobile App Configuration Policies Deployed | Low | M365 Business Premium or Intune Plan 1 | — | **Assessment-only** |
 | INT-3.3 | Conditional Launch Policies Configured | High | M365 Business Premium or Intune Plan 1 | — | **Assessment-only** |
 | PPL-2.1 | Power Platform Connector Classification Reviewed | Medium | Included (M365 Business Standard+) | — | **Assessment-only** |
@@ -240,14 +240,14 @@ One row per control in `controls.json`; the tier column is what the test compare
 | AAD-11.1 | Device Code Authentication Flow Blocked | High | M365 Business Premium or Entra ID P1 | — | **Assessment-only** |
 | AAD-11.2 | No Guest Accounts in Highly Privileged Roles | Critical | Included (all plans) | — | **Assessment-only** |
 | AAD-11.3 | Risky Service Principals Reviewed and Remediated | High | Entra ID P2 + Workload Identities add-on | — | **Assessment-only** |
-| AAD-11.4 | Token Protection (Session Binding) Enforced | High | M365 Business Premium or Entra ID P1 | — | **Assessment-only** |
+| AAD-11.4 | Token Protection (Session Binding) Enforced | High | M365 Business Premium or Entra ID P1 | 5.2.2.16 | **Hardened** |
 | AAD-11.5 | Continuous Access Evaluation Strict Mode | Low | M365 Business Premium or Entra ID P1 | — | **Assessment-only** |
 | AAD-11.6 | Cross-Tenant Inbound Trust Settings Restricted | High | Included (all plans) | — | **Assessment-only** |
 | AAD-11.7 | Privileged Access Workstation or Device Scope for Admins | Medium | M365 Business Premium or Entra ID P1 + Intune | — | **Assessment-only** |
 | AAD-11.8 | Terms of Use Policy Enforced | Low | M365 Business Premium or Entra ID P1 | — | **Assessment-only** |
 | AAD-11.9 | Workload Identity Conditional Access Policy | Medium | Entra Workload Identities Premium (add-on) | — | **Assessment-only** |
 | DEF-4.1 | DLP Policy Covers All Key Workloads | High | M365 Business Premium or E3+ | 3.2.1 | **Minimum** |
-| DEF-4.2 | DLP Policy Uses Sensitive Information Types | High | M365 Business Premium or E3+ | — | **Assessment-only** |
+| DEF-4.2 | DLP Policy Uses Sensitive Information Types | High | M365 Business Premium or E3+ | 3.2.1 | **Minimum** |
 | DEF-4.3 | Risky OAuth Application Alerts Configured | High | Included (all plans) | — | **Assessment-only** |
 | DEF-4.4 | Priority Accounts Tagged in Defender | Medium | Defender for Office 365 Plan 2 (M365 E5 or add-on) | 2.4.1 | **Standard** |
 | DEF-4.5 | Endpoint DLP Policy Active on Managed Devices | High | M365 E5 or E5 Compliance add-on | — | **Assessment-only** |
@@ -288,7 +288,7 @@ One row per control in `controls.json`; the tier column is what the test compare
 | EXO-7.4 | No Per-User SMTP AUTH Overrides | High | Included (all plans) | — | **Assessment-only** |
 | EXO-8.1 | Mail Flow Connectors Reviewed and Hardened | High | Included (EOP) | — | **Assessment-only** |
 | EXO-8.2 | No Transport Rule Redirects Mail Externally | Critical | Included (EOP) | 6.2.1 | **Minimum** |
-| AAD-14.1 | Application Credentials Current and Short-Lived | High | Included (Entra ID Free) | — | **Assessment-only** |
+| AAD-14.1 | Application Credentials Current and Short-Lived | High | Included (Entra ID Free) | 5.1.5.4 | **Minimum** |
 | AAD-15.1 | No Application Holds Tenant-Takeover Permissions | Critical | Included (all plans) | — | **Assessment-only** |
 | AAD-15.2 | Applications with Tenant-Wide Data Permissions — Named List | High | Included (all plans) | — | **Assessment-only** |
 | DEF-5.1 | Tenant Allow/Block List Entries Time-Boxed | High | Included (EOP) | — | **Assessment-only** |
@@ -302,7 +302,6 @@ Required at their tier, always NotVerified until a control checks them.
 
 | Row | Recommendation | Profile | Tier |
 |---|---|---|---|
-| `CIS-1.1.1` | Ensure Administrative accounts are cloud-only | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-1.1.2` | Ensure two emergency access accounts have been defined: the settings AAD-7.2 do not check | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-1.1.4` | Ensure administrative accounts use licenses with a reduced application footprint | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-1.3.4` | Ensure 'User owned apps and services' is restricted | E3 Level 1 / E5 Level 1 | Minimum |
@@ -313,7 +312,6 @@ Required at their tier, always NotVerified until a control checks them.
 | `CIS-2.1.10` | Ensure DMARC records for all Exchange Online domains are published | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-2.1.12` | Ensure the connection filter IP allow list is not used | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-4.1` | Ensure devices without a compliance policy are marked 'not compliant' | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-4.2` | Ensure device enrollment for personally owned devices is blocked by default | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.2.1` | Ensure 'Per-user MFA' is disabled | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.2.4` | Ensure access to the Entra admin center is restricted | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.3.1` | Ensure users cannot create security groups | E3 Level 1 / E5 Level 1 | Minimum |
@@ -322,13 +320,11 @@ Required at their tier, always NotVerified until a control checks them.
 | `CIS-5.1.4.3` | Ensure the GA role is not added as a local administrator during Entra join | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.4.4` | Ensure local administrator assignment is limited during Entra join | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.4.5` | Ensure Local Administrator Password Solution is enabled | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-5.1.5.4` | Ensure password lifetime for applications does not exceed 180 days | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.5.5` | Ensure new application passwords are system-generated | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.5.6` | Ensure maximum certificate lifetime for applications does not exceed 180 days | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.8.1` | Ensure that password hash sync is enabled for hybrid deployments | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.2.1` | Ensure multifactor authentication is enabled for all users in administrative roles | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.2.3` | Enable Conditional Access policies to block legacy authentication | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-5.2.2.4` | Ensure Sign-in frequency is enabled and browser sessions are not persistent for Administrative users | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.2.9` | Ensure a managed device is required for authentication | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.2.10` | Ensure a managed device is required to register security information | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.2.11` | Ensure sign-in frequency for Intune Enrollment is set to 'Every time' | E3 Level 1 / E5 Level 1 | Minimum |
@@ -350,7 +346,6 @@ Required at their tier, always NotVerified until a control checks them.
 | `CIS-6.3.2` | Ensure the ability to add personal email accounts and calendars is disabled | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-6.5.2` | Ensure MailTips are enabled for end users | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-7.2.2` | Ensure SharePoint and OneDrive integration with Azure AD B2B is enabled | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-7.2.7` | Ensure link sharing is restricted in SharePoint and OneDrive | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-7.2.11` | Ensure the SharePoint default sharing link permission is set | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-8.2.3` | Ensure external Teams users cannot initiate conversations | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-8.2.4` | Ensure the organization cannot communicate with accounts in trial Teams tenants | E3 Level 1 / E5 Level 1 | Minimum |
@@ -372,8 +367,6 @@ Required at their tier, always NotVerified until a control checks them.
 | `CIS-2.4.5` | Ensure 'AIR' remediation is enabled | E5 Level 1 | Standard |
 | `CIS-3.2.2` | Ensure DLP policies are enabled for Microsoft Teams | E5 Level 1 | Standard |
 | `CIS-3.2.3` | Ensure DLP policies are published for Copilot users | E5 Level 1 | Standard |
-| `CIS-5.2.2.6` | Enable Identity Protection user risk policies | E5 Level 1 | Standard |
-| `CIS-5.2.2.7` | Enable Identity Protection sign-in risk policies | E5 Level 1 | Standard |
 | `CIS-5.3.2` | Ensure 'Access reviews' for guest users are configured | E5 Level 1 | Standard |
 | `CIS-5.3.3` | Ensure 'Access reviews' for privileged roles are configured | E5 Level 1 | Standard |
 | `CIS-5.3.4` | Ensure approval is required for Global Administrator role activation: the settings AAD-3.5 do not check | E5 Level 1 | Standard |
@@ -399,10 +392,8 @@ Required at their tier, always NotVerified until a control checks them.
 | `CIS-5.1.5.1` | Ensure user consent to apps accessing company data on their behalf is not allowed | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-5.1.5.3` | Ensure password addition is blocked for applications | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-5.1.6.1` | Ensure that collaboration invitations are sent to allowed domains only | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-5.2.2.5` | Ensure 'Phishing-resistant MFA strength' is required for Administrators | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-5.2.2.8` | Ensure 'sign-in risk' is blocked for medium and high risk | E5 Level 2 | Hardened |
 | `CIS-5.2.2.15` | Ensure exclusionary geographic access controls are utilized | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-5.2.2.16` | Ensure Token Protection is enforced for session tokens | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-5.2.3.7` | Ensure the email OTP authentication method is disabled | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-5.3.1` | Ensure privileged role assignments are activated and not assigned | E5 Level 2 | Hardened |
 | `CIS-6.3.1` | Ensure users installing Outlook add-ins is not allowed | E3 Level 2 / E5 Level 2 | Hardened |

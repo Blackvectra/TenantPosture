@@ -424,7 +424,7 @@ Testing/                          126 Pester suites — the FULL suite gates eve
 
 **Severity distribution:** 13 Critical · 99 High · 69 Medium · 28 Low
 
-**Framework citations per control:** CIS M365 Foundations v7.0.0 (75 controls, cited only where the check matches the recommendation's audit; [alignment](docs/TP-CIS-M365-ALIGNMENT.md)) · CISA SCuBA (ScubaGear v2.0.0 policy IDs) · NIST SP 800-53 Rev 5 · CMMC 2.0 · ISO/IEC 27001:2022 · MITRE ATT&CK — plus CIS Controls v8.1 safeguards, SOC 2, HIPAA, and PCI DSS references. Controls whose license requirement the tenant doesn't meet are routed to an Upgrade Unlocks section instead of dragging the score down.
+**Framework citations per control:** CIS M365 Foundations v7.0.0 (85 controls, cited only where the check matches the recommendation's audit; [alignment](docs/TP-CIS-M365-ALIGNMENT.md)) · CISA SCuBA (ScubaGear v2.0.0 policy IDs) · NIST SP 800-53 Rev 5 · CMMC 2.0 · ISO/IEC 27001:2022 · MITRE ATT&CK — plus CIS Controls v8.1 safeguards, SOC 2, HIPAA, and PCI DSS references. Controls whose license requirement the tenant doesn't meet are routed to an Upgrade Unlocks section instead of dragging the score down.
 
 ### NIST SP 800-53 Rev 5 — family rollup
 

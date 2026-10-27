@@ -42,25 +42,25 @@
   "effectivenessNote": "Configuration compliance and effectiveness are different questions. EffectivenessCapability says whether the assessment can read the effectiveness evidence today; where it cannot, EffectivenessState is Unknown and is reported as Unknown, never rounded to a pass.",
   "controls": [
     {
-      "ControlId": "CIS-1.1.1",
-      "Title": "Ensure Administrative accounts are cloud-only",
+      "ControlId": "AAD-10.2",
+      "Title": "Privileged Accounts Use Dedicated Cloud-Only Accounts",
       "Tier": "Minimum",
       "Cis": "1.1.1",
       "CisProfile": "E3 Level 1 / E5 Level 1",
-      "CisRelation": "Manual",
+      "CisRelation": "Stricter",
       "Owner": "Identity",
-      "RawDataKeys": [],
-      "EvidenceSource": "Manual: CIS Microsoft 365 Foundations v7.0.0 1.1.1 audit procedure.",
-      "ExpectedState": "CIS 1.1.1: Ensure Administrative accounts are cloud-only, verified by hand against the CIS audit procedure.",
+      "RawDataKeys": [
+        "AAD-DirectoryRoles"
+      ],
+      "EvidenceSource": "Assessment control AAD-10.2 (AAD-DirectoryRoles)",
+      "ExpectedState": "CIS 1.1.1: Ensure Administrative accounts are cloud-only. Checked as: no holder (active or PIM-eligible) of any role in the tenant catalog whose name contains 'Administrator', or of Global Reader, has onPremisesSyncEnabled = true.",
       "SlaClass": "High",
       "DependsOn": [],
-      "FreshnessClass": "Monthly",
+      "FreshnessClass": "Weekly",
       "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
       "EffectivenessCapability": "NotCollected",
-      "Reason": "Part of the CIS E3 Level 1 / E5 Level 1 profile this tier adopts.",
-      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 1.1.1 (E3 Level 1 / E5 Level 1), the profile this tier adopts.",
-      "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
-      "Automated": false
+      "Reason": "Using the same account for email and admin work means email phishing can compromise admin credentials.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 1.1.1 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
       "ControlId": "AAD-7.2",
@@ -616,6 +616,27 @@
       "Notes": "Needs a sensitive-information-type design first; PVW-3.4 and DEF-4.1/4.2 are the same policy family."
     },
     {
+      "ControlId": "DEF-4.2",
+      "Title": "DLP Policy Uses Sensitive Information Types",
+      "Tier": "Minimum",
+      "Cis": "3.2.1",
+      "CisProfile": "E3 Level 1 / E5 Level 1",
+      "CisRelation": "Stricter",
+      "Owner": "Collaboration & Data",
+      "RawDataKeys": [
+        "Purview"
+      ],
+      "EvidenceSource": "Assessment control DEF-4.2 (Purview)",
+      "ExpectedState": "CIS 3.2.1: Ensure DLP policies are enabled. Checked as: an enabled sensitive-information-type rule in an enforced (Mode Enable) DLP policy covering Exchange, SharePoint, OneDrive or Teams.",
+      "SlaClass": "Standard",
+      "DependsOn": [],
+      "FreshnessClass": "Weekly",
+      "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
+      "EffectivenessCapability": "NotCollected",
+      "Reason": "DLP without SITs cannot automatically identify regulated or sensitive content.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 3.2.1 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
+    },
+    {
       "ControlId": "PVW-1.4",
       "Title": "Sensitivity Labels Published",
       "Tier": "Minimum",
@@ -680,25 +701,25 @@
       "Automated": false
     },
     {
-      "ControlId": "CIS-4.2",
-      "Title": "Ensure device enrollment for personally owned devices is blocked by default",
+      "ControlId": "INT-3.1",
+      "Title": "Device Enrollment Restrictions Configured",
       "Tier": "Minimum",
       "Cis": "4.2",
       "CisProfile": "E3 Level 1 / E5 Level 1",
-      "CisRelation": "Manual",
+      "CisRelation": "Equivalent",
       "Owner": "Endpoint",
-      "RawDataKeys": [],
-      "EvidenceSource": "Manual: CIS Microsoft 365 Foundations v7.0.0 4.2 audit procedure.",
-      "ExpectedState": "CIS 4.2: Ensure device enrollment for personally owned devices is blocked by default, verified by hand against the CIS audit procedure.",
+      "RawDataKeys": [
+        "Intune-DeviceCompliance"
+      ],
+      "EvidenceSource": "Assessment control INT-3.1 (Intune-DeviceCompliance)",
+      "ExpectedState": "CIS 4.2: Ensure device enrollment for personally owned devices is blocked by default. Checked as: the priority-0 default platform restriction blocks personal devices or the platform on Windows, iOS/iPadOS, macOS, Android Enterprise (work profile) and Android device administrator.",
       "SlaClass": "High",
       "DependsOn": [],
-      "FreshnessClass": "Monthly",
+      "FreshnessClass": "Weekly",
       "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
       "EffectivenessCapability": "NotCollected",
-      "Reason": "Part of the CIS E3 Level 1 / E5 Level 1 profile this tier adopts.",
-      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 4.2 (E3 Level 1 / E5 Level 1), the profile this tier adopts.",
-      "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
-      "Automated": false
+      "Reason": "Without enrollment restrictions, any device — including unmanaged personal or obsolete devices — can enroll and receive corporate app access.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 4.2 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
       "ControlId": "CIS-5.1.2.1",
@@ -933,25 +954,25 @@
       "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.1.5.2 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
-      "ControlId": "CIS-5.1.5.4",
-      "Title": "Ensure password lifetime for applications does not exceed 180 days",
+      "ControlId": "AAD-14.1",
+      "Title": "Application Credentials Current and Short-Lived",
       "Tier": "Minimum",
       "Cis": "5.1.5.4",
       "CisProfile": "E3 Level 1 / E5 Level 1",
-      "CisRelation": "Manual",
+      "CisRelation": "Stricter",
       "Owner": "Identity",
-      "RawDataKeys": [],
-      "EvidenceSource": "Manual: CIS Microsoft 365 Foundations v7.0.0 5.1.5.4 audit procedure.",
-      "ExpectedState": "CIS 5.1.5.4: Ensure password lifetime for applications does not exceed 180 days, verified by hand against the CIS audit procedure.",
+      "RawDataKeys": [
+        "AAD-Inventory"
+      ],
+      "EvidenceSource": "Assessment control AAD-14.1 (AAD-Inventory)",
+      "ExpectedState": "CIS 5.1.5.4: Ensure password lifetime for applications does not exceed 180 days. Checked as: the default app management policy is enabled with an enabled passwordLifetime restriction of P180D or less for applications and service principals, no created-after date and no exempted actors (the certificate limit of 5.1.5.6 is required as well).",
       "SlaClass": "High",
       "DependsOn": [],
-      "FreshnessClass": "Monthly",
+      "FreshnessClass": "Weekly",
       "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
       "EffectivenessCapability": "NotCollected",
-      "Reason": "Part of the CIS E3 Level 1 / E5 Level 1 profile this tier adopts.",
-      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.1.5.4 (E3 Level 1 / E5 Level 1), the profile this tier adopts.",
-      "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
-      "Automated": false
+      "Reason": "A client secret is a standing bearer credential to everything its application can reach.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.1.5.4 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
       "ControlId": "CIS-5.1.5.5",
@@ -1118,25 +1139,25 @@
       "Automated": false
     },
     {
-      "ControlId": "CIS-5.2.2.4",
-      "Title": "Ensure Sign-in frequency is enabled and browser sessions are not persistent for Administrative users",
+      "ControlId": "AAD-10.4",
+      "Title": "Short Sign-in Frequency for Admins and Guests",
       "Tier": "Minimum",
       "Cis": "5.2.2.4",
       "CisProfile": "E3 Level 1 / E5 Level 1",
-      "CisRelation": "Manual",
+      "CisRelation": "Stricter",
       "Owner": "Identity",
-      "RawDataKeys": [],
-      "EvidenceSource": "Manual: CIS Microsoft 365 Foundations v7.0.0 5.2.2.4 audit procedure.",
-      "ExpectedState": "CIS 5.2.2.4: Ensure Sign-in frequency is enabled and browser sessions are not persistent for Administrative users, verified by hand against the CIS audit procedure.",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Assessment control AAD-10.4 (AAD-CAPolicies)",
+      "ExpectedState": "CIS 5.2.2.4: Ensure Sign-in frequency is enabled and browser sessions are not persistent for Administrative users. Checked as: one enabled CA policy naming all 15 CIS administrative roles, on all resources, with sign-in frequency of 4 hours or less and persistent browser Never; every privileged role and guests (24 hours or less) are also judged.",
       "SlaClass": "High",
       "DependsOn": [],
-      "FreshnessClass": "Monthly",
+      "FreshnessClass": "Weekly",
       "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
       "EffectivenessCapability": "NotCollected",
-      "Reason": "Part of the CIS E3 Level 1 / E5 Level 1 profile this tier adopts.",
-      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.2.4 (E3 Level 1 / E5 Level 1), the profile this tier adopts.",
-      "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
-      "Automated": false
+      "Reason": "Stolen tokens (from AiTM, token theft via malware) remain valid for the full session lifetime.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.2.4 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
       "ControlId": "CIS-5.2.2.9",
@@ -1931,25 +1952,25 @@
       "Notes": "Anyone links are the specific thing to remove; SPO-1.2 covers the default link type."
     },
     {
-      "ControlId": "CIS-7.2.7",
-      "Title": "Ensure link sharing is restricted in SharePoint and OneDrive",
+      "ControlId": "SPO-1.2",
+      "Title": "Default Sharing Link Not Anonymous",
       "Tier": "Minimum",
       "Cis": "7.2.7",
       "CisProfile": "E3 Level 1 / E5 Level 1",
-      "CisRelation": "Manual",
+      "CisRelation": "Equivalent",
       "Owner": "Collaboration & Data",
-      "RawDataKeys": [],
-      "EvidenceSource": "Manual: CIS Microsoft 365 Foundations v7.0.0 7.2.7 audit procedure.",
-      "ExpectedState": "CIS 7.2.7: Ensure link sharing is restricted in SharePoint and OneDrive, verified by hand against the CIS audit procedure.",
+      "RawDataKeys": [
+        "SharePoint"
+      ],
+      "EvidenceSource": "Assessment control SPO-1.2 (SharePoint)",
+      "ExpectedState": "CIS 7.2.7: Ensure link sharing is restricted in SharePoint and OneDrive. Checked as: Get-SPOTenant DefaultSharingLinkType is Direct or Internal; a value not read is not assessed.",
       "SlaClass": "High",
       "DependsOn": [],
-      "FreshnessClass": "Monthly",
+      "FreshnessClass": "Weekly",
       "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
       "EffectivenessCapability": "NotCollected",
-      "Reason": "Part of the CIS E3 Level 1 / E5 Level 1 profile this tier adopts.",
-      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 7.2.7 (E3 Level 1 / E5 Level 1), the profile this tier adopts.",
-      "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
-      "Automated": false
+      "Reason": "Defaulting to anonymous links means users create them accidentally, without understanding the exposure.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 7.2.7 (E3 Level 1 / E5 Level 1), the profile this tier adopts."
     },
     {
       "ControlId": "SPO-1.4",
@@ -2667,46 +2688,46 @@
       "Automated": false
     },
     {
-      "ControlId": "CIS-5.2.2.6",
-      "Title": "Enable Identity Protection user risk policies",
+      "ControlId": "AAD-1.5",
+      "Title": "User Risk CA Policy",
       "Tier": "Standard",
       "Cis": "5.2.2.6",
       "CisProfile": "E5 Level 1",
-      "CisRelation": "Manual",
+      "CisRelation": "Stricter",
       "Owner": "Identity",
-      "RawDataKeys": [],
-      "EvidenceSource": "Manual: CIS Microsoft 365 Foundations v7.0.0 5.2.2.6 audit procedure.",
-      "ExpectedState": "CIS 5.2.2.6: Enable Identity Protection user risk policies, verified by hand against the CIS audit procedure.",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Assessment control AAD-1.5 (AAD-CAPolicies)",
+      "ExpectedState": "CIS 5.2.2.6: Enable Identity Protection user risk policies. Checked as: one enabled CA policy for all users, all resources and all client apps selects high user risk, requires password change AND MFA or an authentication strength, with sign-in frequency Every time.",
       "SlaClass": "High",
       "DependsOn": [],
-      "FreshnessClass": "Monthly",
+      "FreshnessClass": "Weekly",
       "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
       "EffectivenessCapability": "NotCollected",
-      "Reason": "Part of the CIS E5 Level 1 profile this tier adopts.",
-      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.2.6 (E5 Level 1), the profile this tier adopts.",
-      "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
-      "Automated": false
+      "Reason": "High user risk indicates credential compromise.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.2.6 (E5 Level 1), the profile this tier adopts."
     },
     {
-      "ControlId": "CIS-5.2.2.7",
-      "Title": "Enable Identity Protection sign-in risk policies",
+      "ControlId": "AAD-1.4",
+      "Title": "Sign-in Risk CA Policy",
       "Tier": "Standard",
       "Cis": "5.2.2.7",
       "CisProfile": "E5 Level 1",
-      "CisRelation": "Manual",
+      "CisRelation": "Stricter",
       "Owner": "Identity",
-      "RawDataKeys": [],
-      "EvidenceSource": "Manual: CIS Microsoft 365 Foundations v7.0.0 5.2.2.7 audit procedure.",
-      "ExpectedState": "CIS 5.2.2.7: Enable Identity Protection sign-in risk policies, verified by hand against the CIS audit procedure.",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Assessment control AAD-1.4 (AAD-CAPolicies)",
+      "ExpectedState": "CIS 5.2.2.7: Enable Identity Protection sign-in risk policies. Checked as: one enabled CA policy for all users, all resources and all client apps selects high and medium sign-in risk and blocks, or requires MFA or an authentication strength with sign-in frequency Every time; per-level all-user coverage is also judged.",
       "SlaClass": "High",
       "DependsOn": [],
-      "FreshnessClass": "Monthly",
+      "FreshnessClass": "Weekly",
       "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
       "EffectivenessCapability": "NotCollected",
-      "Reason": "Part of the CIS E5 Level 1 profile this tier adopts.",
-      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.2.7 (E5 Level 1), the profile this tier adopts.",
-      "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
-      "Automated": false
+      "Reason": "Without sign-in risk policies, compromised credentials and impossible travel go unchallenged.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.2.7 (E5 Level 1), the profile this tier adopts."
     },
     {
       "ControlId": "CIS-5.3.2",
@@ -3509,25 +3530,25 @@
       "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.1.6.3 (E3 Level 2 / E5 Level 2), the profile this tier adopts."
     },
     {
-      "ControlId": "CIS-5.2.2.5",
-      "Title": "Ensure 'Phishing-resistant MFA strength' is required for Administrators",
+      "ControlId": "AAD-1.3",
+      "Title": "Phishing-Resistant MFA Required for Admins",
       "Tier": "Hardened",
       "Cis": "5.2.2.5",
       "CisProfile": "E3 Level 2 / E5 Level 2",
-      "CisRelation": "Manual",
+      "CisRelation": "Stricter",
       "Owner": "Identity",
-      "RawDataKeys": [],
-      "EvidenceSource": "Manual: CIS Microsoft 365 Foundations v7.0.0 5.2.2.5 audit procedure.",
-      "ExpectedState": "CIS 5.2.2.5: Ensure 'Phishing-resistant MFA strength' is required for Administrators, verified by hand against the CIS audit procedure.",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Assessment control AAD-1.3 (AAD-CAPolicies)",
+      "ExpectedState": "CIS 5.2.2.5: Ensure 'Phishing-resistant MFA strength' is required for Administrators. Checked as: an enabled CA policy naming all 15 CIS administrator roles (and every privileged role in the tenant catalog), on all resources with no narrowing condition, requires only the phishing-resistant authentication strength.",
       "SlaClass": "Standard",
       "DependsOn": [],
-      "FreshnessClass": "Monthly",
+      "FreshnessClass": "Weekly",
       "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
       "EffectivenessCapability": "NotCollected",
-      "Reason": "Part of the CIS E3 Level 2 / E5 Level 2 profile this tier adopts.",
-      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.2.5 (E3 Level 2 / E5 Level 2), the profile this tier adopts.",
-      "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
-      "Automated": false
+      "Reason": "Standard MFA is bypassed by AiTM proxy phishing attacks.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.2.5 (E3 Level 2 / E5 Level 2), the profile this tier adopts."
     },
     {
       "ControlId": "CIS-5.2.2.8",
@@ -3593,25 +3614,25 @@
       "Automated": false
     },
     {
-      "ControlId": "CIS-5.2.2.16",
-      "Title": "Ensure Token Protection is enforced for session tokens",
+      "ControlId": "AAD-11.4",
+      "Title": "Token Protection (Session Binding) Enforced",
       "Tier": "Hardened",
       "Cis": "5.2.2.16",
       "CisProfile": "E3 Level 2 / E5 Level 2",
-      "CisRelation": "Manual",
+      "CisRelation": "Equivalent",
       "Owner": "Identity",
-      "RawDataKeys": [],
-      "EvidenceSource": "Manual: CIS Microsoft 365 Foundations v7.0.0 5.2.2.16 audit procedure.",
-      "ExpectedState": "CIS 5.2.2.16: Ensure Token Protection is enforced for session tokens, verified by hand against the CIS audit procedure.",
+      "RawDataKeys": [
+        "AAD-CAPolicies"
+      ],
+      "EvidenceSource": "Assessment control AAD-11.4 (AAD-CAPolicies)",
+      "ExpectedState": "CIS 5.2.2.16: Ensure Token Protection is enforced for session tokens. Checked as: an enabled CA policy with token protection, users not None, Exchange Online, SharePoint Online and Teams Services selected, the Windows platform, and client apps limited to mobile apps and desktop clients.",
       "SlaClass": "Standard",
       "DependsOn": [],
-      "FreshnessClass": "Monthly",
+      "FreshnessClass": "Weekly",
       "EffectivenessCheck": "No effectiveness check is defined for this requirement; configuration only.",
       "EffectivenessCapability": "NotCollected",
-      "Reason": "Part of the CIS E3 Level 2 / E5 Level 2 profile this tier adopts.",
-      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.2.16 (E3 Level 2 / E5 Level 2), the profile this tier adopts.",
-      "Notes": "No assessment control checks this recommendation yet, so it always resolves NotVerified. That is the honest state, not a pass.",
-      "Automated": false
+      "Reason": "AiTM (adversary-in-the-middle) phishing steals authenticated session tokens.",
+      "WhyMspOwnsThis": "CIS Microsoft 365 Foundations v7.0.0 5.2.2.16 (E3 Level 2 / E5 Level 2), the profile this tier adopts."
     },
     {
       "ControlId": "CIS-5.2.3.7",
