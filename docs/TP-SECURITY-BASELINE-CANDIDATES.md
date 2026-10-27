@@ -6,7 +6,7 @@
 
 ## What the baseline is, and is not
 
-The assessment answers "what is this tenant's posture against 209 controls and ten frameworks". The baseline answers a narrower question: **is this client configured the way the CIS Microsoft 365 Foundations Benchmark says, at the profile NRG assigns it?** It is a desired-state view over the assessment: it reads findings and never changes them, creates none, and moves no framework score. Every control the tool assesses is still assessed and reported; a control with no CIS recommendation is simply not a baseline requirement.
+The assessment answers "what is this tenant's posture against 243 controls and ten frameworks". The baseline answers a narrower question: **is this client configured the way the CIS Microsoft 365 Foundations Benchmark says, at the profile NRG assigns it?** It is a desired-state view over the assessment: it reads findings and never changes them, creates none, and moves no framework score. Every control the tool assesses is still assessed and reported; a control with no CIS recommendation is simply not a baseline requirement.
 
 ## Tiers are CIS profiles
 
@@ -73,12 +73,12 @@ plus a `BaselineCompliance` summary (counts by observed state, constraint and di
 
 | Tier | Rows | Checked by the tool | Manual (CIS-<number>) |
 |---|---|---|---|
-| Minimum | 116 | 57 | 59 |
-| Standard | 16 | 5 | 11 |
-| Hardened | 59 | 23 | 36 |
+| Minimum | 116 | 73 | 43 |
+| Standard | 16 | 7 | 9 |
+| Hardened | 59 | 39 | 20 |
 | Assessment-only controls | 124 | | |
 
-All 160 v7.0.0 recommendations are represented; 85 rows are tool-checked controls and 106 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
+All 160 v7.0.0 recommendations are represented; 119 rows are tool-checked controls and 72 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
 
 ## Every assessment control
 
@@ -260,6 +260,12 @@ One row per control in `controls.json`; the tier column is what the test compare
 | TMS-4.2 | Anonymous Users Cannot Start Meetings | High | Included (all plans) | 8.5.2 | **Minimum** |
 | TMS-4.3 | Teams External Domain Federation Restricted to Allowlist | High | Included (all plans) | 8.2.1 | **Hardened** |
 | TMS-4.4 | Teams Events Cannot Be Attended by Anonymous Internet Users | Medium | Included (all plans) | — | **Assessment-only** |
+| TMS-5.1 | External Unmanaged Teams Users Cannot Initiate Conversations | Medium | Included (M365 Business Standard+) | 8.2.3 | **Minimum** |
+| TMS-5.2 | Communication With Trial-Only Teams Tenants Blocked | Medium | Included (M365 Business Standard+) | 8.2.4 | **Minimum** |
+| TMS-5.3 | Only Organizers and Co-organizers Can Present | Low | Included (M365 Business Standard+) | 8.5.6 | **Hardened** |
+| TMS-5.4 | External Meeting Chat Disabled | Medium | Included (M365 Business Standard+) | 8.5.8 | **Hardened** |
+| TMS-5.5 | Meeting Recording Off by Default | Low | Included (M365 Business Standard+) | 8.5.9 | **Hardened** |
+| TMS-5.6 | Users Can Report Security Concerns in Teams | Medium | Included (M365 Business Standard+) | 8.6.1 | **Standard** |
 | INT-4.1 | Windows LAPS Deployed via Intune | High | M365 Business Premium or Intune Plan 1 | — | **Assessment-only** |
 | INT-4.2 | Windows Hello for Business Deployed | Medium | M365 Business Premium or Intune Plan 1 | — | **Assessment-only** |
 | INT-4.3 | Device OS Version Compliance Enforced | High | M365 Business Premium or Intune Plan 1 | — | **Assessment-only** |
@@ -291,10 +297,38 @@ One row per control in `controls.json`; the tier column is what the test compare
 | AAD-14.1 | Application Credentials Current and Short-Lived | High | Included (Entra ID Free) | 5.1.5.4 | **Minimum** |
 | AAD-15.1 | No Application Holds Tenant-Takeover Permissions | Critical | Included (all plans) | — | **Assessment-only** |
 | AAD-15.2 | Applications with Tenant-Wide Data Permissions — Named List | High | Included (all plans) | — | **Assessment-only** |
+| AAD-16.1 | Users Cannot Create Security Groups | Medium | Included (all plans) | 5.1.3.1 | **Minimum** |
+| AAD-16.2 | Users Cannot Create Microsoft 365 Groups | Low | Included (all plans) | 5.1.3.4 | **Hardened** |
+| AAD-16.3 | Joining Devices to Microsoft Entra Restricted | Medium | Included (all plans) | 5.1.4.1 | **Hardened** |
+| AAD-16.4 | Maximum Devices per User Limited | Low | Included (all plans) | 5.1.4.2 | **Minimum** |
+| AAD-16.5 | Global Administrators Not Local Admins on Joined Devices | Medium | Included (all plans) | 5.1.4.3 | **Minimum** |
+| AAD-16.6 | Registering Users Not Local Admins on Joined Devices | High | Included (all plans) | 5.1.4.4 | **Minimum** |
+| AAD-16.7 | Microsoft Entra LAPS Enabled | Medium | Included (all plans) | 5.1.4.5 | **Minimum** |
+| AAD-16.8 | Users Cannot Recover BitLocker Keys of Their Devices | Low | Included (all plans) | 5.1.4.6 | **Hardened** |
+| AAD-17.1 | Password Addition Blocked for Applications | Medium | Included (Entra ID Free) | 5.1.5.3 | **Hardened** |
+| AAD-17.2 | New Application Passwords System-Generated | Low | Included (Entra ID Free) | 5.1.5.5 | **Minimum** |
+| AAD-17.3 | SMS and Voice Call Authentication Methods Disabled | High | Included (all plans) | 5.2.3.5 | **Minimum** |
+| AAD-17.4 | System-Preferred MFA Enabled for All Users | Low | Included (all plans) | 5.2.3.6 | **Minimum** |
+| AAD-17.5 | Email OTP Authentication Method Disabled | Medium | Included (all plans) | 5.2.3.7 | **Hardened** |
+| AAD-17.6 | Authenticator on Companion Applications Disabled | Low | Included (all plans) | 5.2.3.10 | **Minimum** |
 | DEF-5.1 | Tenant Allow/Block List Entries Time-Boxed | High | Included (EOP) | — | **Assessment-only** |
+| DEF-6.1 | Administrators Notified When Internal Users Send Malware | Low | Included (EOP) | 2.1.3 | **Minimum** |
+| DEF-6.2 | Outbound Spam Policies Notify Administrators | Low | Included (EOP) | 2.1.6 | **Minimum** |
+| DEF-6.3 | Comprehensive Attachment Filtering Applied | Medium | Included (EOP) | 2.1.11 | **Hardened** |
+| DEF-6.4 | Zero-Hour Auto Purge for Microsoft Teams Enabled | Medium | Defender for Office 365 Plan 1 (M365 Business Premium) | 2.4.4 | **Standard** |
 | EXO-9.1 | Mailboxes Protected by Hold or Retention Policy | High | Exchange Online Plan 2 or Exchange Online Archiving (M365 Business Premium, E3, E5) | — | **Assessment-only** |
 | EXO-9.2 | Deleted Item Retention Window at Maximum | Medium | Included (all plans) | — | **Assessment-only** |
+| EXO-10.1 | External Calendar Sharing Not Available | Low | Included (M365 Business Standard+) | 1.3.3 | **Hardened** |
+| EXO-10.2 | Additional Storage Providers Restricted in Outlook on the Web | Medium | Included (M365 Business Standard+) | 6.5.3 | **Hardened** |
+| EXO-10.3 | Connection Filter IP Allow List Not Used | Medium | Included (EOP) | 2.1.12 | **Minimum** |
 | SPO-4.1 | Departed-User OneDrive Retention Configured | Medium | Included (all plans) | — | **Assessment-only** |
+| SPO-5.1 | SharePoint Infected Files Cannot Be Downloaded | Medium | Included (M365 Business Standard+) | 7.3.1 | **Hardened** |
+| SPO-5.2 | SharePoint and OneDrive Integration With Entra B2B Enabled | Medium | Included (M365 Business Standard+) | 7.2.2 | **Minimum** |
+| SPO-5.3 | OneDrive Content Sharing Restricted | Medium | Included (M365 Business Standard+) | 7.2.4 | **Hardened** |
+| SPO-5.4 | SharePoint Guests Cannot Share Items They Do Not Own | Medium | Included (M365 Business Standard+) | 7.2.5 | **Hardened** |
+| SPO-5.5 | SharePoint External Sharing Limited to Allowed Domains | Medium | Included (M365 Business Standard+) | 7.2.6 | **Hardened** |
+| SPO-5.6 | SharePoint External Sharing Restricted by Security Group | Medium | Included (M365 Business Standard+) | 7.2.8 | **Hardened** |
+| SPO-5.7 | SharePoint Default Sharing Link Permission Is View | Low | Included (M365 Business Standard+) | 7.2.11 | **Minimum** |
 
 ## Manual CIS rows
 
@@ -307,20 +341,11 @@ Required at their tier, always NotVerified until a control checks them.
 | `CIS-1.3.4` | Ensure 'User owned apps and services' is restricted | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-1.3.5` | Ensure internal phishing protection for Forms is enabled | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-1.3.9` | Ensure shared bookings pages are restricted to select users | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-2.1.3` | Ensure notifications for internal users sending malware is Enabled | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-2.1.6` | Ensure Exchange Online Spam Policies are set to notify administrators | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-2.1.10` | Ensure DMARC records for all Exchange Online domains are published | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-2.1.12` | Ensure the connection filter IP allow list is not used | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-4.1` | Ensure devices without a compliance policy are marked 'not compliant' | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.2.1` | Ensure 'Per-user MFA' is disabled | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.2.4` | Ensure access to the Entra admin center is restricted | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-5.1.3.1` | Ensure users cannot create security groups | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.3.3` | Ensure that 'Owners can manage group membership requests in My Groups' is set to 'No' | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-5.1.4.2` | Ensure the maximum number of devices per user is limited | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-5.1.4.3` | Ensure the GA role is not added as a local administrator during Entra join | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-5.1.4.4` | Ensure local administrator assignment is limited during Entra join | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-5.1.4.5` | Ensure Local Administrator Password Solution is enabled | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-5.1.5.5` | Ensure new application passwords are system-generated | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.5.6` | Ensure maximum certificate lifetime for applications does not exceed 180 days | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.1.8.1` | Ensure that password hash sync is enabled for hybrid deployments | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.2.1` | Ensure multifactor authentication is enabled for all users in administrative roles | E3 Level 1 / E5 Level 1 | Minimum |
@@ -333,9 +358,6 @@ Required at their tier, always NotVerified until a control checks them.
 | `CIS-5.2.2.17` | Ensure authentication transfer is blocked | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.3.1` | Ensure Microsoft Authenticator is configured to protect against MFA fatigue: the settings AAD-9.1 do not check | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.3.3` | Ensure password protection is enabled for on-prem Active Directory | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-5.2.3.5` | Ensure weak authentication methods are disabled | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-5.2.3.6` | Ensure system-preferred multifactor authentication is enabled | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-5.2.3.10` | Ensure Microsoft Authenticator on companion applications is disabled | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.4.3` | Ensure SSPR registration and authentication re-confirmation are required | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.4.4` | Ensure that users are notified on password resets | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-5.2.4.5` | Ensure all admins are notified when other admins reset their password | E3 Level 1 / E5 Level 1 | Minimum |
@@ -345,10 +367,6 @@ Required at their tier, always NotVerified until a control checks them.
 | `CIS-6.2.3` | Ensure email from external senders is identified | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-6.3.2` | Ensure the ability to add personal email accounts and calendars is disabled | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-6.5.2` | Ensure MailTips are enabled for end users | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-7.2.2` | Ensure SharePoint and OneDrive integration with Azure AD B2B is enabled | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-7.2.11` | Ensure the SharePoint default sharing link permission is set | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-8.2.3` | Ensure external Teams users cannot initiate conversations | E3 Level 1 / E5 Level 1 | Minimum |
-| `CIS-8.2.4` | Ensure the organization cannot communicate with accounts in trial Teams tenants | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-8.4.1` | Ensure app permission policies are configured: the settings TMS-2.2 do not check | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-9.1.1` | Ensure guest user access is restricted | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-9.1.2` | Ensure external user invitations are restricted | E3 Level 1 / E5 Level 1 | Minimum |
@@ -363,7 +381,6 @@ Required at their tier, always NotVerified until a control checks them.
 | `CIS-9.1.12` | Ensure service principals ability to create workspaces, connections and deployment pipelines is restricted | E3 Level 1 / E5 Level 1 | Minimum |
 | `CIS-2.4.1` | Ensure Priority account protection is enabled and configured: the settings DEF-4.4 do not check | E5 Level 1 | Standard |
 | `CIS-2.4.2` | Ensure Priority accounts have 'Strict protection' presets applied | E5 Level 1 | Standard |
-| `CIS-2.4.4` | Ensure Zero-hour auto purge for Microsoft Teams is on | E5 Level 1 | Standard |
 | `CIS-2.4.5` | Ensure 'AIR' remediation is enabled | E5 Level 1 | Standard |
 | `CIS-3.2.2` | Ensure DLP policies are enabled for Microsoft Teams | E5 Level 1 | Standard |
 | `CIS-3.2.3` | Ensure DLP policies are published for Copilot users | E5 Level 1 | Standard |
@@ -371,40 +388,23 @@ Required at their tier, always NotVerified until a control checks them.
 | `CIS-5.3.3` | Ensure 'Access reviews' for privileged roles are configured | E5 Level 1 | Standard |
 | `CIS-5.3.4` | Ensure approval is required for Global Administrator role activation: the settings AAD-3.5 do not check | E5 Level 1 | Standard |
 | `CIS-5.3.5` | Ensure approval is required for Privileged Role Administrator activation | E5 Level 1 | Standard |
-| `CIS-8.6.1` | Ensure users can report security concerns in Teams | E5 Level 1 | Standard |
 | `CIS-1.2.1` | Ensure that only organizationally managed/approved public groups exist | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-1.3.2` | Ensure 'Idle session timeout' is set to '3 hours (or less)' for unmanaged devices | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-1.3.3` | Ensure 'External sharing' of calendars is not available | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-1.3.7` | Ensure 'third-party storage services' are restricted in 'Microsoft 365 on the web' | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-1.3.8` | Ensure that Sways cannot be shared with people outside of your organization | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-2.1.1` | Ensure Safe Links for Office Applications is Enabled: the settings DEF-1.2, DEF-4.7 do not check | E5 Level 2 | Hardened |
 | `CIS-2.1.4` | Ensure Safe Attachments policy is enabled: the settings DEF-1.1 do not check | E5 Level 2 | Hardened |
 | `CIS-2.1.5` | Ensure Safe Attachments for SharePoint, OneDrive, and Microsoft Teams is Enabled: the settings EXO-4.3 do not check | E5 Level 2 | Hardened |
 | `CIS-2.1.7` | Ensure that an anti-phishing policy has been created: the settings DEF-1.3, DEF-1.4, DEF-1.5, DEF-1.6, EXO-1.7 do not check | E5 Level 2 | Hardened |
-| `CIS-2.1.11` | Ensure comprehensive attachment filtering is applied | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-2.4.3` | Ensure Microsoft Defender for Cloud Apps is enabled and configured: the settings DEF-3.3 do not check | E5 Level 2 | Hardened |
 | `CIS-5.1.2.5` | Ensure the option to remain signed in is hidden | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-5.1.2.6` | Ensure 'LinkedIn account connections' is disabled | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-5.1.3.2` | Ensure that 'Restrict user ability to access groups features in My Groups' is set to 'Yes' | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-5.1.3.4` | Ensure that 'Users can create Microsoft 365 groups in Azure portals, API or PowerShell' is set to 'No' | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-5.1.4.1` | Ensure the ability to join devices to Entra is restricted | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-5.1.4.6` | Ensure users are restricted from recovering BitLocker keys | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-5.1.5.1` | Ensure user consent to apps accessing company data on their behalf is not allowed | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-5.1.5.3` | Ensure password addition is blocked for applications | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-5.1.6.1` | Ensure that collaboration invitations are sent to allowed domains only | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-5.2.2.8` | Ensure 'sign-in risk' is blocked for medium and high risk | E5 Level 2 | Hardened |
 | `CIS-5.2.2.15` | Ensure exclusionary geographic access controls are utilized | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-5.2.3.7` | Ensure the email OTP authentication method is disabled | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-5.3.1` | Ensure privileged role assignments are activated and not assigned | E5 Level 2 | Hardened |
 | `CIS-6.3.1` | Ensure users installing Outlook add-ins is not allowed | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-6.5.3` | Ensure additional storage providers are restricted in Outlook on the web | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-6.5.5` | Ensure Direct Send submissions are rejected | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-7.2.4` | Ensure OneDrive content sharing is restricted | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-7.2.5` | Ensure that SharePoint guest users cannot share items they don't own | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-7.2.6` | Ensure SharePoint external sharing is restricted | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-7.2.8` | Ensure external sharing is restricted by security group | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-7.3.1` | Ensure Office 365 SharePoint infected files are disallowed for download | E5 Level 2 | Hardened |
-| `CIS-8.5.6` | Ensure only organizers and co-organizers can present | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-8.5.8` | Ensure external meeting chat is off | E3 Level 2 / E5 Level 2 | Hardened |
-| `CIS-8.5.9` | Ensure meeting recording is off by default | E3 Level 2 / E5 Level 2 | Hardened |
 | `CIS-9.1.5` | Ensure 'Interact with and share R and Python' visuals is 'Disabled' | E3 Level 2 / E5 Level 2 | Hardened |
