@@ -20,6 +20,9 @@ function Invoke-TPCollectAADUsers {
             Users             = @()
             TotalCount        = 0
             SectionStatus     = @{
+                # The member list: 'Truncated' when the page cap was reached,
+                # so a consumer that needs every account (PPL-4.9) can tell.
+                Users           = 'NotRun'
                 MFARegistration = 'NotRun'
             }
             MFARegistration   = @{
@@ -66,6 +69,7 @@ function Invoke-TPCollectAADUsers {
             $nextLink = $pageResp['@odata.nextLink']
             $pageCount++
         }
+        $result.Data.SectionStatus.Users = if ($pageCount -ge $maxPages -and $nextLink) { 'Truncated' } else { 'Collected' }
         if ($pageCount -ge $maxPages -and $nextLink) {
             if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                 Register-TPException -Source 'AAD-Users' `

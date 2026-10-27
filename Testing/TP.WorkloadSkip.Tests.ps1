@@ -114,7 +114,7 @@ Describe 'Purview by default, -DisableWAM, and honest -Skip flags' {
                     @{ Flag = 'SkipTeams';         Keys = @('Teams') },
                     @{ Flag = 'SkipSharePoint';    Keys = @('SharePoint') },
                     @{ Flag = 'SkipIntune';        Keys = @('Intune-EndpointSecurity', 'Intune-DeviceCompliance', 'Intune-AppProtection') },
-                    @{ Flag = 'SkipPowerPlatform'; Keys = @('PowerPlatform') },
+                    @{ Flag = 'SkipPowerPlatform'; Keys = @('PowerPlatform', 'CopilotStudio') },
                     @{ Flag = 'SkipDNS';           Keys = @('DNS-EmailRecords') })) {
                 $script:Entry | Should -Match ("On = \`$" + $case.Flag + ";")
                 foreach ($k in $case.Keys) {

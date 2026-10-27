@@ -1108,7 +1108,7 @@ if (-not $skipCollection) {
         @{ On = $SkipTeams;         Flag = '-SkipTeams';         Keys = @('Teams') }
         @{ On = $SkipSharePoint;    Flag = '-SkipSharePoint';    Keys = @('SharePoint') }
         @{ On = $SkipIntune;        Flag = '-SkipIntune';        Keys = @('Intune-EndpointSecurity', 'Intune-DeviceCompliance', 'Intune-AppProtection') }
-        @{ On = $SkipPowerPlatform; Flag = '-SkipPowerPlatform'; Keys = @('PowerPlatform') }
+        @{ On = $SkipPowerPlatform; Flag = '-SkipPowerPlatform'; Keys = @('PowerPlatform', 'CopilotStudio') }
         @{ On = $SkipDNS;           Flag = '-SkipDNS';           Keys = @('DNS-EmailRecords') }
     )
     foreach ($sf in $skipFlags) {
@@ -1236,12 +1236,14 @@ if (-not $skipCollection) {
             Invoke-TPCollectorStep 'Compliance, enrollment, WHfB, updates'  'Invoke-TPCollectIntuneDeviceCompliance'
             Invoke-TPCollectorStep 'App protection and configuration'       'Invoke-TPCollectIntuneAppProtection'
         }
-        if (-not $SkipPowerPlatform -and (Test-TPCollectorWanted -Function 'Invoke-TPCollectPowerPlatform')) {
+        if (-not $SkipPowerPlatform -and (Test-TPCollectorWanted -Function 'Invoke-TPCollectPowerPlatform', 'Invoke-TPCollectCopilotStudio')) {
             Write-TPCollectorGroup 'Power Platform'
             if (-not ($AppId -and $TenantId -and $CertificateThumbprint)) {
                 Write-Host "      A browser sign-in may open (same account). Use -SkipPowerPlatform to skip." -ForegroundColor DarkGray
             }
             Invoke-TPCollectorStep 'Environments, tenant isolation, DLP'    'Invoke-TPCollectPowerPlatform'
+            # After the Power Platform collector: it reuses that environment list.
+            Invoke-TPCollectorStep 'Copilot Studio agents (Dataverse)'      'Invoke-TPCollectCopilotStudio'
         }
     }
 

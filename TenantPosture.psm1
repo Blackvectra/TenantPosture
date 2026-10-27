@@ -257,6 +257,7 @@ $script:ExportedFunctions = @(
     'Invoke-TPCollectIntuneDeviceCompliance',
     'Invoke-TPCollectIntuneAppProtection',
     'Invoke-TPCollectPowerPlatform',
+    'Invoke-TPCollectCopilotStudio',
     'Invoke-TPCollectM365Copilot',
 
     # ── Evaluators — AAD ──────────────────────────────────────────────────────
@@ -372,6 +373,17 @@ $script:ExportedFunctions = @(
     'Test-TPControlPowerPlatform',
     'Test-TPControlPPLConnectorClassification',
     'Test-TPControlPPLAutomate', 'Test-TPControlPPLPowerApps',
+    # Copilot Studio agents, PPL-4.1 to PPL-4.10
+    'Test-TPControlCopilotStudioSharing',
+    'Test-TPControlCopilotStudioAuthentication',
+    'Test-TPControlCopilotStudioHttpNodes',
+    'Test-TPControlCopilotStudioEmailTools',
+    'Test-TPControlCopilotStudioMakerAuth',
+    'Test-TPControlCopilotStudioCredentials',
+    'Test-TPControlCopilotStudioMcpTools',
+    'Test-TPControlCopilotStudioInstructions',
+    'Test-TPControlCopilotStudioOwnership',
+    'Test-TPControlCopilotStudioDormant',
 
     # ── Evaluators — Inventory / Object-level ─────────────────────────────────
     'Test-TPControlInventoryMFAUsers', 'Test-TPControlInventoryStaleGuests',

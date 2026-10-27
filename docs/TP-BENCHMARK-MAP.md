@@ -2,7 +2,7 @@
 
 Generated from `Config/controls.json` (CIS Microsoft 365 and ScubaGear citations), `Config/scuba-alignment.json` and `Config/benchmark-mappings.json` on 2026-10-26; `Get-TPBenchmarkMapping` returns the same view and `Testing/TP.BenchmarkMapping.Tests.ps1` fails when a control is in neither list.
 
-**196 of 243 controls are mapped to at least one configuration benchmark; 47 are not, each with the reason.** A control cites a benchmark item only when its evaluator judges the setting the item audits and every state it scores Satisfied passes that audit: a similar topic is not enough, so a control with no such item is listed below rather than given a near-miss. Relations: Equivalent (same setting and threshold), Subset (part of what the item requires; the rest is named in the mapping file), Stricter (passes only when the item passes, can fail where it passes); ScubaGear relations are the ones recorded in `Config/scuba-alignment.json`.
+**197 of 253 controls are mapped to at least one configuration benchmark; 56 are not, each with the reason.** A control cites a benchmark item only when its evaluator judges the setting the item audits and every state it scores Satisfied passes that audit: a similar topic is not enough, so a control with no such item is listed below rather than given a near-miss. Relations: Equivalent (same setting and threshold), Subset (part of what the item requires; the rest is named in the mapping file), Stricter (passes only when the item passes, can fail where it passes); ScubaGear relations are the ones recorded in `Config/scuba-alignment.json`.
 
 Control frameworks (NIST SP 800-53, CIS Controls v8.1, CMMC, ISO 27001, SOC 2, HIPAA, PCI DSS, MITRE ATT&CK) are mapped separately in `References` and are not configuration benchmarks.
 
@@ -203,6 +203,7 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | PPL-3.1 | M365 Copilot Sensitivity Label Enforcement | Microsoft Zero Trust: Zero Trust Assessment test 35003 (Stricter) |
 | PPL-3.2 | DLP Policy Active for Copilot Interactions | Microsoft Zero Trust: Data loss prevention policies are enabled (Zero Trust Assessment test 35030) (Stricter) |
 | PPL-3.5 | Copilot Interaction Audit Logging Active | CIS M365 v7.0.0 3.1.1 |
+| PPL-4.2 | Copilot Studio Agents Require User Authentication | Microsoft Learn recommended values: Configure user authentication in Copilot Studio > No authentication, Caution (Stricter) |
 
 ### PVW
 
@@ -301,6 +302,15 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | INT-4.4 | Mobile Device Compliance Requires PIN or Biometric | Microsoft's iOS/iPadOS and Android security configuration framework pages set 'Require a password' in DEVICE RESTRICTION profiles (for example iOS personal Level 1, Password > Require a password = Yes), a different setting from a compliance-policy passcode rule. | Yes |
 | PPL-3.3 | Copilot Access Restricted to Licensed Users | The 95% threshold is the tool's own heuristic. |  |
 | PPL-3.4 | Copilot Studio Agent Publishing Governed | Manual control with no verdict. |  |
+| PPL-4.1 | Copilot Studio Agents Not Open to Everyone or Any Tenant | Microsoft Learn's automatic security scan describes an agent shared with no one as the secure default and warns when an agent is shared with everyone in the organization, but states no recommended access control value; ScubaGear 2.0.0 Power Platform baselines (MS.POWERPLATFORM.1.1-6.1) have no Copilot Studio agent item. |  |
+| PPL-4.3 | Copilot Studio HTTP Requests Use HTTPS on Port 443 | Microsoft Learn ('Configure data policies for agents') documents blocking HTTP requests as an option, not a recommended value, and no benchmark audits the scheme or port of a topic's HTTP request node. |  |
+| PPL-4.4 | Copilot Studio Email Tools Do Not Let the AI Set Recipients or Content | No benchmark audits email tools on Copilot Studio agents; Learn documents that tool inputs default to 'Dynamically fill with AI' without recommending custom values for email recipients. |  |
+| PPL-4.5 | Copilot Studio Connector Tools Use End-User Credentials | Microsoft Learn ('Control maker-provided credentials for authentication') describes the oversharing risk of maker credentials and the admin control that enforces end-user credentials, but presents it as an option (both are enabled by default), not a recommended value. |  |
+| PPL-4.6 | No Hard-Coded Credentials in Copilot Studio Topics | No configuration benchmark audits Copilot Studio topic definitions for embedded credentials; the check is a heuristic pattern search. |  |
+| PPL-4.7 | Copilot Studio MCP Tool Integrations Reviewed | Manual review item with no verdict on found integrations; no benchmark recommends a value for MCP tool integrations. |  |
+| PPL-4.8 | Copilot Studio Generative Agents Have Custom Instructions | Microsoft Learn gives best practices for writing instructions for generative orchestration but no recommendation that every agent carry them; no benchmark audits it. |  |
+| PPL-4.9 | Copilot Studio Agents Have an Active Owner | No benchmark audits Copilot Studio agent ownership. |  |
+| PPL-4.10 | Published Copilot Studio Agents Not Dormant | No benchmark sets a dormancy period for Copilot Studio agents; the 180 days Maester uses is that tool's own threshold and the NRG value is not approved. |  |
 | PVW-2.3 | Information Barriers Mode Configured | No allowed benchmark states a recommended information-barriers mode. |  |
 | PVW-2.4 | Insider Risk Management Policy Active | The control never reaches a verdict, so no item can be audited by it. | Yes |
 | PVW-3.2 | eDiscovery Case Management Configured | Manual control with no verdict. |  |

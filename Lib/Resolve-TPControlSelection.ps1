@@ -84,6 +84,7 @@ function Get-TPCollectorCatalog {
         [ordered]@{ Function = 'Invoke-TPCollectIntuneDeviceCompliance'; Keys = @('Intune-DeviceCompliance'); Service = 'Graph' }
         [ordered]@{ Function = 'Invoke-TPCollectIntuneAppProtection';    Keys = @('Intune-AppProtection');    Service = 'Graph' }
         [ordered]@{ Function = 'Invoke-TPCollectPowerPlatform';          Keys = @('PowerPlatform');           Service = 'PowerPlatform' }
+        [ordered]@{ Function = 'Invoke-TPCollectCopilotStudio';          Keys = @('CopilotStudio');           Service = 'PowerPlatform' }
         [ordered]@{ Function = 'Invoke-TPCollectEXOMailboxConfig';       Keys = @('EXO-MailboxConfig');       Service = 'Exchange' }
         [ordered]@{ Function = 'Invoke-TPCollectEXOConnectionFilter';    Keys = @('EXO-ConnectionFilter');    Service = 'Exchange' }
         [ordered]@{ Function = 'Invoke-TPCollectEXOInventory';           Keys = @('EXO-Inventory');           Service = 'Exchange' }

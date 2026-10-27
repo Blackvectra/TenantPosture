@@ -37,7 +37,7 @@ function Get-TPControlAutomationAudit {
     # emits whatever -State literals the HELPER's own body emits. Derived from
     # the helper's AST, never declared, so the helper cannot claim a verdict
     # it does not produce.
-    $DelegateFns = @('Add-TPCAPolicyTierFinding', 'Add-TPPolicySetFinding', 'Add-TPDefenderUnavailableFinding', 'Add-TPExpectedStateFinding', 'Add-TPCADeviceComplianceFinding')
+    $DelegateFns = @('Add-TPCAPolicyTierFinding', 'Add-TPPolicySetFinding', 'Add-TPDefenderUnavailableFinding', 'Add-TPExpectedStateFinding', 'Add-TPCADeviceComplianceFinding', 'Add-TPCopilotStudioVerdict')
 
     # ── AST helpers ───────────────────────────────────────────────────────────
     $literalOf = {

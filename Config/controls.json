@@ -5675,6 +5675,290 @@
       }
     },
     {
+      "ControlId": "PPL-4.1",
+      "Title": "Copilot Studio Agents Not Open to Everyone or Any Tenant",
+      "Description": "No Copilot Studio agent's access control (the Dataverse bot accesscontrolpolicy, 'which users may interact with the agent') is Any or Any (multi-tenant); every agent is limited to the users it is shared with (Agent readers) or to named security groups (Group membership). Agents from managed solutions are counted and set aside.",
+      "BusinessRisk": "An agent open to anyone, or to users of any tenant, answers whoever reaches it with whatever its knowledge sources and tools can reach, including SharePoint content and connector actions, with no per-user decision about who should have that access.",
+      "Severity": "High",
+      "Workload": "PPL",
+      "Category": "Data",
+      "Automated": true,
+      "CollectorDependency": "CopilotStudio",
+      "EvaluatorFunction": "Test-TPControlCopilotStudioSharing",
+      "Remediation": "Copilot Studio > the agent > Settings > Security > Access control: choose 'Only people I share with' (Agent readers) or a security group, turn multi-tenant support off, and share the agent only with the users or security groups that need it. Publish the agent so the change takes effect.",
+      "References": {
+        "CISControls": [],
+        "CIS": "",
+        "NIST": "AC-3",
+        "CMMC": "AC.L1-3.1.1",
+        "MITRE": [
+          "T1213"
+        ],
+        "SCuBA": "",
+        "HIPAA": "§164.312(a)(1)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 7.2",
+        "ISO27001": "A.5.15"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "PPL-4.2",
+      "Title": "Copilot Studio Agents Require User Authentication",
+      "Description": "Every Copilot Studio agent authenticates its users: authenticationmode is Integrated (Authenticate with Microsoft, where users are always signed in), or manual authentication (Custom Entra ID or Generic OAuth2) with 'Require users to sign in' on (authenticationtrigger Always). No authentication is a Gap.",
+      "BusinessRisk": "Microsoft documents that an agent with No authentication lets anyone who has the link chat with it, and that an agent with manual authentication and sign-in not required does not ask users to sign in until a topic needs it. Either way the agent's knowledge and tools are reachable without an identity, and its use cannot be attributed.",
+      "Severity": "High",
+      "Workload": "PPL",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "CopilotStudio",
+      "EvaluatorFunction": "Test-TPControlCopilotStudioAuthentication",
+      "Remediation": "Copilot Studio > the agent > Settings > Security > Authentication: select Authenticate with Microsoft, or Authenticate manually with Microsoft Entra ID and turn on Require users to sign in. Publish the agent. Optionally enforce it tenant-wide with a Power Platform data policy that requires authentication for agents.",
+      "References": {
+        "CISControls": [],
+        "CIS": "",
+        "NIST": "IA-2",
+        "CMMC": "IA.L1-3.5.2",
+        "MITRE": [
+          "T1213"
+        ],
+        "SCuBA": "",
+        "HIPAA": "§164.312(d)",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.3",
+        "ISO27001": "A.8.5"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "PPL-4.3",
+      "Title": "Copilot Studio HTTP Requests Use HTTPS on Port 443",
+      "Description": "No active Copilot Studio topic contains an HTTP request node (HttpRequestAction) whose URL uses plain http or an explicit port other than 443. Only the scheme and port are recorded, never the address. A URL assembled entirely from variables cannot be read and leaves the agent not assessed.",
+      "BusinessRisk": "A plain-HTTP request sends whatever the topic puts in it (user input, conversation data, headers) unencrypted; a request to an unusual port is a common sign of a misconfigured or unvetted endpoint and of a command-and-control or exfiltration channel. HTTP request nodes also sit outside connector data policies unless the HTTP connector is blocked.",
+      "Severity": "Medium",
+      "Workload": "PPL",
+      "Category": "Network",
+      "Automated": true,
+      "CollectorDependency": "CopilotStudio",
+      "EvaluatorFunction": "Test-TPControlCopilotStudioHttpNodes",
+      "Remediation": "Change each flagged HTTP request node to an https URL on the standard port, or replace it with a governed Power Platform connector. Where agents should not make raw HTTP calls, block HTTP requests for agents in a Power Platform data policy (Copilot Studio data policies: Block HTTP requests).",
+      "References": {
+        "CISControls": [],
+        "CIS": "",
+        "NIST": "SC-7, SC-8",
+        "CMMC": "SC.L2-3.13.8",
+        "MITRE": [
+          "T1071.001",
+          "T1048",
+          "T1571"
+        ],
+        "SCuBA": "",
+        "HIPAA": "§164.312(e)(1)",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 4.2.1",
+        "ISO27001": "A.8.20, A.8.24"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "PPL-4.4",
+      "Title": "Copilot Studio Email Tools Do Not Let the AI Set Recipients or Content",
+      "Description": "No active Copilot Studio tool that sends, forwards or replies to email (Office 365 Outlook, Outlook.com, Mail, Gmail or SMTP connector) leaves its recipient (To, and Cc or Bcc when used), subject or body to be filled dynamically with AI, which Microsoft documents as the default for any input without a custom value. A Power Fx formula counts as not fixed.",
+      "BusinessRisk": "An email tool whose recipient and content the agent fills from the conversation can be steered by a prompt (including one hidden in a document or web page the agent reads) into mailing internal data to an outside address, from a corporate mailbox.",
+      "Severity": "High",
+      "Workload": "PPL",
+      "Category": "Data",
+      "Automated": true,
+      "CollectorDependency": "CopilotStudio",
+      "EvaluatorFunction": "Test-TPControlCopilotStudioEmailTools",
+      "Remediation": "Remove email-sending tools from agents that do not need them. Where an agent must send email, set the recipient (and where possible the subject and body template) as fixed custom values in the tool's inputs, and block the email connectors for agents that should not send mail with a Power Platform data policy.",
+      "References": {
+        "CISControls": [],
+        "CIS": "",
+        "NIST": "AC-4",
+        "CMMC": "AC.L2-3.1.3",
+        "MITRE": [
+          "T1048"
+        ],
+        "SCuBA": "",
+        "HIPAA": "",
+        "SOC2": "CC6.7",
+        "PCIDSS": "Req 7.2",
+        "ISO27001": "A.5.14"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "PPL-4.5",
+      "Title": "Copilot Studio Connector Tools Use End-User Credentials",
+      "Description": "Every active Copilot Studio connector tool uses End user credentials, so it acts with the permissions of the person chatting. A tool whose definition does not record the end-user (Invoker) connection mode is reported as using the maker's stored connection (Maester's reading of the agent definition, not yet confirmed against a live tenant).",
+      "BusinessRisk": "Microsoft documents that a tool using maker-provided credentials acts with the maker's account for every user, which can overshare data or capabilities: an end user can read or change what only the maker is allowed to, without any separation of duties.",
+      "Severity": "Medium",
+      "Workload": "PPL",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "CopilotStudio",
+      "EvaluatorFunction": "Test-TPControlCopilotStudioMakerAuth",
+      "Remediation": "Copilot Studio > the agent > Tools > the tool > Additional details > Credentials to use: End user credentials. To enforce it, Power Platform admin center > the environment (or environment group) > Settings > Features > Copilot Studio agents > Control maker credential options: End-user credentials only.",
+      "References": {
+        "CISControls": [],
+        "CIS": "",
+        "NIST": "AC-6",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1550.001",
+          "T1213"
+        ],
+        "SCuBA": "",
+        "HIPAA": "",
+        "SOC2": "CC6.3",
+        "PCIDSS": "Req 7.2",
+        "ISO27001": "A.5.18"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "PPL-4.6",
+      "Title": "No Hard-Coded Credentials in Copilot Studio Topics",
+      "Description": "No Copilot Studio topic or tool definition matches a credential pattern (API key assignments, bearer and basic authorization values, connection-string secrets, password or secret assignments, AWS access key ids, private key blocks, JSON web tokens). Heuristic: a match names the pattern type and component id only, and the matched value is never kept.",
+      "BusinessRisk": "A credential written into a topic can be read by anyone who can edit or export the agent and can sometimes be drawn out through prompt injection; it outlives rotations elsewhere and gives direct access to the system it unlocks.",
+      "Severity": "High",
+      "Workload": "PPL",
+      "Category": "Identity",
+      "Automated": true,
+      "CollectorDependency": "CopilotStudio",
+      "EvaluatorFunction": "Test-TPControlCopilotStudioCredentials",
+      "Remediation": "Remove the credential from the named component and rotate it at its source. Authenticate through a connection or connector, the agent's authentication settings, or an environment variable backed by Azure Key Vault.",
+      "References": {
+        "CISControls": [],
+        "CIS": "",
+        "NIST": "IA-5(7)",
+        "CMMC": "IA.L2-3.5.10",
+        "MITRE": [
+          "T1552"
+        ],
+        "SCuBA": "",
+        "HIPAA": "",
+        "SOC2": "CC6.1",
+        "PCIDSS": "Req 8.6.2",
+        "ISO27001": "A.5.17"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "PPL-4.7",
+      "Title": "Copilot Studio MCP Tool Integrations Reviewed",
+      "Description": "Lists every Model Context Protocol (MCP) tool on a Copilot Studio agent with its endpoint host for review. Whether an MCP server was reviewed is not recorded anywhere the tool can read, so MCP tools found are a manual review item (never a pass); Satisfied only when every environment was read and no MCP tool exists.",
+      "BusinessRisk": "An MCP server supplies the agent with tool descriptions and results it acts on. A compromised or untrusted server can inject instructions, exfiltrate the data the agent passes to it, or trigger actions through the agent: a supply-chain risk outside the tenant's control.",
+      "Severity": "Medium",
+      "Workload": "PPL",
+      "Category": "Governance",
+      "Automated": true,
+      "CollectorDependency": "CopilotStudio",
+      "EvaluatorFunction": "Test-TPControlCopilotStudioMcpTools",
+      "Remediation": "Review each listed MCP server: owner, purpose, publisher, data it receives and authentication. Remove integrations that are not approved, and use a Power Platform data policy to block the MCP connectors agents should not use.",
+      "References": {
+        "CISControls": [],
+        "CIS": "",
+        "NIST": "CM-7(1)",
+        "CMMC": "CM.L2-3.4.6",
+        "MITRE": [
+          "T1195",
+          "T1199"
+        ],
+        "SCuBA": "",
+        "HIPAA": "",
+        "SOC2": "CC9.2",
+        "PCIDSS": "Req 12.8",
+        "ISO27001": "A.5.21"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "PPL-4.8",
+      "Title": "Copilot Studio Generative Agents Have Custom Instructions",
+      "Description": "Every Copilot Studio agent that uses generative orchestration carries custom instructions. Only whether instructions exist is read, never their text. Generative orchestration and instructions are read from fields Microsoft Learn does not describe (Maester's usage), not yet confirmed against a live tenant.",
+      "BusinessRisk": "An agent that plans its own steps with no instructions relies entirely on the model's defaults for what it answers, which tools it calls and when; that widens the room for off-topic or harmful answers and for prompt-injected tool use.",
+      "Severity": "Medium",
+      "Workload": "PPL",
+      "Category": "Governance",
+      "Automated": true,
+      "CollectorDependency": "CopilotStudio",
+      "EvaluatorFunction": "Test-TPControlCopilotStudioInstructions",
+      "Remediation": "Copilot Studio > the agent > Overview > Instructions: state the agent's purpose, scope, the tools and knowledge it should use, what it must refuse, and the response format. Publish the agent.",
+      "References": {
+        "CISControls": [],
+        "CIS": "",
+        "NIST": "CM-6",
+        "CMMC": "CM.L2-3.4.2",
+        "MITRE": [
+          "T1213"
+        ],
+        "SCuBA": "",
+        "HIPAA": "",
+        "SOC2": "CC7.1",
+        "PCIDSS": "Req 2.2",
+        "ISO27001": "A.8.9"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "PPL-4.9",
+      "Title": "Copilot Studio Agents Have an Active Owner",
+      "Description": "Every Copilot Studio agent is owned by an enabled member account: the owner's Entra object id (from the Dataverse user that owns the agent) is found enabled in the Entra ID member list. A disabled or missing owner is a Gap; an agent owned by a team or an application user, or a member list not read in full, is not assessed.",
+      "BusinessRisk": "An agent whose owner has left keeps running with its configuration, sharing and connections, but nobody is accountable for reviewing it, responding to an incident involving it, or retiring it.",
+      "Severity": "Medium",
+      "Workload": "PPL",
+      "Category": "Governance",
+      "Automated": true,
+      "CollectorDependency": "CopilotStudio",
+      "EvaluatorFunction": "Test-TPControlCopilotStudioOwnership",
+      "Remediation": "Assign each flagged agent to an active owner (Power Platform admin center or Copilot Studio > the agent > Share, or reassign the record's owner in Dataverse), or retire the agent if it is no longer needed.",
+      "References": {
+        "CISControls": [],
+        "CIS": "",
+        "NIST": "CM-8(4)",
+        "CMMC": "CM.L2-3.4.1",
+        "MITRE": [
+          "T1078"
+        ],
+        "SCuBA": "",
+        "HIPAA": "",
+        "SOC2": "CC6.2",
+        "PCIDSS": "Req 12.5.1",
+        "ISO27001": "A.5.9"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
+      "ControlId": "PPL-4.10",
+      "Title": "Published Copilot Studio Agents Not Dormant",
+      "Description": "No published, active Copilot Studio agent has gone longer than the approved number of days (CopilotStudioDormantDays in Config/tp-standards.json) without its record being modified. Judged on the agent's last-modified date, not on usage. With no approved threshold the control is not assessed and lists each published agent's last-modified date.",
+      "BusinessRisk": "A published agent nobody has touched in a long time still answers users with the sharing, connections and permissions it was given then, which may no longer match policy, and is easily forgotten in a review.",
+      "Severity": "Low",
+      "Workload": "PPL",
+      "Category": "Governance",
+      "Automated": true,
+      "CollectorDependency": "CopilotStudio",
+      "EvaluatorFunction": "Test-TPControlCopilotStudioDormant",
+      "Remediation": "Review each flagged agent with its owner: confirm it is still needed and its configuration still fits current policy (and record the review), or unpublish and retire it.",
+      "References": {
+        "CISControls": [],
+        "CIS": "",
+        "NIST": "CM-7(1)",
+        "CMMC": "CM.L2-3.4.6",
+        "MITRE": [
+          "T1213"
+        ],
+        "SCuBA": "",
+        "HIPAA": "",
+        "SOC2": "CC6.2",
+        "PCIDSS": "Req 2.2.4",
+        "ISO27001": "A.5.9"
+      },
+      "LicenseRequirement": "Included (all plans)"
+    },
+    {
       "ControlId": "AAD-12.1",
       "Title": "Users Without MFA — Named List",
       "Description": "Identifies by name and UPN every enabled member account that is not MFA capable: no strong method registered, or only one the authentication methods policy does not allow (Microsoft's isMfaCapable).",

@@ -10,6 +10,8 @@
 # READ-ONLY. No tenant configuration is ever modified.
 #
 # Sets raw data key: 'PowerPlatform'
+# Each environment row carries InstanceUrl (its Dataverse URL, empty without
+# Dataverse), which the Copilot Studio collector reuses.
 # Network: login.microsoftonline.com (token), api.bap.microsoft.com (admin API)
 #
 # HOW IT READS POWER PLATFORM — IN PROCESS, NO CHILD PROCESS:
@@ -122,6 +124,14 @@ function Invoke-TPCollectPowerPlatform {
                     Type        = [string](Get-TPNestedProperty -Object $_ -Path 'properties.environmentSku' -Default '')
                     Region      = [string](Get-TPObjectField    -Item   $_ -Key  'location' -Default '')
                     State       = [string](Get-TPNestedProperty -Object $_ -Path 'properties.states.management.id' -Default '')
+                    # The environment's Dataverse URL (empty when it has no
+                    # Dataverse database). Read by the Copilot Studio
+                    # collector, which validates the host before using it.
+                    InstanceUrl = [string]$(
+                        $iu = [string](Get-TPNestedProperty -Object $_ -Path 'properties.linkedEnvironmentMetadata.instanceUrl' -Default '')
+                        if (-not $iu) { $iu = [string](Get-TPNestedProperty -Object $_ -Path 'properties.linkedEnvironmentMetadata.instanceApiUrl' -Default '') }
+                        $iu
+                    )
                 }
             })
             $result.Data.SectionStatus.Environments = 'Collected'
@@ -225,20 +235,33 @@ function Invoke-TPCollectPowerPlatform {
     return $result
 }
 
-# Interactive, in-process sign-in to the Power Platform admin API.
-# Uses the MSAL (Microsoft.Identity.Client) that Microsoft.Graph.Authentication
-# has already loaded for Connect-MgGraph, with the same system-browser flow
-# (no embedded web view, no device code, no child process). The token stays
-# in memory for the life of this call. The login hint and NoPrompt let an
+# Interactive, in-process sign-in to the Power Platform admin API, or (with
+# -Audience) to one Dataverse environment's Web API for the Copilot Studio
+# collector. Uses the MSAL (Microsoft.Identity.Client) that
+# Microsoft.Graph.Authentication has already loaded for Connect-MgGraph, with
+# the same system-browser flow (no embedded web view, no device code, no
+# child process). One public client application is kept per tenant for the
+# life of the PowerShell session, with MSAL's default IN-MEMORY token cache
+# only (nothing is written to disk): after the first interactive sign-in the
+# other audiences are answered silently. The login hint and NoPrompt let an
 # existing browser session complete the sign-in without re-entering anything.
+$script:TPPowerPlatformMsalApps = @{}
+
 function Get-TPPowerPlatformToken {
     [CmdletBinding()]
     [OutputType([string])]
     param(
         [Parameter(Mandatory)] [ValidatePattern('^[0-9a-fA-F-]{36}$')] [string] $TenantId,
         [string] $LoginHint,
-        [int] $TimeoutSeconds = 180
+        [int] $TimeoutSeconds = 180,
+        # The Power Platform admin API (default), or one Dataverse
+        # environment's base URL, https://<host> on a Dataverse host
+        # (Test-TPPowerPlatformAudience). Anything else is refused.
+        [string] $Audience = 'https://service.powerapps.com/'
     )
+    if (-not (Test-TPPowerPlatformAudience -Audience $Audience)) {
+        throw "refused: '$Audience' is not the Power Platform admin API or a Dataverse environment URL"
+    }
     $builder = 'Microsoft.Identity.Client.PublicClientApplicationBuilder' -as [type]
     if (-not $builder) {
         # Graph loads its own MSAL into a private assembly load context that
@@ -261,17 +284,39 @@ function Get-TPPowerPlatformToken {
     if (-not $builder -or -not $prompt) {
         throw 'the Microsoft sign-in library (Microsoft.Identity.Client) could not be loaded from Microsoft.Graph.Authentication'
     }
-    $b   = $builder::Create($script:TPPowerPlatformClientId)
-    $b   = $b.WithAuthority("https://login.microsoftonline.com/$TenantId")
-    $b   = $b.WithRedirectUri('http://localhost')
-    $app = $b.Build()
-    $req = $app.AcquireTokenInteractive([string[]]@('https://service.powerapps.com//.default'))
-    $req = $req.WithUseEmbeddedWebView($false)
-    $req = $req.WithPrompt($prompt::NoPrompt)
-    if ($LoginHint) { $req = $req.WithLoginHint($LoginHint) }
+    $key = $TenantId.ToLowerInvariant()
+    $app = $script:TPPowerPlatformMsalApps[$key]
+    if (-not $app) {
+        $b   = $builder::Create($script:TPPowerPlatformClientId)
+        $b   = $b.WithAuthority("https://login.microsoftonline.com/$TenantId")
+        $b   = $b.WithRedirectUri('http://localhost')
+        $app = $b.Build()
+        $script:TPPowerPlatformMsalApps[$key] = $app
+    }
+    # The admin API's resource ends in '/', so its scope reads
+    # 'https://service.powerapps.com//.default'; a Dataverse scope is
+    # 'https://<host>/.default'.
+    $scopes = [string[]]@("$Audience/.default")
     $cts = [System.Threading.CancellationTokenSource]::new([TimeSpan]::FromSeconds($TimeoutSeconds))
+    $res = $null
     try {
-        $res = $req.ExecuteAsync($cts.Token).GetAwaiter().GetResult()
+        try {
+            $accounts = @($app.GetAccountsAsync().GetAwaiter().GetResult())
+            $acct = @($accounts | Where-Object { $_ -and (-not $LoginHint -or [string]::Equals([string]$_.Username, $LoginHint, [System.StringComparison]::OrdinalIgnoreCase)) }) | Select-Object -First 1
+            if ($acct) { $res = $app.AcquireTokenSilent($scopes, $acct).ExecuteAsync($cts.Token).GetAwaiter().GetResult() }
+        } catch {
+            # No cached account, or MSAL needs the user (MsalUiRequiredException):
+            # fall through to the interactive sign-in.
+            Write-Verbose "Silent token for $Audience not available: $($_.Exception.Message)"
+            $res = $null
+        }
+        if (-not $res) {
+            $req = $app.AcquireTokenInteractive($scopes)
+            $req = $req.WithUseEmbeddedWebView($false)
+            $req = $req.WithPrompt($prompt::NoPrompt)
+            if ($LoginHint) { $req = $req.WithLoginHint($LoginHint) }
+            $res = $req.ExecuteAsync($cts.Token).GetAwaiter().GetResult()
+        }
     } finally {
         $cts.Dispose()
     }
