@@ -206,10 +206,10 @@
       "CitedBefore": "MS.AAD.7.3v1",
       "CitedIdStatus": "current",
       "MigrationNewId": null,
-      "Current": "MS.AAD.7.3v1",
-      "Relation": "Unsupported",
+      "Current": "MS.AAD.7.4v1",
+      "Relation": "Partial",
       "RequirementStrength": "SHALL",
-      "Note": "MS.AAD.7.3 is cloud-only privileged accounts. AAD-3.2 is about permanent versus eligible assignments (PIM), a different requirement. Covered by AAD-10.2."
+      "Note": "Re-cited 2026-10-27: MS.AAD.7.3v1 (cloud-only privileged accounts, AAD-10.2's requirement) was removed and MS.AAD.7.4v1 cited, the rule AAD-3.2 judges: no permanent active assignment to a highly privileged role. ScubaGear's check fails a role holding any active assignment with no end date, unless the principal is listed as an exemption in its configuration file, and requires Entra ID P2. Stricter: Satisfied also needs at least one PIM-eligible assignment, and every active assignment that is not a PIM activation counts as permanent, a time-bound one included (end dates are not read). Looser: service principals are not judged; NRG's 17-role list omits Hybrid Identity Administrator, one of ScubaGear's eight highly privileged roles; and cloud-only Global Administrators excluded from Conditional Access are set aside as emergency access accounts (the exception the rule's note allows) by that inference, not by an approved list. PIM not licensed is not assessed."
     },
     {
       "Control": "AAD-3.5",
@@ -1024,6 +1024,83 @@
       "Relation": "Equivalent",
       "RequirementStrength": "SHOULD",
       "Note": "Added 2026-10-26: Satisfied requires the enabled default application management policy to restrict passwordLifetime to 180 days or less with no exempted actors or created-after date, which is 5.6. It also restricts asymmetricKeyLifetime to 180 days, stricter than MS.AAD.5.7v1's 365, which is met but not cited (one ScubaGear rule per control)."
+    },
+    {
+      "Control": "AAD-17.3",
+      "Title": "SMS and Voice Call Authentication Methods Disabled",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.AAD.3.5v2",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. The v2 rule requires SMS, voice call and email OTP disabled; ScubaGear reads the Sms, Voice and Email method states in the authentication methods policy. AAD-17.3 judges the same policy's Sms and Voice states (Satisfied only when both read disabled); Email OTP is AAD-17.5's half, so each control covers part of the rule."
+    },
+    {
+      "Control": "AAD-17.5",
+      "Title": "Email OTP Authentication Method Disabled",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.AAD.3.5v2",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. Covers the email OTP third of the v2 rule (Email method state disabled in the authentication methods policy, the setting ScubaGear reads); SMS and voice call are AAD-17.3's part."
+    },
+    {
+      "Control": "AAD-7.5",
+      "Title": "Passwords Set to Never Expire",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.AAD.6.1v1",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. Both read each domain's passwordValidityPeriodInDays. Stricter than ScubaGear's check, so every NRG pass meets the rule: NRG requires 2147483647 on every verified domain, federated and subdomains included, and reads an unset value as Microsoft's 90-day default (a shortfall), while ScubaGear judges managed verified domains only, takes a subdomain's value from its root, and accepts an unset value (null) as never expiring, which its v2.0.0 instructions say Microsoft treats as never expire for tenants created after October 2021. A tenant whose domains read null therefore passes ScubaGear and is an NRG shortfall: report both."
+    },
+    {
+      "Control": "EXO-10.1",
+      "Title": "External Calendar Sharing Not Available",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.EXO.6.2v1",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. Stricter than the rule, which lets calendar details be shared with specific domains: Satisfied needs the default sharing policy disabled outright and no other enabled sharing policy sharing calendars with every domain (*) or anonymously, so every pass meets the rule. It differs from ScubaGear's automated check, which fails any sharing policy whose domain entries name * with a calendar action whether or not the policy is enabled: a disabled default policy that still lists *:CalendarSharingFreeBusySimple is an NRG pass and a ScubaGear failure. Contacts sharing (MS.EXO.6.1v1) is not checked by any NRG control."
+    },
+    {
+      "Control": "SPO-5.3",
+      "Title": "OneDrive Content Sharing Restricted",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.SHAREPOINT.1.2v1",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. Same setting (OneDriveSharingCapability). Stricter: Satisfied needs Only people in your organization (Disabled, or SharePoint external sharing off, which OneDrive cannot exceed), while the rule also accepts Existing guests, which NRG scores Partial (CIS 7.2.4). Every NRG pass meets the rule. Not assessed without the SharePoint shell unless SharePoint sharing is off."
+    },
+    {
+      "Control": "SPO-5.5",
+      "Title": "SharePoint External Sharing Limited to Allowed Domains",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.SHAREPOINT.1.3v1",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. Covers the approved-domain half, the setting ScubaGear's automated check reads (sharing domain restriction mode set to the allow list, not applicable when sharing is limited to the organization). Stricter: the allow list must name at least one domain. The rule's approved-security-group alternative is not credited here (SPO-5.6 reads the security group allow list, and ScubaGear does not check it), so a tenant restricting sharing by security group alone is an NRG Gap."
+    },
+    {
+      "Control": "SPO-5.7",
+      "Title": "SharePoint Default Sharing Link Permission Is View",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.SHAREPOINT.2.2v1",
+      "Relation": "Equivalent",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. Default sharing link permission View (DefaultLinkPermission, the setting ScubaGear reads). Needs the SharePoint shell. MS.SHAREPOINT.3.2v1 (the permissions Anyone links may grant, FileAnonymousLinkType and FolderAnonymousLinkType) is a different setting and is not checked."
     }
   ]
 }

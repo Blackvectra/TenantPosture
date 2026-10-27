@@ -1120,6 +1120,7 @@ Microsoft 365 admin center > Settings > Org settings > Services > Calendar: clea
 | NIST SP 800-53 Rev 5 | AC-3 |
 | CIS Microsoft 365 Foundations Benchmark v7.0.0 | 1.3.3 |
 | CIS Controls v8.1 | 3.3 |
+| CISA SCuBA | MS.EXO.6.2v1 |
 | CMMC 2.0 | AC.L2-3.1.3 |
 | ISO/IEC 27001:2022 | A.5.14 |
 | SOC 2 | CC6.7 |

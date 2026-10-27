@@ -321,7 +321,7 @@ Convert permanent role assignments to PIM eligible. Keep only break-glass accoun
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6(5) |
 | CIS Controls v8.1 | 6.8, 5.4 |
-| CISA SCuBA | MS.AAD.7.3v1 |
+| CISA SCuBA | MS.AAD.7.4v1 |
 | CMMC 2.0 | AC.L2-3.1.6 |
 | ISO/IEC 27001:2022 | A.8.2 |
 | SOC 2 | CC6.3 |
@@ -846,6 +846,7 @@ Microsoft 365 admin center > Settings > Org settings > Security & privacy > Pass
 | NIST SP 800-53 Rev 5 | IA-5(1) |
 | CIS Microsoft 365 Foundations Benchmark v7.0.0 | 1.3.1 |
 | CIS Controls v8.1 | 5.2 |
+| CISA SCuBA | MS.AAD.6.1v1 |
 | CMMC 2.0 | IA.L2-3.5.7 |
 | ISO/IEC 27001:2022 | A.5.17 |
 | SOC 2 | CC6.1 |
@@ -1979,6 +1980,7 @@ Microsoft Entra admin center > Entra ID > Authentication methods > Policies: ope
 | NIST SP 800-53 Rev 5 | IA-5, CM-7 |
 | CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.3.5 |
 | CIS Controls v8.1 | 6.3 |
+| CISA SCuBA | MS.AAD.3.5v2 |
 | CMMC 2.0 | IA.L2-3.5.3 |
 | ISO/IEC 27001:2022 | A.5.17, A.8.5 |
 | SOC 2 | CC6.1 |
@@ -2041,6 +2043,7 @@ Microsoft Entra admin center > Entra ID > Authentication methods > Policies > Em
 | NIST SP 800-53 Rev 5 | IA-5, CM-7 |
 | CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.3.7 |
 | CIS Controls v8.1 | 6.3 |
+| CISA SCuBA | MS.AAD.3.5v2 |
 | CMMC 2.0 | IA.L1-3.5.2 |
 | ISO/IEC 27001:2022 | A.5.17 |
 | SOC 2 | CC6.1 |
