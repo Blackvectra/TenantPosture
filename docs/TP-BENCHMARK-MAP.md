@@ -64,15 +64,15 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | AAD-16.8 | Users Cannot Recover BitLocker Keys of Their Devices | CIS M365 v7.0.0 5.1.4.6 |
 | AAD-17.1 | Password Addition Blocked for Applications | CIS M365 v7.0.0 5.1.5.3 |
 | AAD-17.2 | New Application Passwords System-Generated | CIS M365 v7.0.0 5.1.5.5 |
-| AAD-17.3 | SMS and Voice Call Authentication Methods Disabled | CIS M365 v7.0.0 5.2.3.5 |
+| AAD-17.3 | SMS and Voice Call Authentication Methods Disabled | CIS M365 v7.0.0 5.2.3.5; ScubaGear 2.0.0 MS.AAD.3.5v2 (Partial) |
 | AAD-17.4 | System-Preferred MFA Enabled for All Users | CIS M365 v7.0.0 5.2.3.6 |
-| AAD-17.5 | Email OTP Authentication Method Disabled | CIS M365 v7.0.0 5.2.3.7 |
+| AAD-17.5 | Email OTP Authentication Method Disabled | CIS M365 v7.0.0 5.2.3.7; ScubaGear 2.0.0 MS.AAD.3.5v2 (Partial) |
 | AAD-17.6 | Authenticator on Companion Applications Disabled | CIS M365 v7.0.0 5.2.3.10 |
 | AAD-2.1 | Conditional Access Policies Deployed | ScubaGear 2.0.0 MS.AAD.1.1v1 (Partial) |
 | AAD-2.2 | Named Locations Defined | CIS M365 v7.0.0 5.2.2.14 |
 | AAD-2.3 | Device Compliance Enforced via CA | ScubaGear 2.0.0 MS.AAD.3.7v1 (Partial) |
 | AAD-3.1 | Global Administrator Count 2-4, Cloud-Only | CIS M365 v7.0.0 1.1.3; ScubaGear 2.0.0 MS.AAD.7.1v1 (Partial) |
-| AAD-3.2 | No Permanent Admin Role Assignments | ScubaGear 2.0.0 MS.AAD.7.3v1 (Unsupported) |
+| AAD-3.2 | No Permanent Admin Role Assignments | ScubaGear 2.0.0 MS.AAD.7.4v1 (Partial) |
 | AAD-3.3 | PIM Requires MFA on Activation | Microsoft Zero Trust: Phase 1 - Secure the identity control plane, Step 6: Configure activation settings > Require MFA on activation (Subset) |
 | AAD-3.4 | PIM Requires Justification on Activation | Microsoft Zero Trust: Step 6: Configure PIM > Configure activation settings > 'Require justification' (Subset) |
 | AAD-3.5 | PIM GA Activation Requires Approval | CIS M365 v7.0.0 5.3.4; ScubaGear 2.0.0 MS.AAD.7.6v1 (Equivalent) |
@@ -89,7 +89,7 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | AAD-7.2 | Break-Glass Accounts Configured | CIS M365 v7.0.0 1.1.2 |
 | AAD-7.3 | Smart Lockout Duration at Least 60 Seconds | CIS M365 v7.0.0 5.2.3.9 |
 | AAD-7.4 | Custom Banned Password List Enforced | CIS M365 v7.0.0 5.2.3.2 |
-| AAD-7.5 | Passwords Set to Never Expire | CIS M365 v7.0.0 1.3.1 |
+| AAD-7.5 | Passwords Set to Never Expire | CIS M365 v7.0.0 1.3.1; ScubaGear 2.0.0 MS.AAD.6.1v1 (Partial) |
 | AAD-8.1 | PIM Alerts Configured | ScubaGear 2.0.0 MS.AAD.7.7v1 (Manual) |
 | AAD-9.1 | Authenticator Number Matching Enabled | CIS M365 v7.0.0 5.2.3.1; ScubaGear 2.0.0 MS.AAD.3.3v2 (Partial) |
 | AAD-9.2 | Passwordless Authentication Methods Available | ScubaGear 2.0.0 MS.AAD.3.1v1 (Unsupported) |
@@ -146,7 +146,7 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | EXO-1.5 | Anti-Phishing Impersonation Protection Enabled | ScubaGear 2.0.0 MS.SECURITYSUITE.2.1v1 (Partial) |
 | EXO-1.6 | Modern Authentication Enabled | CIS M365 v7.0.0 6.5.1 |
 | EXO-1.7 | Honor DMARC Policy Enabled | CIS M365 v7.0.0 2.1.7 |
-| EXO-10.1 | External Calendar Sharing Not Available | CIS M365 v7.0.0 1.3.3 |
+| EXO-10.1 | External Calendar Sharing Not Available | CIS M365 v7.0.0 1.3.3; ScubaGear 2.0.0 MS.EXO.6.2v1 (Partial) |
 | EXO-10.2 | Additional Storage Providers Restricted in Outlook on the Web | CIS M365 v7.0.0 6.5.3 |
 | EXO-10.3 | Connection Filter IP Allow List Not Used | CIS M365 v7.0.0 2.1.12 |
 | EXO-2.5 | Customer Lockbox Enabled | CIS M365 v7.0.0 1.3.6 |
@@ -240,11 +240,11 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | SPO-3.4 | SharePoint Guest Access Expiration Required | CIS M365 v7.0.0 7.2.9 |
 | SPO-5.1 | SharePoint Infected Files Cannot Be Downloaded | CIS M365 v7.0.0 7.3.1 |
 | SPO-5.2 | SharePoint and OneDrive Integration With Entra B2B Enabled | CIS M365 v7.0.0 7.2.2 |
-| SPO-5.3 | OneDrive Content Sharing Restricted | CIS M365 v7.0.0 7.2.4 |
+| SPO-5.3 | OneDrive Content Sharing Restricted | CIS M365 v7.0.0 7.2.4; ScubaGear 2.0.0 MS.SHAREPOINT.1.2v1 (Partial) |
 | SPO-5.4 | SharePoint Guests Cannot Share Items They Do Not Own | CIS M365 v7.0.0 7.2.5 |
-| SPO-5.5 | SharePoint External Sharing Limited to Allowed Domains | CIS M365 v7.0.0 7.2.6 |
+| SPO-5.5 | SharePoint External Sharing Limited to Allowed Domains | CIS M365 v7.0.0 7.2.6; ScubaGear 2.0.0 MS.SHAREPOINT.1.3v1 (Partial) |
 | SPO-5.6 | SharePoint External Sharing Restricted by Security Group | CIS M365 v7.0.0 7.2.8 |
-| SPO-5.7 | SharePoint Default Sharing Link Permission Is View | CIS M365 v7.0.0 7.2.11 |
+| SPO-5.7 | SharePoint Default Sharing Link Permission Is View | CIS M365 v7.0.0 7.2.11; ScubaGear 2.0.0 MS.SHAREPOINT.2.2v1 (Equivalent) |
 
 ### TMS
 

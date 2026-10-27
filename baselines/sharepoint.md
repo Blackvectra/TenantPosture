@@ -650,6 +650,7 @@ Set-SPOTenant -OneDriveSharingCapability Disabled. SharePoint admin center > Pol
 | NIST SP 800-53 Rev 5 | AC-3, AC-4 |
 | CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.4 |
 | CIS Controls v8.1 | 3.3 |
+| CISA SCuBA | MS.SHAREPOINT.1.2v1 |
 | CMMC 2.0 | AC.L1-3.1.1 |
 | ISO/IEC 27001:2022 | A.5.14, A.8.12 |
 | SOC 2 | CC6.7 |
@@ -712,6 +713,7 @@ Set-SPOTenant -SharingDomainRestrictionMode AllowList -SharingAllowedDomainList 
 | NIST SP 800-53 Rev 5 | AC-4, SC-7 |
 | CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.6 |
 | CIS Controls v8.1 | 3.3 |
+| CISA SCuBA | MS.SHAREPOINT.1.3v1 |
 | CMMC 2.0 | AC.L1-3.1.20 |
 | ISO/IEC 27001:2022 | A.5.14, A.8.12 |
 | SOC 2 | CC6.7 |
@@ -774,6 +776,7 @@ Set-SPOTenant -DefaultLinkPermission View. SharePoint admin center > Policies > 
 | NIST SP 800-53 Rev 5 | AC-6 |
 | CIS Microsoft 365 Foundations Benchmark v7.0.0 | 7.2.11 |
 | CIS Controls v8.1 | 3.3 |
+| CISA SCuBA | MS.SHAREPOINT.2.2v1 |
 | CMMC 2.0 | AC.L2-3.1.5 |
 | ISO/IEC 27001:2022 | A.5.15, A.8.2 |
 | SOC 2 | CC6.3 |

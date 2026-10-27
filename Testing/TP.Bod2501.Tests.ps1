@@ -115,10 +115,31 @@ Describe 'CISA BOD 25-01 required-configurations view' {
             $r31['Status'] | Should -Be $script:St.Manual
             @($r31['CitedNotCounted'].ControlId) | Should -Contain 'AAD-9.2'
             (Row $v 'MS.AAD.7.7v1')['Status'] | Should -Be $script:St.Manual
-            (Row $v 'MS.AAD.6.1v1')['Status'] | Should -Be $script:St.Manual
+            (Row $v 'MS.AAD.7.5v1')['Status'] | Should -Be $script:St.Manual
             $v.Summary.ByStatus[$script:St.Met] | Should -Be $v.Summary.Equivalent
             $v.Summary.ByStatus[$script:St.Partly] | Should -Be $v.Summary.PartialOnly
             $v.Summary.ByStatus[$script:St.Manual] | Should -Be ($v.Summary.Uncited + $v.Summary.NotCounted)
+        }
+
+        It 'with every control satisfied, 17 policies read met, 24 partly checked and 15 need manual evidence' {
+            # Pinned so a citation change shows up here, not silently in the deliverable.
+            # 2026-10-27: SPO-5.7 (Equivalent) made MS.SHAREPOINT.2.2v1 met; AAD-17.3/17.5,
+            # AAD-7.5, EXO-10.1, SPO-5.3, SPO-5.5 and AAD-3.2 (all Partial) made six more
+            # policies partly checked. Was 16 / 18 / 22.
+            $v = View $script:AllPass
+            $v.Summary.ByStatus[$script:St.Met] | Should -Be 17
+            $v.Summary.ByStatus[$script:St.Partly] | Should -Be 24
+            $v.Summary.ByStatus[$script:St.Manual] | Should -Be 15
+            (Row $v 'MS.SHAREPOINT.2.2v1')['Status'] | Should -Be $script:St.Met
+            foreach ($p in 'MS.AAD.3.5v2', 'MS.AAD.6.1v1', 'MS.AAD.7.4v1', 'MS.EXO.6.2v1', 'MS.SHAREPOINT.1.2v1', 'MS.SHAREPOINT.1.3v1') {
+                (Row $v $p)['Status'] | Should -Be $script:St.Partly -Because $p
+            }
+            # MS.AAD.3.5v2 is split between two controls, each covering part of it.
+            @(@((Row $v 'MS.AAD.3.5v2')['Controls']) | ForEach-Object { $_['ControlId'] } | Sort-Object) | Should -Be @('AAD-17.3', 'AAD-17.5')
+            # MS.AAD.7.3v1 is AAD-10.2's alone now (AAD-3.2 cites 7.4), counted or not.
+            $r73 = Row $v 'MS.AAD.7.3v1'
+            @(@($r73['Controls']) + @($r73['CitedNotCounted']) | Where-Object { $null -ne $_ } | ForEach-Object { $_['ControlId'] ?? $_.ControlId }) | Should -Not -Contain 'AAD-3.2'
+            @(@((Row $v 'MS.AAD.7.4v1')['Controls']) | ForEach-Object { $_['ControlId'] }) | Should -Be @('AAD-3.2')
         }
 
         It 'an Equivalent check that passed is tool-verified met' {
