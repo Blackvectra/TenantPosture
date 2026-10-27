@@ -29,14 +29,14 @@ Describe 'Approved emergency-access exclusions' {
         function script:Pol {
             param([string] $Name = 'p', [string] $State = 'enabled', [string[]] $Users = @('All'), [string[]] $Groups = @(), [string[]] $Roles = @(),
                   [string[]] $ExUsers = @(), [string[]] $ExGroups = @(), [string[]] $ExRoles = @(), [string[]] $Apps = @('All'), [string[]] $ExApps = @(),
-                  [string[]] $ClientApps = @('all'), [string[]] $Grant = @(), [string] $Op = 'OR', [string[]] $SignInRisk = @())
+                  [string[]] $ClientApps = @('all'), [string[]] $Grant = @(), [string] $Op = 'OR', [string[]] $SignInRisk = @(), [hashtable] $Session = @{})
             @{ Id = $Name; DisplayName = $Name; State = $State
                Conditions = @{ ClientAppTypes = $ClientApps; SignInRiskLevels = $SignInRisk; UserRiskLevels = @(); AuthFlows = @(); Platforms = @(); ExcludePlatforms = @()
                                Users = @{ IncludeUsers = $Users; IncludeGroups = $Groups; IncludeRoles = $Roles; ExcludeUsers = $ExUsers; ExcludeGroups = $ExGroups; ExcludeRoles = $ExRoles }
                                Applications = @{ Include = $Apps; Exclude = $ExApps; UserActions = @() }
                                Locations = @{ Include = @(); Exclude = @() }; Devices = @{ FilterMode = ''; FilterRule = '' }; ClientApplications = @{ IncludeServicePrincipals = @() } }
                GrantControls = @{ Operator = $Op; BuiltInControls = $Grant; CustomControls = @(); AuthStrengthId = ''; AuthStrengthName = ''; AuthStrengthCombinations = @(); TermsOfUse = @() }
-               SessionControls = @{} }
+               SessionControls = $Session }
         }
         function script:Ca([object[]] $Policies) {
             Clear-TPState
@@ -266,9 +266,17 @@ Describe 'Approved emergency-access exclusions' {
             (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1)))) | Should -Be 0
             (F 'AAD-1.4').State  | Should -Be 'Partial'
             (F 'AAD-1.4').Detail | Should -Match 'other shortfall'
-            # With both levels covered the same exclusion is the only shortfall and is approved.
-            Ca @((Pol -Name 'High risk' -Grant @('mfa') -SignInRisk @('high') -ExUsers @($script:U1)), (Pol -Name 'Medium risk' -Grant @('mfa') -SignInRisk @('medium') -ExUsers @($script:U1)))
+            # Both levels in two policies: covered, but CIS 5.2.2.7 needs one policy, so that shortfall keeps it Partial.
+            $every = @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'everyTime'; Value = $null; Type = '' }; PersistentBrowser = $null }
+            Ca @((Pol -Name 'High risk' -Grant @('mfa') -SignInRisk @('high') -ExUsers @($script:U1) -Session $every), (Pol -Name 'Medium risk' -Grant @('mfa') -SignInRisk @('medium') -ExUsers @($script:U1) -Session $every))
             (V 'Test-TPControlAADSignInRisk' 'AAD-1.4').State | Should -Be 'Partial'
+            (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1)))) | Should -Be 0
+            (F 'AAD-1.4').State | Should -Be 'Partial'
+            # One policy meeting CIS 5.2.2.7: the same exclusion is the only shortfall and is approved.
+            Ca @(Pol -Name 'Risk' -Grant @('mfa') -SignInRisk @('high', 'medium') -ExUsers @($script:U1) -Session $every)
+            $f = V 'Test-TPControlAADSignInRisk' 'AAD-1.4'
+            $f.State | Should -Be 'Partial'
+            @($f.AffectedObjects | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'Shortfall' -Default '') }).Count | Should -Be 0 -Because 'the exclusion is the only shortfall'
             (Set-TPEmergencyAccessApproval -Path (Record @((Entry -Id $script:U1)))) | Should -Be 1
             (F 'AAD-1.4').State | Should -Be 'Satisfied'
         }

@@ -44,10 +44,11 @@ Describe 'CA policy tiers — None / Audit mode / Enabled' {
                 'AAD-10.4' { $p.SessionControls = @{ SignInFrequency = @{ IsEnabled = $true; FrequencyInterval = 'timeBased'; Value = 12; Type = 'hours' } } }
                 # Token protection is sessionControls.secureSignInSession (beta),
                 # stored as SecureSignInSession by the collector.
-                # ...on Windows, for some users, on Exchange Online and SharePoint Online.
+                # ...on Windows, for some users, mobile apps and desktop clients only, on
+                # Exchange Online, SharePoint Online and Teams Services (CIS 5.2.2.16).
                 'AAD-11.4' { $p.SessionControls = @{ SecureSignInSession = $true }
-                             $p.Conditions = @{ Users = @{ IncludeUsers = @('All'); IncludeRoles = @() }; Platforms = @('windows'); ClientApplications = @{}
-                                                Applications = @{ Include = @('00000002-0000-0ff1-ce00-000000000000', '00000003-0000-0ff1-ce00-000000000000'); Exclude = @() } } }
+                             $p.Conditions = @{ Users = @{ IncludeUsers = @('All'); IncludeRoles = @() }; Platforms = @('windows'); ClientAppTypes = @('mobileAppsAndDesktopClients'); ClientApplications = @{}
+                                                Applications = @{ Include = @('00000002-0000-0ff1-ce00-000000000000', '00000003-0000-0ff1-ce00-000000000000', 'cc15fd57-2c6c-4117-a88c-83b1d56b4bbe'); Exclude = @() } } }
                 # Matched on configuration, never on the policy's NAME.
                 'AAD-11.7' { $p.Conditions = @{ Users = @{ IncludeRoles = @('62e90394-69f5-4237-9190-012177145e10') }; Devices = @{ FilterMode = 'include'; FilterRule = 'device.extensionAttribute1 -eq "PAW"' }; ClientApplications = @{} } }
                 'AAD-11.8' { $p.GrantControls = @{ BuiltInControls = @(); TermsOfUse = @('tou-1') } }

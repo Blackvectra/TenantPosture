@@ -118,19 +118,20 @@ CA policy targeting privileged roles with Authentication Strength = Phishing-res
 **License required:** Entra ID P2
 
 **Description:**
-CA policy enforces MFA or blocks access when sign-in risk is elevated. Requires Entra ID P2.
+Enabled Conditional Access policies respond to high and medium sign-in risk for all users on all applications (each level judged on who it protects), and one enabled policy meets CIS 5.2.2.7: it selects both high and medium sign-in risk, covers all users, all applications and every client app type with no other condition, and either blocks access or requires MFA (or an authentication strength) with sign-in frequency set to every time. Requires Entra ID P2.
 
 **Business risk:**
 Without sign-in risk policies, compromised credentials and impossible travel go unchallenged.
 
 **Remediation:**
-CA policy: Condition = Sign-in risk high/medium, Grant = Require MFA or Block. Requires Entra P2.
+CA policy: Users = All users (exclude emergency access accounts only), Target resources = All resources, Conditions > Sign-in risk = High and Medium, Client apps not limited, Grant = Require multifactor authentication (or an authentication strength), Session > Sign-in frequency = Every time; or Grant = Block access. Requires Entra P2.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-7, IA-2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.2.7 |
 | CIS Controls v8.1 | 6.7 |
 | CISA SCuBA | MS.AAD.2.3v1 |
 | CMMC 2.0 | AC.L2-3.1.8 |
@@ -149,19 +150,20 @@ CA policy: Condition = Sign-in risk high/medium, Grant = Require MFA or Block. R
 **License required:** Entra ID P2
 
 **Description:**
-CA policy enforces password change or blocks access when user risk is elevated.
+Enabled Conditional Access policies respond to high user risk for all users on all applications, and one enabled policy meets CIS 5.2.2.6: it selects high user risk, covers all users, all applications and every client app type with no other condition, requires a password change AND MFA (or an authentication strength), and sets sign-in frequency to every time. Microsoft's newer 'Require risk remediation' grant is reported but does not meet CIS 5.2.2.6, which audits the password-change grant.
 
 **Business risk:**
 High user risk indicates credential compromise. Without automated response, compromised accounts remain active.
 
 **Remediation:**
-CA policy: Condition = User risk high, Grant = Require password change. Requires Entra P2.
+CA policy: Users = All users (exclude emergency access accounts only), Target resources = All resources, Conditions > User risk = High, Client apps not limited, Grant = Require multifactor authentication (or an authentication strength) AND Require password change (Require all the selected controls), Session > Sign-in frequency = Every time. Requires Entra P2.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-7, IA-5 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.2.6 |
 | CIS Controls v8.1 | 6.7 |
 | CISA SCuBA | MS.AAD.2.1v1 |
 | CMMC 2.0 | AC.L2-3.1.8 |
@@ -1107,19 +1109,20 @@ Create a Sentinel or Defender XDR alert rule for sign-in from break-glass accoun
 **License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-CA policy enforces sign-in frequency to limit the lifetime of stolen session tokens.
+Enabled CA policies set a sign-in frequency of 4 hours or less with a persistent browser session of never persistent for every privileged role (the tool's list, Microsoft's isPrivileged roles and the administrative roles CIS 5.2.2.4 lists, named in the policy's roles, on all applications), with at least one such policy naming every role CIS 5.2.2.4 lists, and 24 hours or less (or every time) for guest or external users, limiting the lifetime of stolen session tokens.
 
 **Business risk:**
 Stolen tokens (from AiTM, token theft via malware) remain valid for the full session lifetime. Sign-in frequency limits re-use to the configured window.
 
 **Remediation:**
-CA policy: Session controls > Sign-in frequency > set to 1 hour for privileged users, 8 hours for standard users.
+CA policy for the privileged directory roles (Users > Directory roles: every privileged role, including Application, Authentication, Billing, Cloud Application, Conditional Access, Exchange, Global, Helpdesk, Password, Privileged Authentication, Privileged Role, Security, SharePoint and User Administrator and Global Reader), Target resources = All resources: Session > Sign-in frequency > Periodic reauthentication, 4 hours or less, and Session > Persistent browser session > Never persistent. CA policy for Guest or external users: Session > Sign-in frequency, 24 hours or less (or Every time).
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-12 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.2.4 |
 | CIS Controls v8.1 | 4.3 |
 | CMMC 2.0 | AC.L2-3.1.10 |
 | ISO/IEC 27001:2022 | A.5.17, A.8.3 |
@@ -1228,19 +1231,20 @@ Entra ID > Identity Protection > Risky workload identities. Investigate and reme
 **License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-CA policy enforces token protection to bind tokens to the originating device, blocking replay attacks.
+CA policy enforces token protection for Office 365 Exchange Online, Office 365 SharePoint Online and Microsoft Teams Services on Windows mobile apps and desktop clients, binding tokens to the originating device and blocking replay attacks.
 
 **Business risk:**
 AiTM (adversary-in-the-middle) phishing steals authenticated session tokens. Without token binding, stolen tokens work from any device — effectively bypassing MFA entirely.
 
 **Remediation:**
-CA policy: Session controls > Token protection. Enable for Exchange Online and SharePoint Online at minimum. Requires Entra ID P1+. Note: may cause issues with non-compliant clients — test in report-only mode first.
+CA policy: Users = the users in scope (not None), Target resources = Select resources: Office 365 Exchange Online, Office 365 SharePoint Online and Microsoft Teams Services only (not All resources or the Office 365 group), Conditions > Device platforms = Windows, Client apps = Mobile apps and desktop clients only, Session > Require token protection for sign-in sessions. Requires Entra ID P1+. Note: unsupported clients are blocked; test in report-only mode first.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-12, IA-2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.2.16 |
 | CMMC 2.0 | AC.L2-3.1.10 |
 | ISO/IEC 27001:2022 | A.5.17 |
 | SOC 2 | CC6.1 |

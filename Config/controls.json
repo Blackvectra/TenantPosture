@@ -1680,7 +1680,7 @@
     {
       "ControlId": "AAD-1.4",
       "Title": "Sign-in Risk CA Policy",
-      "Description": "CA policy enforces MFA or blocks access when sign-in risk is elevated. Requires Entra ID P2.",
+      "Description": "Enabled Conditional Access policies respond to high and medium sign-in risk for all users on all applications (each level judged on who it protects), and one enabled policy meets CIS 5.2.2.7: it selects both high and medium sign-in risk, covers all users, all applications and every client app type with no other condition, and either blocks access or requires MFA (or an authentication strength) with sign-in frequency set to every time. Requires Entra ID P2.",
       "BusinessRisk": "Without sign-in risk policies, compromised credentials and impossible travel go unchallenged.",
       "Severity": "High",
       "Workload": "AAD",
@@ -1688,12 +1688,12 @@
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
       "EvaluatorFunction": "Test-TPControlAADSignInRisk",
-      "Remediation": "CA policy: Condition = Sign-in risk high/medium, Grant = Require MFA or Block. Requires Entra P2.",
+      "Remediation": "CA policy: Users = All users (exclude emergency access accounts only), Target resources = All resources, Conditions > Sign-in risk = High and Medium, Client apps not limited, Grant = Require multifactor authentication (or an authentication strength), Session > Sign-in frequency = Every time; or Grant = Block access. Requires Entra P2.",
       "References": {
         "CISControls": [
           "6.7"
         ],
-        "CIS": "",
+        "CIS": "5.2.2.7",
         "SCuBA": "MS.AAD.2.3v1",
         "NIST": "AC-7, IA-2",
         "CMMC": "AC.L2-3.1.8",
@@ -1711,7 +1711,7 @@
     {
       "ControlId": "AAD-1.5",
       "Title": "User Risk CA Policy",
-      "Description": "CA policy enforces password change or blocks access when user risk is elevated.",
+      "Description": "Enabled Conditional Access policies respond to high user risk for all users on all applications, and one enabled policy meets CIS 5.2.2.6: it selects high user risk, covers all users, all applications and every client app type with no other condition, requires a password change AND MFA (or an authentication strength), and sets sign-in frequency to every time. Microsoft's newer 'Require risk remediation' grant is reported but does not meet CIS 5.2.2.6, which audits the password-change grant.",
       "BusinessRisk": "High user risk indicates credential compromise. Without automated response, compromised accounts remain active.",
       "Severity": "High",
       "Workload": "AAD",
@@ -1719,12 +1719,12 @@
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
       "EvaluatorFunction": "Test-TPControlAADUserRisk",
-      "Remediation": "CA policy: Condition = User risk high, Grant = Require password change. Requires Entra P2.",
+      "Remediation": "CA policy: Users = All users (exclude emergency access accounts only), Target resources = All resources, Conditions > User risk = High, Client apps not limited, Grant = Require multifactor authentication (or an authentication strength) AND Require password change (Require all the selected controls), Session > Sign-in frequency = Every time. Requires Entra P2.",
       "References": {
         "CISControls": [
           "6.7"
         ],
-        "CIS": "",
+        "CIS": "5.2.2.6",
         "SCuBA": "MS.AAD.2.1v1",
         "NIST": "AC-7, IA-5",
         "CMMC": "AC.L2-3.1.8",
@@ -3762,7 +3762,7 @@
     {
       "ControlId": "AAD-10.4",
       "Title": "Short Sign-in Frequency for Admins and Guests",
-      "Description": "Enabled CA policies set a sign-in frequency of 4 hours or less for every privileged role (named in the policy's roles) and 24 hours or less (or every time) for guest or external users, limiting the lifetime of stolen session tokens.",
+      "Description": "Enabled CA policies set a sign-in frequency of 4 hours or less with a persistent browser session of never persistent for every privileged role (the tool's list, Microsoft's isPrivileged roles and the administrative roles CIS 5.2.2.4 lists, named in the policy's roles, on all applications), with at least one such policy naming every role CIS 5.2.2.4 lists, and 24 hours or less (or every time) for guest or external users, limiting the lifetime of stolen session tokens.",
       "BusinessRisk": "Stolen tokens (from AiTM, token theft via malware) remain valid for the full session lifetime. Sign-in frequency limits re-use to the configured window.",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -3770,12 +3770,12 @@
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
       "EvaluatorFunction": "Test-TPControlAADSignInFrequency",
-      "Remediation": "CA policy for the privileged directory roles (Users > Directory roles, every privileged role): Session > Sign-in frequency > Periodic reauthentication, 4 hours or less. CA policy for Guest or external users: Session > Sign-in frequency, 24 hours or less (or Every time).",
+      "Remediation": "CA policy for the privileged directory roles (Users > Directory roles: every privileged role, including Application, Authentication, Billing, Cloud Application, Conditional Access, Exchange, Global, Helpdesk, Password, Privileged Authentication, Privileged Role, Security, SharePoint and User Administrator and Global Reader), Target resources = All resources: Session > Sign-in frequency > Periodic reauthentication, 4 hours or less, and Session > Persistent browser session > Never persistent. CA policy for Guest or external users: Session > Sign-in frequency, 24 hours or less (or Every time).",
       "References": {
         "CISControls": [
           "4.3"
         ],
-        "CIS": "",
+        "CIS": "5.2.2.4",
         "SCuBA": "",
         "NIST": "AC-12",
         "CMMC": "AC.L2-3.1.10",
@@ -4674,7 +4674,7 @@
     {
       "ControlId": "AAD-11.4",
       "Title": "Token Protection (Session Binding) Enforced",
-      "Description": "CA policy enforces token protection for Exchange Online and SharePoint Online on Windows, binding tokens to the originating device and blocking replay attacks.",
+      "Description": "CA policy enforces token protection for Office 365 Exchange Online, Office 365 SharePoint Online and Microsoft Teams Services on Windows mobile apps and desktop clients, binding tokens to the originating device and blocking replay attacks.",
       "BusinessRisk": "AiTM (adversary-in-the-middle) phishing steals authenticated session tokens. Without token binding, stolen tokens work from any device — effectively bypassing MFA entirely.",
       "Severity": "High",
       "Workload": "AAD",
@@ -4682,11 +4682,11 @@
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
       "EvaluatorFunction": "Test-TPControlAADTokenProtection",
-      "Remediation": "CA policy: Session controls > Token protection. Enable for Exchange Online and SharePoint Online at minimum. Requires Entra ID P1+. Note: may cause issues with non-compliant clients — test in report-only mode first.",
+      "Remediation": "CA policy: Users = the users in scope (not None), Target resources = Select resources: Office 365 Exchange Online, Office 365 SharePoint Online and Microsoft Teams Services only (not All resources or the Office 365 group), Conditions > Device platforms = Windows, Client apps = Mobile apps and desktop clients only, Session > Require token protection for sign-in sessions. Requires Entra ID P1+. Note: unsupported clients are blocked; test in report-only mode first.",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "References": {
         "CISControls": [],
-        "CIS": "",
+        "CIS": "5.2.2.16",
         "SCuBA": "",
         "NIST": "AC-12, IA-2",
         "CMMC": "AC.L2-3.1.10",

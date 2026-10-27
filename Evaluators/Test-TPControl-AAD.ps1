@@ -515,10 +515,11 @@ function Test-TPControlAADSignInRisk {
     [CmdletBinding()] param()
     $cid = 'AAD-1.4'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
+    $req14 = 'One enabled CA policy for all users, all applications and every client app type: signInRiskLevels = high and medium + require MFA (or an authentication strength) with sign-in frequency every time, or block'
     if ((Get-TPSecurityDefaultsState) -eq $true) {
         Add-TPSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
             -Detail 'No Conditional Access sign-in risk policy can be in force while Security Defaults is enabled, and Security Defaults has no configurable sign-in risk policy of its own: it prompts registered users for MFA when Microsoft decides it is necessary. Conditional Access risk policies need Microsoft Entra ID P2. The legacy Identity Protection sign-in risk policy (retiring October 1, 2026) is not read by this tool.' `
-            -CurrentValue 'Security Defaults enabled; no Conditional Access sign-in risk policy in force' -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' `
+            -CurrentValue 'Security Defaults enabled; no Conditional Access sign-in risk policy in force' -RequiredValue $req14 `
             -Remediation $ctrl.Remediation -NeedsConditionalAccess
         return
     }
@@ -551,20 +552,24 @@ function Test-TPControlAADSignInRisk {
     }
     if ($riskPolicies.Count -gt 0 -and @($perLevel.Keys | Where-Object { @($perLevel[$_].Selecting).Count -gt 0 }).Count -gt 0) {
         $cv = Get-TPRiskCoverageVerdict -PerLevel $perLevel -Noun 'sign-in risk' -Consequence 'is let through without a challenge'
+        # CIS 5.2.2.7 audits ONE policy (both levels, MFA with sign-in frequency every
+        # time, or a block) on top of the per-level coverage above.
+        $cis = Get-TPCisRiskPolicyVerdict -Policies $ca.Data['Policies'] -Kind 'SignIn'
+        $cv = Merge-TPExpectedStateParts -A $cv -B $cis
         Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
             -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished -AffectedObjects $cv.AffectedObjects `
-            -CurrentValue "signInRiskLevels = $($levels -join ', '); all-user coverage: $(($perLevel.Keys | ForEach-Object { "$_ $($perLevel[$_].Kind)" }) -join ', ')" `
-            -RequiredValue 'CA policy in force for all users on all applications: signInRiskLevels = high/medium + require MFA'
+            -CurrentValue "signInRiskLevels = $($levels -join ', '); all-user coverage: $(($perLevel.Keys | ForEach-Object { "$_ $($perLevel[$_].Kind)" }) -join ', '); one policy meeting CIS 5.2.2.7: $(if (@($cis.Shortfalls).Count) { 'no' } elseif (@($cis.NotEstablished).Count -and -not @($cis.Verified).Count) { 'not read' } else { 'yes' })" `
+            -RequiredValue $req14
     } elseif ($riskPolicies.Count -eq 0 -and @($ro14.Qualifying).Count -gt 0) {
         Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
             -Detail "A sign-in risk policy meets every requirement (high and medium sign-in risk, all users and applications, a responding control) but is in report-only mode, which collects evaluation data and enforces nothing: $(@($ro14.Qualifying) -join ', '). Until it is turned on, a risky sign-in is let through without a challenge; Partial is still a failed baseline requirement.$(Get-TPRiskReportOnlyNote -ReportOnly $ro14)" `
-            -CurrentValue "Report-only: $(@($ro14.Qualifying) -join ', ')" -RequiredValue 'CA policy in force: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
+            -CurrentValue "Report-only: $(@($ro14.Qualifying) -join ', ')" -RequiredValue $req14 -Remediation $ctrl.Remediation
     } elseif ($riskPolicies.Count -gt 0) {
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
             -Detail "The enabled sign-in risk policies ($names) apply to $($levels -join ', ') risk only, so a medium- or high-risk sign-in (password spray, anonymous IP, token replay) is let through without a challenge." `
-            -CurrentValue "signInRiskLevels = $($levels -join ', ')" -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
+            -CurrentValue "signInRiskLevels = $($levels -join ', ')" -RequiredValue $req14 -Remediation $ctrl.Remediation
     } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail ('No enabled Conditional Access policy uses the sign-in risk condition, so a sign-in Identity Protection rates risky (password spray, anonymous IP, token replay) is let through without a challenge. (Sign-in risk policies need Entra ID P2; on a tenant without it this control is not scored.)' + (Get-TPRiskReportOnlyNote -ReportOnly $ro14)) -CurrentValue 'No sign-in risk policy' -RequiredValue 'CA policy: signInRiskLevels = high/medium + require MFA' -Remediation $ctrl.Remediation
+        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail ('No enabled Conditional Access policy uses the sign-in risk condition, so a sign-in Identity Protection rates risky (password spray, anonymous IP, token replay) is let through without a challenge. (Sign-in risk policies need Entra ID P2; on a tenant without it this control is not scored.)' + (Get-TPRiskReportOnlyNote -ReportOnly $ro14)) -CurrentValue 'No sign-in risk policy' -RequiredValue $req14 -Remediation $ctrl.Remediation
     }
 }
 
@@ -665,15 +670,156 @@ function Get-TPRiskCoverageVerdict {
     return [ordered]@{ Verified = $v; Shortfalls = $s; NotEstablished = $u; AffectedObjects = $ao }
 }
 
+# Every client app type a policy can select. CIS Microsoft 365 v7.0.0 audits the
+# risk policies (5.2.2.6, 5.2.2.7) as scoped to every client app, so a policy that
+# leaves some out is reported, not counted toward the CIS requirement.
+function Get-TPCAAllClientAppTypes {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param()
+    return @('browser', 'mobileAppsAndDesktopClients', 'exchangeActiveSync', 'other')
+}
+
+function Get-TPCASignInFrequencyEveryTime {
+    <#
+    .SYNOPSIS
+        'EveryTime' when a policy's sign-in frequency session control is on and set to every
+        time, 'Other' when it is off, absent or periodic, 'NotRead' when a results file
+        predates the read (no SignInFrequency key, or an enabled control with neither a
+        FrequencyInterval nor a Type to tell the two apart).
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] $Policy)
+    $sc = Get-TPObjectField -Item $Policy -Key 'SessionControls' -Default $null
+    if (-not (Test-TPFieldPresent -Item $sc -Key 'SignInFrequency')) { return 'NotRead' }
+    $sif = Get-TPObjectField -Item $sc -Key 'SignInFrequency' -Default $null
+    if ($null -eq $sif -or (Get-TPObjectField -Item $sif -Key 'IsEnabled' -Default $false) -ne $true) { return 'Other' }
+    if (Test-TPFieldPresent -Item $sif -Key 'FrequencyInterval') {
+        return $(if ([string](Get-TPObjectField -Item $sif -Key 'FrequencyInterval' -Default '') -eq 'everyTime') { 'EveryTime' } else { 'Other' })
+    }
+    if ([string](Get-TPObjectField -Item $sif -Key 'Type' -Default '')) { return 'Other' }
+    return 'NotRead'
+}
+
+function Get-TPCisRiskPolicyCheck {
+    <#
+    .SYNOPSIS
+        Judges ONE Conditional Access risk policy against the CIS Microsoft 365 v7.0.0 audit:
+        5.2.2.7 (-Kind SignIn: high AND medium sign-in risk, MFA or an authentication
+        strength with sign-in frequency every time, or a block on its own) or 5.2.2.6
+        (-Kind User: high user risk, password change AND MFA or an authentication strength,
+        operator AND, sign-in frequency every time). Both need all users on all
+        applications, every client app type, and no other narrowing condition. Returns
+        Problems (why it fails) and NotRead (what an older results file does not hold).
+    #>
+    [CmdletBinding()]
+    param([AllowNull()] $Policy, [Parameter(Mandatory)] [ValidateSet('SignIn', 'User')] [string] $Kind)
+    $problems = [System.Collections.Generic.List[string]]::new()
+    $notRead  = [System.Collections.Generic.List[string]]::new()
+    $cond  = if ($Kind -eq 'SignIn') { 'SignInRiskLevels' } else { 'UserRiskLevels' }
+    $other = if ($Kind -eq 'SignIn') { 'UserRiskLevels' } else { 'SignInRiskLevels' }
+    $need  = if ($Kind -eq 'SignIn') { @('high', 'medium') } else { @('high') }
+    $levels = @(Get-TPNestedProperty -Object $Policy -Path "Conditions.$cond" -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
+    $missing = @($need | Where-Object { $_ -notin $levels })
+    if ($missing.Count -gt 0) { $problems.Add("does not select $($missing -join ' and ') risk") }
+    if (@(Get-TPNestedProperty -Object $Policy -Path "Conditions.$other" -Default @() | Where-Object { $_ }).Count -gt 0) {
+        $problems.Add("also sets a $(if ($Kind -eq 'SignIn') { 'user' } else { 'sign-in' }) risk condition, so it applies only when both risk conditions hold")
+    }
+    foreach ($n in @(Get-TPCANarrowing -Policy $Policy -RequiredClientAppTypes (Get-TPCAAllClientAppTypes) -Ignore @('applies only at certain risk levels'))) { $problems.Add($n) }
+    $g = Get-TPCAGrantAlternatives -Policy $Policy
+    $ctl = @($g.Controls)
+    $mfa = ($ctl -contains 'mfa' -or $ctl -contains 'authStrength')
+    $blocks = $false
+    if ($ctl -contains 'block') {
+        if ($Kind -eq 'User') { $problems.Add('blocks access instead of requiring MFA and a password change') }
+        elseif ($ctl.Count -gt 1) { $problems.Add('combines block with other grant controls') }
+        else { $blocks = $true }
+    } else {
+        if ($Kind -eq 'User' -and $ctl -notcontains 'passwordChange') {
+            $why = 'does not require a password change'
+            if ($ctl -contains 'riskRemediation' -or $ctl -contains 'unknownFutureValue') { $why += ' (it requires risk remediation, Microsoft''s newer grant, which is not the password-change grant CIS 5.2.2.6 audits)' }
+            $problems.Add($why)
+        }
+        if (-not $mfa) { $problems.Add('does not require MFA or an authentication strength') }
+        elseif ($ctl.Count -gt 1 -and $g.Operator -ne 'AND') { $problems.Add('requires one of several grant controls (operator OR), so MFA is not required') }
+    }
+    if (-not $blocks) {
+        switch (Get-TPCASignInFrequencyEveryTime -Policy $Policy) {
+            'Other'   { $problems.Add('does not set sign-in frequency to every time') }
+            'NotRead' { $notRead.Add('its sign-in frequency session control (this results file predates the read)') }
+        }
+    }
+    [pscustomobject]@{ Problems = @($problems); NotRead = @($notRead) }
+}
+
+function Get-TPCisRiskPolicyVerdict {
+    <#
+    .SYNOPSIS
+        The CIS one-policy component of AAD-1.4 / AAD-1.5: at least one enabled policy that
+        passes Get-TPCisRiskPolicyCheck, judged on its exclusions like every coverage
+        component (Get-TPCACoverageVerdict). Verified / Shortfalls / NotEstablished /
+        AffectedObjects for Add-TPExpectedStateFinding.
+    #>
+    [CmdletBinding()]
+    param([AllowNull()] [AllowEmptyCollection()] [object[]] $Policies, [Parameter(Mandatory)] [ValidateSet('SignIn', 'User')] [string] $Kind)
+    $cond = if ($Kind -eq 'SignIn') { 'SignInRiskLevels' } else { 'UserRiskLevels' }
+    $req = if ($Kind -eq 'SignIn') {
+        'CIS 5.2.2.7 (one policy for all users on all applications and every client app type that selects both high and medium sign-in risk and either blocks access or requires MFA, or an authentication strength, with sign-in frequency every time)'
+    } else {
+        'CIS 5.2.2.6 (one policy for all users on all applications and every client app type that selects high user risk and requires a password change AND MFA, or an authentication strength, with sign-in frequency every time)'
+    }
+    $cands = @($Policies | Where-Object { $null -ne $_ -and [string](Get-TPObjectField -Item $_ -Key 'State' -Default '') -eq 'enabled' -and
+        @(Get-TPNestedProperty -Object $_ -Path "Conditions.$cond" -Default @() | Where-Object { $_ }).Count -gt 0 })
+    $qual = @(); $unread = @(); $why = @()
+    foreach ($p in $cands) {
+        $name = [string](Get-TPObjectField -Item $p -Key 'DisplayName' -Default '')
+        $c = Get-TPCisRiskPolicyCheck -Policy $p -Kind $Kind
+        if (@($c.Problems).Count -gt 0) { $why += "'$name' $(@($c.Problems) -join '; ')" }
+        elseif (@($c.NotRead).Count -gt 0) { $unread += "'$name' ($(@($c.NotRead) -join '; '))" }
+        else { $qual += $p }
+    }
+    $v = @(); $s = @(); $u = @(); $ao = @()
+    if ($qual.Count -gt 0) {
+        $cov = Get-TPCAEffectiveCoverage -Policies $qual -RequiredClientAppTypes (Get-TPCAAllClientAppTypes) -Ignore @('applies only at certain risk levels')
+        $what = if ($Kind -eq 'SignIn') { 'One policy selects both high and medium sign-in risk and blocks or requires MFA every time (CIS 5.2.2.7)' } else { 'One policy selects high user risk and requires a password change AND MFA every time (CIS 5.2.2.6)' }
+        $cv = Get-TPCACoverageVerdict -Coverage $cov -What $what
+        $v = @($cv.Verified); $s = @($cv.Shortfalls); $u = @($cv.NotEstablished); $ao = @($cv.AffectedObjects)
+    } elseif ($unread.Count -gt 0) {
+        $u += "whether an enabled policy meets $req, because the setting was not read for: $($unread -join '; ')."
+    } else {
+        $s += "No enabled policy meets $req$(if ($why.Count) { ": $(($why | Select-Object -First 5) -join '; ')$(if ($why.Count -gt 5) { "; and $($why.Count - 5) more" })" })."
+    }
+    return [ordered]@{ Verified = $v; Shortfalls = $s; NotEstablished = $u; AffectedObjects = $ao }
+}
+
+# Merges two Verified / Shortfalls / NotEstablished / AffectedObjects results, keeping
+# each sentence once (a shared exclusion produces the same sentence in both) and each
+# exclusion entry once per principal and sentence.
+function Merge-TPExpectedStateParts {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] $A, [Parameter(Mandatory)] $B)
+    $uniq = { param($x) $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal); @($x | Where-Object { $_ -and $seen.Add([string]$_) }) }
+    $seenAo = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $ao = @(@(@($A.AffectedObjects) + @($B.AffectedObjects)) | Where-Object { $null -ne $_ -and $seenAo.Add("$([string](Get-TPObjectField -Item $_ -Key 'Principal' -Default ''))|$([string](Get-TPObjectField -Item $_ -Key 'Sentence' -Default ''))") })
+    return [ordered]@{
+        Verified        = & $uniq (@($A.Verified) + @($B.Verified))
+        Shortfalls      = & $uniq (@($A.Shortfalls) + @($B.Shortfalls))
+        NotEstablished  = & $uniq (@($A.NotEstablished) + @($B.NotEstablished))
+        AffectedObjects = $ao
+    }
+}
+
 # ── AAD-1.5 User Risk CA Policy ───────────────────────────────────────────────
 function Test-TPControlAADUserRisk {
     [CmdletBinding()] param()
     $cid = 'AAD-1.5'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
+    $req15 = 'One enabled CA policy for all users, all applications and every client app type: userRiskLevels = high + require password change AND MFA (or an authentication strength), sign-in frequency every time'
     if ((Get-TPSecurityDefaultsState) -eq $true) {
         Add-TPSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
             -Detail 'No Conditional Access user risk policy can be in force while Security Defaults is enabled, and Security Defaults has no configurable user risk policy of its own, so neither forces an account Identity Protection rates as likely compromised to change its password or blocks it. Conditional Access risk policies need Microsoft Entra ID P2. The legacy Identity Protection user risk policy (retiring October 1, 2026) is not read by this tool.' `
-            -CurrentValue 'Security Defaults enabled; no Conditional Access user risk policy in force' -RequiredValue 'CA policy: userRiskLevels = high + require password change or risk remediation' `
+            -CurrentValue 'Security Defaults enabled; no Conditional Access user risk policy in force' -RequiredValue $req15 `
             -Remediation $ctrl.Remediation -NeedsConditionalAccess
         return
     }
@@ -705,18 +851,22 @@ function Test-TPControlAADUserRisk {
     }
     if (@($perLevel['high'].Selecting).Count -gt 0) {
         $cv = Get-TPRiskCoverageVerdict -PerLevel $perLevel -Noun 'user risk' -Consequence 'is not forced to change its password or blocked'
+        # CIS 5.2.2.6 audits ONE policy: high user risk, password change AND MFA (or an
+        # authentication strength), sign-in frequency every time.
+        $cis = Get-TPCisRiskPolicyVerdict -Policies $ca.Data['Policies'] -Kind 'User'
+        $cv = Merge-TPExpectedStateParts -A $cv -B $cis
         Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
             -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished -AffectedObjects $cv.AffectedObjects `
-            -CurrentValue "userRiskLevels = $($levels -join ', '); all-user coverage for high: $($perLevel['high'].Kind)" `
-            -RequiredValue 'CA policy in force for all users on all applications: userRiskLevels = high + require password change or risk remediation'
+            -CurrentValue "userRiskLevels = $($levels -join ', '); all-user coverage for high: $($perLevel['high'].Kind); one policy meeting CIS 5.2.2.6: $(if (@($cis.Shortfalls).Count) { 'no' } elseif (@($cis.NotEstablished).Count -and -not @($cis.Verified).Count) { 'not read' } else { 'yes' })" `
+            -RequiredValue $req15
     } elseif ($riskPolicies.Count -eq 0 -and @($ro15.Qualifying).Count -gt 0) {
         Add-TPFinding -ControlId $cid -State 'Partial' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' -FrameworkIds $cit `
             -Detail "A user risk policy meets every requirement (high user risk, all users and applications, a responding control) but is in report-only mode, which collects evaluation data and enforces nothing: $(@($ro15.Qualifying) -join ', '). Until it is turned on, an account Identity Protection rates high risk is not forced to change its password or blocked; Partial is still a failed baseline requirement.$(Get-TPRiskReportOnlyNote -ReportOnly $ro15)" `
-            -CurrentValue "Report-only: $(@($ro15.Qualifying) -join ', ')" -RequiredValue 'CA policy in force: userRiskLevels = high + require password change or risk remediation' -Remediation $ctrl.Remediation
+            -CurrentValue "Report-only: $(@($ro15.Qualifying) -join ', ')" -RequiredValue $req15 -Remediation $ctrl.Remediation
     } elseif ($riskPolicies.Count -gt 0) {
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
             -Detail "The enabled user risk policies ($names) apply to $($levels -join ', ') risk only, so an account Identity Protection rates high risk (likely compromised) is not forced to change its password or blocked." `
-            -CurrentValue "userRiskLevels = $($levels -join ', ')" -RequiredValue 'CA policy: userRiskLevels = high + require password change or risk remediation' -Remediation $ctrl.Remediation
+            -CurrentValue "userRiskLevels = $($levels -join ', ')" -RequiredValue $req15 -Remediation $ctrl.Remediation
     } else {
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit -Detail ('No enabled Conditional Access policy uses the user risk condition, so an account Identity Protection rates as likely compromised is not forced to change its password or blocked. (User risk policies need Entra ID P2; on a tenant without it this control is not scored.)' + (Get-TPRiskReportOnlyNote -ReportOnly $ro15)) -Remediation $ctrl.Remediation
     }
@@ -2007,11 +2157,36 @@ function Get-TPSignInFrequencyHours {
     return $null
 }
 
+# The administrative directory roles CIS Microsoft 365 v7.0.0 lists for its
+# administrator Conditional Access recommendations (5.2.2.1, 5.2.2.4), by built-in
+# role template id (Microsoft Entra built-in roles reference).
+function Get-TPCisAdminRoles {
+    [CmdletBinding()]
+    param()
+    @(
+        [pscustomobject]@{ Id = '9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3'; Name = 'Application Administrator' }
+        [pscustomobject]@{ Id = 'c4e39bd9-1100-46d3-8c65-fb160da0071f'; Name = 'Authentication Administrator' }
+        [pscustomobject]@{ Id = 'b0f54661-2d74-4c50-afa3-1ec803f12efe'; Name = 'Billing Administrator' }
+        [pscustomobject]@{ Id = '158c047a-c907-4556-b7ef-446551a6b5f7'; Name = 'Cloud Application Administrator' }
+        [pscustomobject]@{ Id = 'b1be1c3e-b65d-4f19-8427-f6fa0d97feb9'; Name = 'Conditional Access Administrator' }
+        [pscustomobject]@{ Id = '29232cdf-9323-42fd-ade2-1d097af3e4de'; Name = 'Exchange Administrator' }
+        [pscustomobject]@{ Id = '62e90394-69f5-4237-9190-012177145e10'; Name = 'Global Administrator' }
+        [pscustomobject]@{ Id = 'f2ef992c-3afb-46b9-b7cf-a126ee74c451'; Name = 'Global Reader' }
+        [pscustomobject]@{ Id = '729827e3-9c14-49f7-bb1b-9608f156bbb8'; Name = 'Helpdesk Administrator' }
+        [pscustomobject]@{ Id = '966707d0-3269-4727-9be2-8c3a10f19b9d'; Name = 'Password Administrator' }
+        [pscustomobject]@{ Id = '7be44c8a-adaf-4e2a-84d6-ab2649e08a13'; Name = 'Privileged Authentication Administrator' }
+        [pscustomobject]@{ Id = 'e8611ab8-c189-46e8-94e1-60213ab1f814'; Name = 'Privileged Role Administrator' }
+        [pscustomobject]@{ Id = '194ae4cb-b126-40b2-bd5b-6091b380977d'; Name = 'Security Administrator' }
+        [pscustomobject]@{ Id = 'f28a1f50-f6e7-4571-818b-6a12f2af6b6c'; Name = 'SharePoint Administrator' }
+        [pscustomobject]@{ Id = 'fe930be7-5e62-47db-91af-98c3a49a38b1'; Name = 'User Administrator' }
+    )
+}
+
 function Test-TPControlAADSignInFrequency {
     [CmdletBinding()] param()
     $cid = 'AAD-10.4'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
-    $required = 'Enabled CA policies with a sign-in frequency session control: every privileged role at 4 hours or less (named in the policy''s roles), and guest or external users at 24 hours or less (or every time)'
+    $required = 'Enabled CA policies with a sign-in frequency session control: every privileged role (the tool''s list, Microsoft''s isPrivileged roles and the administrative roles CIS 5.2.2.4 lists) at 4 hours or less with persistent browser session never, named in the policy''s roles, all applications, and at least one such policy naming every CIS 5.2.2.4 role, and guest or external users at 24 hours or less (or every time)'
     if ((Get-TPSecurityDefaultsState) -eq $true) {
         Add-TPSecurityDefaultsFinding -ControlId $cid -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -State 'Gap' -Severity $ctrl.Severity `
             -Detail 'No sign-in frequency session control is in force: session controls are a Conditional Access feature Security Defaults does not provide, so sign-in sessions follow the default rolling window of up to 90 days and a stolen token stays usable within it.' `
@@ -2039,12 +2214,24 @@ function Test-TPControlAADSignInFrequency {
     $sharedExclusions = [System.Collections.Generic.List[string]]::new()
     $byExclusionNote = ''
 
-    # ── Privileged roles: 4 hours or less, type hours (ZTA 21825) ──
-    $privMet = { param($p)
+    # ── Privileged roles: 4 hours or less, type hours (ZTA 21825), and persistent
+    # browser session never (CIS 5.2.2.4) ──
+    $privFreq = { param($p)
         $h = Get-TPSignInFrequencyHours -Policy $p
         $type = [string](Get-TPNestedProperty -Object $p -Path 'SessionControls.SignInFrequency.Type' -Default '')
         $null -ne $h -and $type -eq 'hours' -and $h -le 4
     }
+    # 'Never' (persistent browser session on and set to never persistent), 'Other', or
+    # 'NotRead' for a results file from before the session control was read.
+    $pbState = { param($p)
+        $sc = Get-TPObjectField -Item $p -Key 'SessionControls' -Default $null
+        if (-not (Test-TPFieldPresent -Item $sc -Key 'PersistentBrowser')) { return 'NotRead' }
+        $pb = Get-TPObjectField -Item $sc -Key 'PersistentBrowser' -Default $null
+        if ($null -ne $pb -and (Get-TPObjectField -Item $pb -Key 'IsEnabled' -Default $false) -eq $true -and [string](Get-TPObjectField -Item $pb -Key 'Mode' -Default '') -eq 'never') { return 'Never' }
+        return 'Other'
+    }
+    $privMet = { param($p) (& $privFreq $p) -and (& $pbState $p) -ne 'Other' }
+    $hasRoles = { param($p) @(Get-TPNestedProperty -Object $p -Path 'Conditions.Users.IncludeRoles' -Default @() | Where-Object { $_ }).Count -gt 0 }
     $roleRaw = Get-TPRawData -Key 'AAD-DirectoryRoles'
     $privRoles = [ordered]@{}; $flagsRead = $false
     if ($roleRaw -and (Get-TPObjectField -Item $roleRaw -Key 'Success' -Default $null) -eq $true) {
@@ -2056,21 +2243,33 @@ function Test-TPControlAADSignInFrequency {
                 $privRoles[$rid] = [string](Get-TPObjectField -Item $d -Key 'DisplayName' -Default $rid)
             }
         }
+        # Every administrative role CIS 5.2.2.4 lists is required too, whether or not
+        # the tool's list or Microsoft's isPrivileged flag marks it (Global Reader,
+        # Password Administrator).
+        if ($privRoles.Count -gt 0) {
+            foreach ($r in @(Get-TPCisAdminRoles)) { if (-not $privRoles.Contains($r.Id)) { $privRoles[$r.Id] = $r.Name } }
+        }
     }
-    $privEnabled = @($policies | Where-Object { (& $stateOf $_) -eq 'enabled' -and (& $privMet $_) -and @(Get-TPNestedProperty -Object $_ -Path 'Conditions.Users.IncludeRoles' -Default @() | Where-Object { $_ }).Count -gt 0 })
-    $privStaged = @($policies | Where-Object { (& $stateOf $_) -eq 'enabledForReportingButNotEnforced' -and (& $privMet $_) -and @(Get-TPNestedProperty -Object $_ -Path 'Conditions.Users.IncludeRoles' -Default @() | Where-Object { $_ }).Count -gt 0 } | ForEach-Object { & $nameOf $_ })
+    $privEnabled = @($policies | Where-Object { (& $stateOf $_) -eq 'enabled' -and (& $privMet $_) -and (& $hasRoles $_) })
+    $privStaged = @($policies | Where-Object { (& $stateOf $_) -eq 'enabledForReportingButNotEnforced' -and (& $privMet $_) -and (& $hasRoles $_) } | ForEach-Object { & $nameOf $_ })
+    # Short frequency but a persistent browser session that is not "never": named, not counted.
+    $privPbShort = @($policies | Where-Object { (& $stateOf $_) -eq 'enabled' -and (& $privFreq $_) -and (& $hasRoles $_) -and (& $pbState $_) -eq 'Other' } | ForEach-Object { & $nameOf $_ })
+    $privPbUnread = @($privEnabled | Where-Object { (& $pbState $_) -eq 'NotRead' } | ForEach-Object { & $nameOf $_ })
+    if ($privPbUnread.Count -gt 0) {
+        $u += "whether $($privPbUnread -join ', ') also set the persistent browser session to never persistent, because this results file predates the read of that session control."
+    }
     $privNarrowed = [ordered]@{}
     if ($privRoles.Count -eq 0 -and $privEnabled.Count -eq 0 -and -not $listIncomplete) {
         # Every tenant has a Global Administrator role; with no enabled role-scoped
         # policy at 4 hours or less, no privileged role can be covered, whatever the
         # catalog holds.
-        $s += 'No enabled policy that names privileged directory roles sets a sign-in frequency of 4 hours or less (type hours), so no privileged role has a short-lived session (the role catalog was not read, so the roles are not listed).'
-        $cur += 'Privileged roles: no policy at 4 hours or less'
+        $s += 'No enabled policy that names privileged directory roles sets a sign-in frequency of 4 hours or less (type hours) and a persistent browser session of never persistent, so no privileged role has a short-lived session (the role catalog was not read, so the roles are not listed).'
+        $cur += 'Privileged roles: no policy at 4 hours or less with persistent browser never'
     } elseif ($privRoles.Count -eq 0) {
-        $u += 'whether every privileged role has a sign-in frequency of 4 hours or less, because this tenant''s role catalog was not read.'
+        $u += 'whether every privileged role has a sign-in frequency of 4 hours or less and a persistent browser session of never persistent, because this tenant''s role catalog was not read.'
         $cur += 'Privileged roles: not assessed (role catalog not read)'
     } else {
-        $setNote = if ($flagsRead) { 'the tool''s privileged-role list and every role Microsoft marks isPrivileged' } else { 'the tool''s privileged-role list (Microsoft''s isPrivileged flags were not read)' }
+        $setNote = if ($flagsRead) { 'the tool''s privileged-role list, every role Microsoft marks isPrivileged and the administrative roles CIS 5.2.2.4 lists' } else { 'the tool''s privileged-role list and the administrative roles CIS 5.2.2.4 lists (Microsoft''s isPrivileged flags were not read)' }
         $uncovered = @(); $unproven = @(); $byExclusion = @()
         foreach ($rid in @($privRoles.Keys)) {
             $cands = @()
@@ -2093,17 +2292,17 @@ function Test-TPControlAADSignInFrequency {
         $total = $privRoles.Count
         $list = { param($names) $a = @($names); "$(($a | Select-Object -First 10) -join ', ')$(if ($a.Count -gt 10) { " and $($a.Count - 10) more" })" }
         if ($uncovered.Count -eq 0 -and $privEnabled.Count -gt 0) {
-            $v += "Every one of the $total privileged roles ($setNote) is named in an enabled policy whose sign-in frequency is 4 hours or less: $((@($privEnabled | ForEach-Object { "$(& $nameOf $_) [$(& $fmt $_)]" })) -join ', ')."
+            $v += "Every one of the $total privileged roles ($setNote) is named in an enabled policy whose sign-in frequency is 4 hours or less and a persistent browser session of never persistent: $((@($privEnabled | ForEach-Object { "$(& $nameOf $_) [$(& $fmt $_)]" })) -join ', ')."
         } elseif ($uncovered.Count -eq 0) {
-            $v += "Every one of the $total privileged roles is named in an enabled policy whose sign-in frequency is 4 hours or less."
+            $v += "Every one of the $total privileged roles is named in an enabled policy whose sign-in frequency is 4 hours or less and a persistent browser session of never persistent."
         } elseif ($uncovered.Count -lt $total) {
-            $v += "$($total - $uncovered.Count) of $total privileged roles ($setNote) are named in an enabled policy whose sign-in frequency is 4 hours or less."
+            $v += "$($total - $uncovered.Count) of $total privileged roles ($setNote) are named in an enabled policy whose sign-in frequency is 4 hours or less and a persistent browser session of never persistent."
         }
         if ($uncovered.Count -gt 0) {
             if ($listIncomplete) {
-                $u += "whether $($uncovered.Count) of $total privileged roles have a sign-in frequency of 4 hours or less, because the Conditional Access policy list could not be read in full: $(& $list $uncovered)."
+                $u += "whether $($uncovered.Count) of $total privileged roles have a sign-in frequency of 4 hours or less and a persistent browser session of never persistent, because the Conditional Access policy list could not be read in full: $(& $list $uncovered)."
             } else {
-                $s += "$($uncovered.Count) of $total privileged roles ($setNote) are not named in any enabled policy with a sign-in frequency of 4 hours or less (type hours), so a stolen session for them stays usable for longer: $(& $list $uncovered)."
+                $s += "$($uncovered.Count) of $total privileged roles ($setNote) are not named in any enabled policy with a sign-in frequency of 4 hours or less (type hours) and a persistent browser session of never persistent, so a stolen session for them stays usable for longer: $(& $list $uncovered)."
             }
         }
         if ($unproven.Count -gt 0) {
@@ -2114,9 +2313,31 @@ function Test-TPControlAADSignInFrequency {
         if ($uncovered.Count -gt 0 -and -not $listIncomplete) {
             foreach ($n in @($privNarrowed.Keys)) { $s += "'$n' sets a short sign-in frequency for privileged roles but $($privNarrowed[$n]), so it is not counted." }
             if ($privStaged.Count -gt 0) { $s += "Report-only for privileged roles (enforces nothing, not counted): $($privStaged -join ', ')." }
+            if ($privPbShort.Count -gt 0) { $s += "Sets 4 hours or less for privileged roles but not a persistent browser session of never persistent, so not counted: $($privPbShort -join ', ')." }
         }
-        $cur += "Privileged roles: $($total - $uncovered.Count - $unproven.Count) of $total covered at 4 hours or less"
+        $cur += "Privileged roles: $($total - $uncovered.Count - $unproven.Count) of $total covered at 4 hours or less with persistent browser never"
         if ($byExclusion.Count -gt 0) { $byExclusionNote = "privileged roles $(& $list $byExclusion)" } else { $byExclusionNote = '' }
+    }
+
+    # ── CIS 5.2.2.4: one enabled policy names every administrative role CIS lists, on
+    # all applications with no other narrowing, at 4 hours or less (type hours) with a
+    # persistent browser session of never persistent. Per-role coverage above can be
+    # met by several policies; the CIS audit reads one policy. ──
+    $cisRoles = @(Get-TPCisAdminRoles)
+    $cisMissingOf = { param($p)
+        $inc = @(Get-TPNestedProperty -Object $p -Path 'Conditions.Users.IncludeRoles' -Default @() | ForEach-Object { [string]$_ })
+        $exc = @(Get-TPNestedProperty -Object $p -Path 'Conditions.Users.ExcludeRoles' -Default @() | ForEach-Object { [string]$_ })
+        @($cisRoles | Where-Object { $inc -notcontains $_.Id -or $exc -contains $_.Id } | ForEach-Object { $_.Name })
+    }
+    $cisCands = @($privEnabled | Where-Object { @(& $narrowingOf $_).Count -eq 0 })
+    $cisPolicies = @($cisCands | Where-Object { @(& $cisMissingOf $_).Count -eq 0 })
+    if ($cisPolicies.Count -gt 0) {
+        $v += "One enabled policy names every one of the $($cisRoles.Count) administrative roles CIS 5.2.2.4 lists, on all applications, at 4 hours or less with a persistent browser session of never persistent: $((@($cisPolicies | ForEach-Object { & $nameOf $_ })) -join ', ')."
+    } elseif ($listIncomplete) {
+        $u += "whether one policy names every administrative role CIS 5.2.2.4 lists at 4 hours or less with a persistent browser session of never persistent, because the Conditional Access policy list could not be read in full."
+    } else {
+        $closest = @($cisCands | ForEach-Object { "'$(& $nameOf $_)' leaves out $(@(& $cisMissingOf $_).Count) ($((@(& $cisMissingOf $_) | Select-Object -First 5) -join ', ')$(if (@(& $cisMissingOf $_).Count -gt 5) { ', ...' }))" } | Select-Object -First 3)
+        $s += "No single enabled policy names every one of the $($cisRoles.Count) administrative roles CIS 5.2.2.4 lists ($(($cisRoles | ForEach-Object { $_.Name }) -join ', ')) on all applications at 4 hours or less (type hours) with a persistent browser session of never persistent$(if ($closest.Count) { "; counted policies: $($closest -join '; ')" })."
     }
 
     # ── Guests and external users: 24 hours or less, 1 day, or every time (ZTA 21824) ──
@@ -2378,24 +2599,36 @@ function Test-TPControlAADTokenProtection {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'TokenProtection was not collected (the beta Conditional Access read did not complete); not assessed.'
         return
     }
-    # A token-protection policy counts only when it reaches what Microsoft's
-    # deployment guide and Zero Trust check name: the Windows platform (listed,
-    # or 'all' without Windows excluded), some users (not None), and All
-    # resources or both Office 365 Exchange Online and Office 365 SharePoint
-    # Online (neither excluded). Microsoft scopes this policy to those apps by
-    # design, so it is not judged on all-application coverage. One scoped to an
-    # unrelated app, or without Windows, used to pass.
-    $exo = '00000002-0000-0ff1-ce00-000000000000'; $spo = '00000003-0000-0ff1-ce00-000000000000'
+    # A token-protection policy counts only when it is what Microsoft's Windows
+    # deployment guide builds and CIS 5.2.2.16 audits: some users (not None); the
+    # three resources token protection supports, Office 365 Exchange Online, Office
+    # 365 SharePoint Online and Microsoft Teams Services, each selected and none
+    # excluded (Microsoft warns the policy should be configured for these
+    # applications only, so All resources is not counted); the Windows platform
+    # selected (not "any device", and not excluded); the client apps condition set to
+    # mobile apps and desktop clients only (the guide warns that browser leaves
+    # MSAL.js apps blocked); and no location, device-filter or risk condition
+    # narrowing it. A policy scoped to All resources, without Windows, or without the
+    # client-app condition used to pass.
+    $exo = '00000002-0000-0ff1-ce00-000000000000'; $spo = '00000003-0000-0ff1-ce00-000000000000'; $teams = 'cc15fd57-2c6c-4117-a88c-83b1d56b4bbe'
+    $appNames = @{ $exo = 'Office 365 Exchange Online'; $spo = 'Office 365 SharePoint Online'; $teams = 'Microsoft Teams Services' }
     $tpShort = { param($p)
         $why = @()
         $inc = @(Get-TPNestedProperty -Object $p -Path 'Conditions.Platforms' -Default @() | Where-Object { $_ } | ForEach-Object { ([string]$_).ToLowerInvariant() })
         $exc = @(Get-TPNestedProperty -Object $p -Path 'Conditions.ExcludePlatforms' -Default @() | Where-Object { $_ } | ForEach-Object { ([string]$_).ToLowerInvariant() })
-        if (-not (($inc -contains 'windows' -or $inc -contains 'all') -and $exc -notcontains 'windows')) { $why += 'does not include the Windows platform' }
+        if ($inc -notcontains 'windows' -or $exc -contains 'windows') { $why += $(if ($inc -contains 'all') { 'targets any device rather than selecting the Windows platform' } else { 'does not include the Windows platform' }) }
         $u = @(@(Get-TPNestedProperty -Object $p -Path 'Conditions.Users.IncludeUsers' -Default @()) + @(Get-TPNestedProperty -Object $p -Path 'Conditions.Users.IncludeGroups' -Default @()) + @(Get-TPNestedProperty -Object $p -Path 'Conditions.Users.IncludeRoles' -Default @()) | Where-Object { $_ -and $_ -ne 'None' })
         if ($u.Count -eq 0) { $why += 'includes no users' }
         $apps = @(Get-TPNestedProperty -Object $p -Path 'Conditions.Applications.Include' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
         $appX = @(Get-TPNestedProperty -Object $p -Path 'Conditions.Applications.Exclude' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
-        if (-not ($apps -contains 'All' -or ($apps -contains $exo -and $apps -contains $spo)) -or $appX -contains $exo -or $appX -contains $spo) { $why += 'does not target both Office 365 Exchange Online and Office 365 SharePoint Online (or All resources)' }
+        if ($apps -contains 'All') { $why += 'targets All resources rather than Office 365 Exchange Online, Office 365 SharePoint Online and Microsoft Teams Services (Microsoft says to configure token protection for these applications only)' }
+        else {
+            $missing = @(@($exo, $spo, $teams) | Where-Object { $apps -notcontains $_ -or $appX -contains $_ } | ForEach-Object { $appNames[$_] })
+            if ($missing.Count) { $why += "does not target $($missing -join ', ')" }
+        }
+        $types = @(Get-TPNestedProperty -Object $p -Path 'Conditions.ClientAppTypes' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+        if (($types -join ',') -ne 'mobileAppsAndDesktopClients') { $why += "does not limit client apps to mobile apps and desktop clients (client apps: $(if ($types.Count) { $types -join ', ' } else { 'not configured' }))" }
+        foreach ($n in @(Get-TPCANarrowing -Policy $p -Ignore @('applies to only some users, groups or roles', 'applies to only some applications', 'applies to no application', 'excludes some applications', 'limited to some device platforms'))) { $why += $n }
         $why }
     $tpPolicies = @(@($ca.Data['Policies']) | Where-Object { $null -ne $_ -and (Get-TPNestedProperty -Object $_ -Path 'SessionControls.SecureSignInSession' -Default $null) -eq $true })
     $narrow = @($tpPolicies | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'State' -Default '') -in @('enabled','enabledForReportingButNotEnforced') -and @(& $tpShort $_).Count -gt 0 } |
@@ -2403,10 +2636,10 @@ function Test-TPControlAADTokenProtection {
     $narrowNote = if ($narrow.Count) { " Not counted: $($narrow -join '; ')." } else { '' }
     Add-TPCAPolicyTierFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Policies $tpPolicies `
         -Match { @(& $tpShort $_).Count -eq 0 } `
-        -What 'Token protection (binding) for Exchange Online and SharePoint Online on Windows' `
-        -EnabledDetail "token protection binds session tokens to the originating device for Office 365 Exchange Online and SharePoint Online on Windows, so a stolen token cannot be replayed from attacker infrastructure.$narrowNote" `
-        -MissingDetail "no enabled token protection (binding) Conditional Access policy covers Office 365 Exchange Online and SharePoint Online on Windows. AiTM phishing steals session tokens and replays them from attacker infrastructure; token binding ties tokens to the originating device.$narrowNote" `
-        -RequiredValue 'Enabled CA policy requiring token protection for users, on Windows, for Exchange Online and SharePoint Online (or All resources)'
+        -What 'Token protection (binding) for Exchange Online, SharePoint Online and Teams on Windows desktop clients' `
+        -EnabledDetail "token protection binds session tokens to the originating device for Office 365 Exchange Online, Office 365 SharePoint Online and Microsoft Teams Services on Windows mobile apps and desktop clients, so a stolen token cannot be replayed from attacker infrastructure.$narrowNote" `
+        -MissingDetail "no enabled token protection (binding) Conditional Access policy covers Office 365 Exchange Online, Office 365 SharePoint Online and Microsoft Teams Services on Windows mobile apps and desktop clients. AiTM phishing steals session tokens and replays them from attacker infrastructure; token binding ties tokens to the originating device.$narrowNote" `
+        -RequiredValue 'Enabled CA policy requiring token protection for users (not None), Windows platform, client apps = mobile apps and desktop clients only, target resources = Office 365 Exchange Online, Office 365 SharePoint Online and Microsoft Teams Services'
 }
 
 # ── AAD-11.5 Continuous Access Evaluation Enabled ────────────────────────────
