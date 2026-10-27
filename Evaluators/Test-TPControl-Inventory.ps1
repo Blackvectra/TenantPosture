@@ -182,45 +182,73 @@ function Test-TPControlInventoryStaleGuests {
     }
 }
 
-# ── INV-1.3 Stale Licensed Member Accounts ───────────────────────────────────
+# ── INV-1.3 Stale Member Accounts (DISA Entra ID STIG V-270204) ─────────────
+# Owner's decision (2026-10-26): ENTR-ID-000090 / V-270204, every ENABLED member
+# account (licensed or not) whose last sign-in is more than 35 days old, or that
+# never signed in and was created more than 35 days ago; the collector also
+# counts a last successful sign-in more than 35 days old. Guests are AAD-12.2's.
+# A results file from before the 35-day read (no StaleMembersThresholdDays) held
+# only accounts idle for 90+ days: those are named, and a clean list from it is
+# not assessed.
 function Test-TPControlInventoryStaleMembers {
     [CmdletBinding()] param()
     $cid = 'AAD-12.3'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
     $inv = Get-TPRawData -Key 'AAD-Inventory'
     if (-not $inv -or -not $inv.Success) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'Inventory data not collected'; return
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Inventory data not collected'; return
     }
     # Empty is not clean. The collector reported success, but this section
     # may not have landed — a failed sub-query leaves it absent or empty,
     # and reading that as compliance is a false pass on a control nobody
     # checked. Not assessed is the only honest verdict.
     if (-not (Test-TPSectionCollected $inv 'StaleMembers')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -Detail 'StaleMembers was not collected; not assessed.'
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'StaleMembers was not collected; not assessed.'
         return
     }
     if ((Get-TPObjectField -Item $inv.Data -Key 'SignInActivityLicensed' -Default $true) -eq $false) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
-            -Detail 'Not scored: last sign-in (Graph signInActivity) requires Microsoft Entra ID P1 or P2, which this tenant does not hold, so no licensed member account can be judged dormant — surfaced as a licensing upgrade opportunity, not counted against the score. Review licensed accounts by last sign-in in Entra ID > Users, or license Entra ID P1.'
+            -Detail 'Not scored: last sign-in (Graph signInActivity) requires Microsoft Entra ID P1 or P2, which this tenant does not hold, so no member account can be judged inactive — surfaced as a licensing upgrade opportunity, not counted against the score. Review accounts by last sign-in in Entra ID > Users, or license Entra ID P1.'
         return
     }
-    $stale = @($inv.Data['StaleMembers'] ?? @() | Where-Object { $_.HasLicense -eq $true })
-    if (@($inv.Data['StaleMembers']).Count -eq 0 -and -not (Test-TPInventorySectionCollected -Inventory $inv -Section 'StaleMembers')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title `
-            -Detail 'Dormant account enumeration did not complete (see Exceptions) — stale licensed accounts could not be assessed.'
+    $rows = @(@(Get-TPNestedProperty -Object $inv -Path 'Data.StaleMembers' -Default @()) | Where-Object { $null -ne $_ })
+    if ($rows.Count -eq 0 -and -not (Test-TPInventorySectionCollected -Inventory $inv -Section 'StaleMembers')) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Dormant account enumeration did not complete (see Exceptions) — inactive member accounts could not be assessed.'
         return
     }
-    if ($stale.Count -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail 'Every licensed member account older than 90 days has signed in successfully within the past 90 days. No dormant employee accounts detected.'
-    } else {
-        $objects = @($stale | Sort-Object DaysSinceSignIn -Descending | Select-Object -First 50 | ForEach-Object {
-            $days = if ($_.DaysSinceSignIn -eq 9999) { "Never signed in" } else { "$($_.DaysSinceSignIn) days since $([string](Get-TPObjectField -Item $_ -Key 'LastSignInBasis' -Default 'last sign-in'))" }
-            "$($_.DisplayName) ($($_.UPN)) — $days"
+    $threshold = Get-TPObjectField -Item $inv.Data -Key 'StaleMembersThresholdDays' -Default $null
+    $current = ([string]$threshold -eq '35')
+    $undetermined = 0
+    [void][int]::TryParse([string](Get-TPObjectField -Item $inv.Data -Key 'StaleMembersUndetermined' -Default '0'), [ref]$undetermined)
+    $eaNote = ' Emergency-access (break-glass) accounts are counted like any other account: they sign in rarely by design, so one listed here is expected and is reviewed rather than disabled.'
+    $rule = 'enabled member accounts (licensed or not) whose last sign-in is more than 35 days old, or that never signed in and were created more than 35 days ago (DISA Microsoft Entra ID STIG V-270204); guest accounts are judged by AAD-12.2'
+    if ($rows.Count -gt 0) {
+        $objects = @($rows | Sort-Object { [int](Get-TPObjectField -Item $_ -Key 'DaysSinceSignIn' -Default 0) } -Descending | Select-Object -First 50 | ForEach-Object {
+            $upn = [string](Get-TPObjectField -Item $_ -Key 'UPN' -Default '')
+            $dn  = [string](Get-TPObjectField -Item $_ -Key 'DisplayName' -Default $upn)
+            $days = [int](Get-TPObjectField -Item $_ -Key 'DaysSinceSignIn' -Default 0)
+            $why = if ($current) { [string](Get-TPObjectField -Item $_ -Key 'LastSignInBasis' -Default '') } elseif ($days -eq 9999) { 'Never signed in' } else { "$days days since $([string](Get-TPObjectField -Item $_ -Key 'LastSignInBasis' -Default 'last sign-in'))" }
+            $lic = if ((Get-TPObjectField -Item $_ -Key 'HasLicense' -Default $null) -eq $true) { 'licensed' } else { 'unlicensed' }
+            "$dn ($upn) [$lic] — $why"
         })
+        $licensed = @($rows | Where-Object { (Get-TPObjectField -Item $_ -Key 'HasLicense' -Default $null) -eq $true }).Count
+        $oldNote = if ($current) { '' } else { ' This results file predates the 35-day read and lists only accounts idle for 90+ days, so further accounts inactive for 36 to 90 days may exist.' }
+        $undNote = if ($undetermined -gt 0) { " A further $undetermined account(s) have no sign-in and no readable creation date and were not judged." } else { '' }
         Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "$($stale.Count) licensed member account(s) older than 90 days have not successfully signed in for 90+ days. These accounts are likely departed employees whose accounts were not offboarded — each is a dormant attack surface with an active license." `
-            -CurrentValue "$($stale.Count) stale licensed accounts" -RequiredValue 'All accounts active or offboarded' `
+            -Detail "$($rows.Count) enabled member account(s) are inactive ($licensed licensed): $rule. Inactive accounts are likely departed employees whose accounts were not offboarded — each is a dormant attack surface.$oldNote$undNote$eaNote" `
+            -CurrentValue "$($rows.Count) inactive enabled member account(s) ($licensed licensed)" -RequiredValue 'No enabled member account inactive for more than 35 days (disable it, or confirm it is still needed)' `
             -Remediation $ctrl.Remediation -AffectedObjects $objects
+    } elseif (-not $current) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail 'Not assessed: this results file predates the 35-day inactivity read (DISA Microsoft Entra ID STIG V-270204) and recorded only accounts idle for 90+ days; none were, but accounts inactive for 36 to 90 days were not recorded.'
+    } elseif ($undetermined -gt 0) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "No enabled member account was found inactive for more than 35 days, but $undetermined account(s) have no sign-in and no readable creation date, so whether they are inactive is not known. Not assessed."
+    } else {
+        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
+            -Detail "No inactive account found among $rule.$eaNote" `
+            -CurrentValue 'No enabled member account inactive for more than 35 days' -RequiredValue 'No enabled member account inactive for more than 35 days (disable it, or confirm it is still needed)'
     }
 }
 

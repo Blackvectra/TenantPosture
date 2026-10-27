@@ -86,6 +86,7 @@
     "INT-2.3": "Windows Firewall policy; no v7 recommendation.",
     "INT-2.4": "macOS FileVault compliance; no v7 recommendation.",
     "INT-2.5": "Windows Update rings; no v7 recommendation.",
+    "INT-2.6": "Office macro and active-content Intune policy (judged against the CIS Intune for Office benchmark, not the M365 benchmark); no v7 M365 recommendation covers Office client macro settings.",
     "INT-3.1": "Closest is 4.2, but Satisfied is ANY block in ANY platform-restriction row (platform blocked, personal blocked, or just a minimum OS version on one non-windowsMobile platform), while 4.2 requires the priority-0 default policy to block personally owned enrollment (or the platform) on every platform; e.g. a minimum iOS version alone passes the tool and fails R.",
     "INT-3.2": "App configuration policies; no v7 recommendation.",
     "INT-3.3": "App protection conditional-launch minimum OS; no v7 recommendation.",

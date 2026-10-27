@@ -32,6 +32,12 @@ Describe 'Purview Security & Compliance sections' {
                 [pscustomobject]@{ Command = $sb; Source = $script:T_Source }
             }
         }
+        # A rule's XML as Get-SupervisoryReviewRule -IncludeRuleXml returns it: the captured
+        # locations sit in a JSON value (Workloads), which is what Microsoft's Zero Trust
+        # Assessment test 35039 parses.
+        $script:CopilotRuleXml = '<rule name="Copilot interactions rule" version="1"><condition><and><keyValue key="DataSource"><value>{"Workloads":["Copilot"],"Locations":["All"]}</value></keyValue><keyValue key="SamplingRate"><value>100</value></keyValue></and></condition></rule>'
+        $script:TeamsRuleXml   = '<rule name="Teams rule" version="1"><condition><keyValue key="DataSource"><value>{"Workloads":["Exchange","Teams"]}</value></keyValue></condition></rule>'
+        & $script:Mod { param($x) $script:CopilotRuleXml = $x } $script:CopilotRuleXml
         function script:Invoke-Purview([hashtable] $Cmds, [string] $Source = 'SecurityCompliance') {
             & $script:Mod { param($c, $s)
                 Clear-TPState; $script:T_Cmds = $c; $script:T_Source = $s
@@ -52,7 +58,8 @@ Describe 'Purview Security & Compliance sections' {
             'Get-AutoSensitivityLabelPolicy'     = { @([pscustomobject]@{ Name = 'PII'; Mode = 'Enable'; Enabled = $true }) }
             'Get-LabelPolicy'                    = { @([pscustomobject]@{ Name = 'Global'; Labels = @('Confidential') }) }
             'Get-ComplianceTag'                  = { @([pscustomobject]@{ Name = 'Contract'; IsRecordLabel = $true }, [pscustomobject]@{ Name = 'Keep 7y' }) }
-            'Get-SupervisoryReviewPolicyV2'      = { @([pscustomobject]@{ Name = 'Offensive language'; Enabled = $true }) }
+            'Get-SupervisoryReviewPolicyV2'      = { @([pscustomobject]@{ Name = 'Copilot interactions'; Guid = '6f1c1d2e-0000-4000-8000-000000000001'; Enabled = $true; ReviewMailbox = 'SupervisoryReview{6f1c1d2e}@contoso.onmicrosoft.com' }) }
+            'Get-SupervisoryReviewRule'          = { @([pscustomobject]@{ Name = 'Copilot interactions rule'; Policy = '6f1c1d2e-0000-4000-8000-000000000001'; RuleXml = $script:CopilotRuleXml }) }
             'Get-PolicyConfig'                   = { [pscustomobject]@{ InformationBarrierMode = 'SingleSegment' } }
             'Get-Label'                          = { @([pscustomobject]@{ Name = 'Confidential'; DisplayName = 'Confidential'; IsValid = $true }) }
         }
@@ -106,7 +113,7 @@ Describe 'Purview Security & Compliance sections' {
 
     It 'projects each documented cmdlet and marks every section Collected' {
         $r = Invoke-Purview $script:Full
-        foreach ($s in 'AuditRetentionPolicies','AutoLabelPolicies','LabelPolicies','RetentionLabels','CommCompliancePolicies','InformationBarriersMode') {
+        foreach ($s in 'AuditRetentionPolicies','AutoLabelPolicies','LabelPolicies','RetentionLabels','CommCompliancePolicies','CommComplianceRules','InformationBarriersMode') {
             $r.Data.SectionStatus[$s] | Should -Be 'Collected' -Because $s
         }
         @($r.Data.AuditRetentionPolicies)[0].RetentionDays | Should -Be 365
@@ -156,6 +163,89 @@ Describe 'Purview Security & Compliance sections' {
             @('Test-TPControlPurviewAutoLabel','PVW-2.6'), @('Test-TPControlPurviewRecordsManagement','PVW-4.4'),
             @('Test-TPControlPurviewCommCompliance','PVW-2.2'), @('Test-TPControlPurviewInfoBarriers','PVW-2.3'))) {
             (Get-Verdict $p[0] $p[1]).State | Should -Be 'NotApplicable' -Because $p[1]
+        }
+    }
+
+    Context 'PVW-2.2 judges Copilot monitoring as Zero Trust Assessment test 35039 does (owner, 2026-10-26)' {
+        BeforeAll {
+            $script:PolGuid = '6f1c1d2e-0000-4000-8000-000000000001'
+            function script:Pol([string] $Name = 'Copilot interactions', $Enabled = $true, $Mailbox = 'SupervisoryReview@contoso.onmicrosoft.com', [switch] $NoMailboxProperty, [string] $Guid = $script:PolGuid) {
+                $o = [ordered]@{ Name = $Name; Guid = $Guid; Enabled = $Enabled }
+                if (-not $NoMailboxProperty) { $o.ReviewMailbox = $Mailbox }
+                [pscustomobject]$o
+            }
+            function script:Rule([string] $Xml, [string] $Policy = $script:PolGuid, [string] $Name = 'rule') {
+                [pscustomobject]@{ Name = $Name; Policy = $Policy; RuleXml = $Xml }
+            }
+            function script:Pvw22([object[]] $Policies, $Rules, [switch] $RulesThrow) {
+                $c = $script:Full.Clone()
+                $c['Get-SupervisoryReviewPolicyV2'] = { $Policies }.GetNewClosure()
+                if ($RulesThrow) { $c['Get-SupervisoryReviewRule'] = { throw 'Access denied' } }
+                else { $c['Get-SupervisoryReviewRule'] = { $Rules }.GetNewClosure() }
+                Invoke-Purview $c | Out-Null
+                Get-Verdict 'Test-TPControlPurviewCommCompliance' 'PVW-2.2'
+            }
+        }
+        It 'the collector asks for the rule XML and keeps only the workloads it names' {
+            $script:SeenParams = $null
+            $c = $script:Full.Clone()
+            $c['Get-SupervisoryReviewRule'] = { [CmdletBinding()] param([switch] $IncludeRuleXml) $script:SeenParams = [bool]$IncludeRuleXml; Rule $script:CopilotRuleXml }
+            $r = Invoke-Purview $c
+            $script:SeenParams | Should -BeTrue -Because 'RuleXml is returned only with -IncludeRuleXml'
+            $rule = @($r.Data.CommComplianceRules)[0]
+            $rule.RuleXmlRead | Should -BeTrue
+            @($rule.Workloads) | Should -Contain 'Copilot'
+            $rule.Keys | Should -Not -Contain 'RuleXml' -Because 'the XML can carry reviewed users and keyword lists'
+            @($r.Data.CommCompliancePolicies)[0].ReviewMailboxRead | Should -BeTrue
+        }
+        It 'an enabled policy with a review mailbox and a Copilot rule is Satisfied, named' {
+            $f = Pvw22 @(Pol) @(Rule $script:CopilotRuleXml)
+            $f.State | Should -Be 'Satisfied'
+            $f.Detail | Should -Match 'Copilot interactions \(review mailbox SupervisoryReview@contoso'
+        }
+        It 'an enabled policy whose rules capture only Exchange and Teams is a Gap: any policy is context only' {
+            $f = Pvw22 @(Pol 'Offensive language') @(Rule $script:TeamsRuleXml)
+            $f.State | Should -Be 'Gap'
+            $f.Detail | Should -Match 'None of the 1 enabled policy'
+            $f.Detail | Should -Match 'policies read: 1 \(1 enabled\)'
+        }
+        It 'a Copilot rule on a disabled policy, or on an enabled policy with no review mailbox, is a Gap' {
+            (Pvw22 @(Pol -Enabled $false) @(Rule $script:CopilotRuleXml)).State | Should -Be 'Gap'
+            $f = Pvw22 @(Pol -Mailbox '') @(Rule $script:CopilotRuleXml)
+            $f.State | Should -Be 'Gap'
+            $f.Detail | Should -Match 'have no review mailbox'
+        }
+        It 'Enabled must be True: a policy whose state was not returned is not assessed, never credited' {
+            (Pvw22 @(Pol -Enabled $null) @(Rule $script:CopilotRuleXml)).State | Should -Be 'NotApplicable'
+        }
+        It 'no policy at all is a Gap' {
+            (Pvw22 @() @()).State | Should -Be 'Gap'
+        }
+        It 'rules not read, rule XML not returned, or a review mailbox not returned leave it not assessed' {
+            $f = Pvw22 @(Pol) $null -RulesThrow
+            $f.State | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match '^CommComplianceRules was not collected; not assessed\.'
+            @($f.FrameworkIds).Count | Should -BeGreaterThan 0
+            (Pvw22 @(Pol) @(Rule '')).State | Should -Be 'NotApplicable'
+            (Pvw22 @(Pol) @(Rule '<rule><unclosed>')).State | Should -Be 'NotApplicable'
+            (Pvw22 @(Pol -NoMailboxProperty) @(Rule $script:CopilotRuleXml)).State | Should -Be 'NotApplicable'
+        }
+        It 'a rule is joined to its policy by Guid, as test 35039 joins them, never credited to another policy' {
+            $f = Pvw22 @(Pol 'Other' -Guid '6f1c1d2e-0000-4000-8000-000000000002') @(Rule $script:CopilotRuleXml)
+            $f.State | Should -Be 'NotApplicable' -Because 'a Copilot rule whose policy was not read cannot be judged'
+            $f.Detail | Should -Match 'could not be matched'
+            (Pvw22 @(Pol 'Copilot interactions' -Guid '6F1C1D2E-0000-4000-8000-000000000001') @(Rule $script:CopilotRuleXml)).State | Should -Be 'Satisfied' -Because 'a GUID compares without case'
+            (Pvw22 @(Pol 'Copilot interactions' -Guid '') @(Rule $script:CopilotRuleXml -Policy 'Copilot interactions')).State | Should -Be 'NotApplicable' -Because 'a name is not the join'
+        }
+        It 'a rule XML with a DTD is refused, never expanded' {
+            $dtd = '<!DOCTYPE r [<!ENTITY x "y">]><rule><value>{"Workloads":["Copilot"]}</value></rule>'
+            (Pvw22 @(Pol) @(Rule $dtd)).State | Should -Be 'NotApplicable'
+        }
+        It 'a results file from before the rule read (no CommComplianceRules section) is not assessed' {
+            & $script:Mod { Clear-TPState }
+            Set-TPRawData -Key 'Purview' -Data ([ordered]@{ CollectorId = 'Purview'; CollectedAt = '2026-09-01T00:00:00Z'; Success = $true
+                Data = @{ CommCompliancePolicies = @(@{ Name = 'Offensive language'; Enabled = $true }); SectionStatus = @{ CommCompliancePolicies = 'Collected' } } })
+            (Get-Verdict 'Test-TPControlPurviewCommCompliance' 'PVW-2.2').State | Should -Be 'NotApplicable'
         }
     }
 

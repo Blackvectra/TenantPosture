@@ -1198,9 +1198,10 @@ Describe 'Failed collection is never reported as compliance (AAD inventory + joi
     AfterAll   { Clear-TPState }
 
     $invCases = @(
-        @{ Control='AAD-12.2'; Evaluator='Test-TPControlInventoryStaleGuests';  Key='GuestUsers';       Section='GuestUsers' }
-        @{ Control='AAD-12.3'; Evaluator='Test-TPControlInventoryStaleMembers'; Key='StaleMembers';     Section='StaleMembers' }
-        @{ Control='AAD-12.4'; Evaluator='Test-TPControlInventoryOAuthApps';    Key='OAuthGrantedApps'; Section='OAuthGrantedApps' }
+        @{ Control='AAD-12.2'; Evaluator='Test-TPControlInventoryStaleGuests';  Key='GuestUsers';       Section='GuestUsers';       Extra=@{} }
+        # AAD-12.3 judges 35 days (STIG V-270204); the collector records that it did.
+        @{ Control='AAD-12.3'; Evaluator='Test-TPControlInventoryStaleMembers'; Key='StaleMembers';     Section='StaleMembers';     Extra=@{ StaleMembersThresholdDays = 35; StaleMembersUndetermined = 0 } }
+        @{ Control='AAD-12.4'; Evaluator='Test-TPControlInventoryOAuthApps';    Key='OAuthGrantedApps'; Section='OAuthGrantedApps'; Extra=@{} }
     )
 
     It '<Control> reports NotApplicable when its enumeration FAILED' -TestCases $invCases {
@@ -1212,9 +1213,9 @@ Describe 'Failed collection is never reported as compliance (AAD inventory + joi
     }
 
     It '<Control> still reports Satisfied when the enumeration COMPLETED and found nothing' -TestCases $invCases {
-        Set-TPRawData -Key 'AAD-Inventory' -Data (NewAADInv @{
-            $Key = @(); SectionStatus = @{ $Section = 'Collected' }
-        })
+        $d = @{ $Key = @(); SectionStatus = @{ $Section = 'Collected' } }
+        foreach ($k in $Extra.Keys) { $d[$k] = $Extra[$k] }
+        Set-TPRawData -Key 'AAD-Inventory' -Data (NewAADInv $d)
         (AADInvVerdict $Evaluator $Control).State | Should -Be 'Satisfied'
     }
 

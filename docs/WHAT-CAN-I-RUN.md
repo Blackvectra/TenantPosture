@@ -31,7 +31,7 @@ coming back to this after six months, start here.
 
 ### `Invoke-TPAssessment.ps1` — the main one
 
-One tenant, 207 controls, client-ready report. Everything else orbits this.
+One tenant, 208 controls, client-ready report. Everything else orbits this.
 
 ```powershell
 .\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com

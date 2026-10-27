@@ -377,6 +377,7 @@
         'Test-TPControlIntuneEDR',
         'Test-TPControlIntuneASR',
         'Test-TPControlIntuneFirewall',
+        'Test-TPControlIntuneOfficeMacro',
         'Test-TPControlIntuneMacEncryption',
         'Test-TPControlIntuneWindowsUpdate',
         'Test-TPControlIntuneEnrollmentRestrictions',

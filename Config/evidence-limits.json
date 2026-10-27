@@ -10,6 +10,11 @@
       "Control": "INT-1.5",
       "NotEstablished": "the benchmark's Administrative Templates settings (CIS 1.3.1, 1.3.2, 1.8.1, 1.14) and Remote Encryption Protection (CIS 2.41)",
       "Reason": "INT-1.5 judges the 30 Level 1 settings of the CIS Microsoft Intune for Microsoft Defender Antivirus Benchmark v1.0.0 that live in the Endpoint security Antivirus profile. Four Level 1 recommendations are Administrative Templates settings configured in a general Settings Catalog profile, which the collector does not read, and Remote Encryption Protection (2.41) has no node in Microsoft's Policy CSP or Defender CSP reference, so its stored value cannot be read with confidence. The benchmark's attack surface reduction rules are judged by INT-2.2."
+    },
+    {
+      "Control": "INT-2.6",
+      "NotEstablished": "Office settings deployed through the Office cloud policy service or on-premises Group Policy, the values of Intune Administrative Templates policies, and whether devices run Microsoft 365 Apps for enterprise",
+      "Reason": "INT-2.6 reads the Office settings of the assigned Intune Settings Catalog policies (including the Microsoft 365 Apps security baseline). The Office cloud policy service (config.office.com) and on-premises Group Policy are not visible through Microsoft Graph for Intune. Administrative Templates policies are listed and checked for Office settings but their values are not read, so a tenant whose Office settings live only there is not assessed, never a Gap. Microsoft documents the Office macro policies as applying to Microsoft 365 Apps for enterprise and not to Microsoft 365 Apps for business; the edition installed on devices is not read."
     }
   ]
 }

@@ -1,0 +1,640 @@
+{
+  "_comment": "CIS Microsoft Intune for Office Benchmark v1.1.0, Level 1: the core macro and active-content subset the owner approved on 2026-10-26 (\"macro core\"), judged by INT-2.6 against the assigned Intune Settings Catalog policies (including the Microsoft 365 Apps security baseline) that configure Office. Recommendation numbers and setting names only: the benchmark text is licensed and is not reproduced. Each requirement (Enabled or Disabled, and the VBA notification option) is the benchmark's; the setting names and the meaning of each state come from Microsoft's Office policy documentation (Source). A setting is matched by its app (the ADMX namespace in the Settings Catalog definition id, e.g. user_vendor_msft_policy_config_excel16v2~...) and by the definition's display name as Graph returns it, or the ADMX policy name at the end of the id (Node, best effort: Microsoft publishes no Graph sample of the Office ids). Enabled and Disabled are read from the option's display name first and the _1/_0 suffix of the choice value second; the VBA option only by its display name. NotInApprovedSubset names the macro-adjacent Level 1 recommendations the approved subset leaves out, with the reason; the rest of the benchmark is outside this control. The standard applies only while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark and version. Testing/TP.IntuneTruth.Tests.ps1 pins this file.",
+  "Benchmark": "CIS Microsoft Intune for Office Benchmark",
+  "Version": "1.1.0",
+  "Profile": "Level 1",
+  "Subset": "Macro and active-content core (owner approval 2026-10-26)",
+  "Settings": [
+    {
+      "Cis": "2.1.1.3.2.1.1",
+      "Level": 1,
+      "App": "Access",
+      "AppKey": "access16v2",
+      "Title": "Allow Trusted Locations on the network",
+      "SettingPath": "Microsoft Access 2016\\Application Settings\\Security\\Trust Center\\Trusted Locations",
+      "Node": "l_allowtrustedlocationsonthenetwork",
+      "Kind": "Toggle",
+      "Compliant": [
+        "0"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Network locations cannot be trusted by default, but users can allow them in the Trust Center",
+      "Source": "https://learn.microsoft.com/microsoft-365-apps/security/trusted-locations#use-policy-to-manage-trusted-locations"
+    },
+    {
+      "Cis": "2.1.1.3.2.2",
+      "Level": 1,
+      "App": "Access",
+      "AppKey": "access16v2",
+      "Title": "Block macros from running in Office files from the Internet",
+      "SettingPath": "Microsoft Access 2016\\Application Settings\\Security\\Trust Center",
+      "Node": "l_blockmacroexecutionfrominternet",
+      "Kind": "Toggle",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Office blocks macros in files from the internet by default (Version 2206 and later, Current Channel), but users can unblock a file",
+      "Source": "https://learn.microsoft.com/microsoft-365-apps/security/internet-macros-blocked#block-macros-from-running-in-office-files-from-the-internet"
+    },
+    {
+      "Cis": "2.1.1.3.2.4",
+      "Level": 1,
+      "App": "Access",
+      "AppKey": "access16v2",
+      "Title": "Require that application add-ins are signed by Trusted Publisher",
+      "SettingPath": "Microsoft Access 2016\\Application Settings\\Security\\Trust Center",
+      "Node": "l_requirethatapplicationaddinsaresignedbytrustedpublisher",
+      "Kind": "Toggle",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Unsigned application add-ins load",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.2.4.7.2.1.2",
+      "Level": 1,
+      "App": "Excel",
+      "AppKey": "excel16v2",
+      "Title": "Don't allow Dynamic Data Exchange (DDE) server launch in Excel",
+      "SettingPath": "Microsoft Excel 2016\\Excel Options\\Security\\Trust Center\\External Content",
+      "Node": "l_disableddeserverlaunch",
+      "Kind": "Toggle",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "DDE server launch is off by default, but users can turn it on in the Trust Center",
+      "Source": "https://learn.microsoft.com/troubleshoot/microsoft-365-apps/excel/security-settings"
+    },
+    {
+      "Cis": "2.2.4.7.2.1.3",
+      "Level": 1,
+      "App": "Excel",
+      "AppKey": "excel16v2",
+      "Title": "Don't allow Dynamic Data Exchange (DDE) server lookup in Excel",
+      "SettingPath": "Microsoft Excel 2016\\Excel Options\\Security\\Trust Center\\External Content",
+      "Node": "l_disableddeserverlookup",
+      "Kind": "Toggle",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "DDE server lookup is on",
+      "Source": "https://learn.microsoft.com/troubleshoot/microsoft-365-apps/excel/security-settings"
+    },
+    {
+      "Cis": "2.2.4.7.2.3.2",
+      "Level": 1,
+      "App": "Excel",
+      "AppKey": "excel16v2",
+      "Title": "Do not open files from the Internet zone in Protected View",
+      "SettingPath": "Microsoft Excel 2016\\Excel Options\\Security\\Trust Center\\Protected View",
+      "Node": "l_donotopenfilesfromtheinternetzoneinprotectedview",
+      "Kind": "Toggle",
+      "Compliant": [
+        "0"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Files from the internet open in Protected View, but users can change it in the Trust Center",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.2.4.7.2.3.3",
+      "Level": 1,
+      "App": "Excel",
+      "AppKey": "excel16v2",
+      "Title": "Do not open files in unsafe locations in Protected View",
+      "SettingPath": "Microsoft Excel 2016\\Excel Options\\Security\\Trust Center\\Protected View",
+      "Node": "l_donotopenfilesinunsafelocationsinprotectedview",
+      "Kind": "Toggle",
+      "Compliant": [
+        "0"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Files in unsafe locations open in Protected View, but users can change it in the Trust Center",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.2.4.7.2.3.6",
+      "Level": 1,
+      "App": "Excel",
+      "AppKey": "excel16v2",
+      "Title": "Turn off Protected View for attachments opened from Outlook",
+      "SettingPath": "Microsoft Excel 2016\\Excel Options\\Security\\Trust Center\\Protected View",
+      "Node": "l_turnoffprotectedviewforattachmentsopenedfromoutlook",
+      "Kind": "Toggle",
+      "Compliant": [
+        "0"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Outlook attachments open in Protected View, but users can change it in the Trust Center",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.2.4.7.2.4.1",
+      "Level": 1,
+      "App": "Excel",
+      "AppKey": "excel16v2",
+      "Title": "Allow Trusted Locations on the network",
+      "SettingPath": "Microsoft Excel 2016\\Excel Options\\Security\\Trust Center\\Trusted Locations",
+      "Node": "l_allowtrustedlocationsonthenetwork",
+      "Kind": "Toggle",
+      "Compliant": [
+        "0"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Network locations cannot be trusted by default, but users can allow them in the Trust Center",
+      "Source": "https://learn.microsoft.com/microsoft-365-apps/security/trusted-locations#use-policy-to-manage-trusted-locations"
+    },
+    {
+      "Cis": "2.2.4.7.2.6",
+      "Level": 1,
+      "App": "Excel",
+      "AppKey": "excel16v2",
+      "Title": "Block macros from running in Office files from the Internet",
+      "SettingPath": "Microsoft Excel 2016\\Excel Options\\Security\\Trust Center",
+      "Node": "l_blockmacroexecutionfrominternet",
+      "Kind": "Toggle",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Office blocks macros in files from the internet by default (Version 2206 and later, Current Channel), but users can unblock a file",
+      "Source": "https://learn.microsoft.com/microsoft-365-apps/security/internet-macros-blocked#block-macros-from-running-in-office-files-from-the-internet"
+    },
+    {
+      "Cis": "2.2.4.7.2.7",
+      "Level": 1,
+      "App": "Excel",
+      "AppKey": "excel16v2",
+      "Title": "VBA Macro Notification Settings",
+      "SettingPath": "Microsoft Excel 2016\\Excel Options\\Security\\Trust Center",
+      "Node": "l_vbawarningspolicy",
+      "Kind": "Dropdown",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "AlternateNames": [
+        "Macro Notification Settings"
+      ],
+      "Option": {
+        "Compliant": [
+          "Disable all except digitally signed macros",
+          "Disable VBA macros except digitally signed macros"
+        ],
+        "Stricter": [
+          "Disable all without notification",
+          "Disable VBA macros without notification"
+        ],
+        "Documented": [
+          "Disable all with notification",
+          "Disable VBA macros with notification",
+          "Enable all macros (not recommended)",
+          "Enable VBA macros (not recommended)",
+          "Enable all macros",
+          "Enable VBA macros"
+        ],
+        "Required": "Disable all except digitally signed macros"
+      },
+      "NotConfigured": "Disable all macros with notification, which users can change in the Trust Center",
+      "Source": "https://learn.microsoft.com/microsoft-365-apps/security/internet-macros-blocked#vba-macro-notification-settings"
+    },
+    {
+      "Cis": "2.2.4.7.2.8",
+      "Level": 1,
+      "App": "Excel",
+      "AppKey": "excel16v2",
+      "Title": "Prevent Excel from running XLM macros",
+      "SettingPath": "Microsoft Excel 2016\\Excel Options\\Security\\Trust Center",
+      "Node": "l_xl4killswitchpolicy",
+      "Kind": "Toggle",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Recent builds of Excel disable XLM macros by default, but users can re-enable them in the Trust Center",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.2.4.7.2.9",
+      "Level": 1,
+      "App": "Excel",
+      "AppKey": "excel16v2",
+      "Title": "Require that application add-ins are signed by Trusted Publisher",
+      "SettingPath": "Microsoft Excel 2016\\Excel Options\\Security\\Trust Center",
+      "Node": "l_requirethatapplicationaddinsaresignedbytrustedpublisher",
+      "Kind": "Toggle",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Unsigned application add-ins load",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.6.6.6.2.2.1",
+      "Level": 1,
+      "App": "PowerPoint",
+      "AppKey": "ppt16v2",
+      "Title": "Do not open files from the Internet zone in Protected View",
+      "SettingPath": "Microsoft PowerPoint 2016\\PowerPoint Options\\Security\\Trust Center\\Protected View",
+      "Node": "l_donotopenfilesfromtheinternetzoneinprotectedview",
+      "Kind": "Toggle",
+      "Compliant": [
+        "0"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Files from the internet open in Protected View, but users can change it in the Trust Center",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.6.6.6.2.2.2",
+      "Level": 1,
+      "App": "PowerPoint",
+      "AppKey": "ppt16v2",
+      "Title": "Do not open files in unsafe locations in Protected View",
+      "SettingPath": "Microsoft PowerPoint 2016\\PowerPoint Options\\Security\\Trust Center\\Protected View",
+      "Node": "l_donotopenfilesinunsafelocationsinprotectedview",
+      "Kind": "Toggle",
+      "Compliant": [
+        "0"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Files in unsafe locations open in Protected View, but users can change it in the Trust Center",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.6.6.6.2.2.5",
+      "Level": 1,
+      "App": "PowerPoint",
+      "AppKey": "ppt16v2",
+      "Title": "Turn off Protected View for attachments opened from Outlook",
+      "SettingPath": "Microsoft PowerPoint 2016\\PowerPoint Options\\Security\\Trust Center\\Protected View",
+      "Node": "l_turnoffprotectedviewforattachmentsopenedfromoutlook",
+      "Kind": "Toggle",
+      "Compliant": [
+        "0"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Outlook attachments open in Protected View, but users can change it in the Trust Center",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.6.6.6.2.3.1",
+      "Level": 1,
+      "App": "PowerPoint",
+      "AppKey": "ppt16v2",
+      "Title": "Allow Trusted Locations on the network",
+      "SettingPath": "Microsoft PowerPoint 2016\\PowerPoint Options\\Security\\Trust Center\\Trusted Locations",
+      "Node": "l_allowtrustedlocationsonthenetwork",
+      "Kind": "Toggle",
+      "Compliant": [
+        "0"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Network locations cannot be trusted by default, but users can allow them in the Trust Center",
+      "Source": "https://learn.microsoft.com/microsoft-365-apps/security/trusted-locations#use-policy-to-manage-trusted-locations"
+    },
+    {
+      "Cis": "2.6.6.6.2.4",
+      "Level": 1,
+      "App": "PowerPoint",
+      "AppKey": "ppt16v2",
+      "Title": "Block macros from running in Office files from the Internet",
+      "SettingPath": "Microsoft PowerPoint 2016\\PowerPoint Options\\Security\\Trust Center",
+      "Node": "l_blockmacroexecutionfrominternet",
+      "Kind": "Toggle",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Office blocks macros in files from the internet by default (Version 2206 and later, Current Channel), but users can unblock a file",
+      "Source": "https://learn.microsoft.com/microsoft-365-apps/security/internet-macros-blocked#block-macros-from-running-in-office-files-from-the-internet"
+    },
+    {
+      "Cis": "2.6.6.6.2.5",
+      "Level": 1,
+      "App": "PowerPoint",
+      "AppKey": "ppt16v2",
+      "Title": "Require that application add-ins are signed by Trusted Publisher",
+      "SettingPath": "Microsoft PowerPoint 2016\\PowerPoint Options\\Security\\Trust Center",
+      "Node": "l_requirethatapplicationaddinsaresignedbytrustedpublisher",
+      "Kind": "Toggle",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Unsigned application add-ins load",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.6.6.6.2.8",
+      "Level": 1,
+      "App": "PowerPoint",
+      "AppKey": "ppt16v2",
+      "Title": "VBA Macro Notification Settings",
+      "SettingPath": "Microsoft PowerPoint 2016\\PowerPoint Options\\Security\\Trust Center",
+      "Node": "l_vbawarningspolicy",
+      "Kind": "Dropdown",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "AlternateNames": [
+        "Macro Notification Settings"
+      ],
+      "Option": {
+        "Compliant": [
+          "Disable all except digitally signed macros",
+          "Disable VBA macros except digitally signed macros"
+        ],
+        "Stricter": [
+          "Disable all without notification",
+          "Disable VBA macros without notification"
+        ],
+        "Documented": [
+          "Disable all with notification",
+          "Disable VBA macros with notification",
+          "Enable all macros (not recommended)",
+          "Enable VBA macros (not recommended)",
+          "Enable all macros",
+          "Enable VBA macros"
+        ],
+        "Required": "Disable all except digitally signed macros"
+      },
+      "NotConfigured": "Disable all macros with notification, which users can change in the Trust Center",
+      "Source": "https://learn.microsoft.com/microsoft-365-apps/security/internet-macros-blocked#vba-macro-notification-settings"
+    },
+    {
+      "Cis": "2.11.8.7.2.2.1",
+      "Level": 1,
+      "App": "Word",
+      "AppKey": "word16v2",
+      "Title": "Do not open files from the Internet zone in Protected View",
+      "SettingPath": "Microsoft Word 2016\\Word Options\\Security\\Trust Center\\Protected View",
+      "Node": "l_donotopenfilesfromtheinternetzoneinprotectedview",
+      "Kind": "Toggle",
+      "Compliant": [
+        "0"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Files from the internet open in Protected View, but users can change it in the Trust Center",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.11.8.7.2.2.2",
+      "Level": 1,
+      "App": "Word",
+      "AppKey": "word16v2",
+      "Title": "Do not open files in unsafe locations in Protected View",
+      "SettingPath": "Microsoft Word 2016\\Word Options\\Security\\Trust Center\\Protected View",
+      "Node": "l_donotopenfilesinunsafelocationsinprotectedview",
+      "Kind": "Toggle",
+      "Compliant": [
+        "0"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Files in unsafe locations open in Protected View, but users can change it in the Trust Center",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.11.8.7.2.2.5",
+      "Level": 1,
+      "App": "Word",
+      "AppKey": "word16v2",
+      "Title": "Turn off Protected View for attachments opened from Outlook",
+      "SettingPath": "Microsoft Word 2016\\Word Options\\Security\\Trust Center\\Protected View",
+      "Node": "l_turnoffprotectedviewforattachmentsopenedfromoutlook",
+      "Kind": "Toggle",
+      "Compliant": [
+        "0"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Outlook attachments open in Protected View, but users can change it in the Trust Center",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.11.8.7.2.3.1",
+      "Level": 1,
+      "App": "Word",
+      "AppKey": "word16v2",
+      "Title": "Allow Trusted Locations on the network",
+      "SettingPath": "Microsoft Word 2016\\Word Options\\Security\\Trust Center\\Trusted Locations",
+      "Node": "l_allowtrustedlocationsonthenetwork",
+      "Kind": "Toggle",
+      "Compliant": [
+        "0"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Network locations cannot be trusted by default, but users can allow them in the Trust Center",
+      "Source": "https://learn.microsoft.com/microsoft-365-apps/security/trusted-locations#use-policy-to-manage-trusted-locations"
+    },
+    {
+      "Cis": "2.11.8.7.2.4",
+      "Level": 1,
+      "App": "Word",
+      "AppKey": "word16v2",
+      "Title": "Block macros from running in Office files from the Internet",
+      "SettingPath": "Microsoft Word 2016\\Word Options\\Security\\Trust Center",
+      "Node": "l_blockmacroexecutionfrominternet",
+      "Kind": "Toggle",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Office blocks macros in files from the internet by default (Version 2206 and later, Current Channel), but users can unblock a file",
+      "Source": "https://learn.microsoft.com/microsoft-365-apps/security/internet-macros-blocked#block-macros-from-running-in-office-files-from-the-internet"
+    },
+    {
+      "Cis": "2.11.8.7.2.6",
+      "Level": 1,
+      "App": "Word",
+      "AppKey": "word16v2",
+      "Title": "Require that application add-ins are signed by Trusted Publisher",
+      "SettingPath": "Microsoft Word 2016\\Word Options\\Security\\Trust Center",
+      "Node": "l_requirethatapplicationaddinsaresignedbytrustedpublisher",
+      "Kind": "Toggle",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "NotConfigured": "Unsigned application add-ins load",
+      "Source": "https://learn.microsoft.com/intune/device-security/security-baselines/ref-v2-office-settings"
+    },
+    {
+      "Cis": "2.11.8.7.2.10",
+      "Level": 1,
+      "App": "Word",
+      "AppKey": "word16v2",
+      "Title": "VBA Macro Notification Settings",
+      "SettingPath": "Microsoft Word 2016\\Word Options\\Security\\Trust Center",
+      "Node": "l_vbawarningspolicy",
+      "Kind": "Dropdown",
+      "Compliant": [
+        "1"
+      ],
+      "Values": {
+        "0": "Disabled",
+        "1": "Enabled"
+      },
+      "AlternateNames": [
+        "Macro Notification Settings"
+      ],
+      "Option": {
+        "Compliant": [
+          "Disable all except digitally signed macros",
+          "Disable VBA macros except digitally signed macros"
+        ],
+        "Stricter": [
+          "Disable all without notification",
+          "Disable VBA macros without notification"
+        ],
+        "Documented": [
+          "Disable all with notification",
+          "Disable VBA macros with notification",
+          "Enable all macros (not recommended)",
+          "Enable VBA macros (not recommended)",
+          "Enable all macros",
+          "Enable VBA macros"
+        ],
+        "Required": "Disable all except digitally signed macros"
+      },
+      "NotConfigured": "Disable all macros with notification, which users can change in the Trust Center",
+      "Source": "https://learn.microsoft.com/microsoft-365-apps/security/internet-macros-blocked#vba-macro-notification-settings"
+    }
+  ],
+  "NotInApprovedSubset": [
+    {
+      "Cis": "2.5.14.3.28",
+      "Level": 1,
+      "Reason": "Outlook 'Security setting for macros' applies only while Outlook Security Mode is set to use Group Policy, a second setting outside the approved subset; judging one without the other would credit a setting that may not apply."
+    },
+    {
+      "Cis": "2.8.4.1.1",
+      "Level": 1,
+      "Reason": "Publisher is not in the approved subset (Word, Excel, PowerPoint and Access); Microsoft is retiring Publisher."
+    },
+    {
+      "Cis": "2.8.4.1.2",
+      "Level": 1,
+      "Reason": "Publisher is not in the approved subset (Word, Excel, PowerPoint and Access); Microsoft is retiring Publisher."
+    },
+    {
+      "Cis": "2.8.4.1.4",
+      "Level": 1,
+      "Reason": "Publisher is not in the approved subset (Word, Excel, PowerPoint and Access); Microsoft is retiring Publisher."
+    },
+    {
+      "Cis": "2.2.4.7.2.5",
+      "Level": 1,
+      "Reason": "Excel XLL add-in blocking is an add-in control outside the approved macro core."
+    },
+    {
+      "Cis": "2.3.27.7",
+      "Level": 1,
+      "Reason": "Automation Security (macros in files opened programmatically) is outside the approved macro core."
+    },
+    {
+      "Cis": "2.3.27.16",
+      "Level": 1,
+      "Reason": "Macro Runtime Scan Scope is outside the approved macro core."
+    },
+    {
+      "Cis": "2.2.4.7.2.3.1",
+      "Level": 1,
+      "Reason": "Always open untrusted database files in Protected View is outside the approved Protected View subset (internet zone, unsafe locations, Outlook attachments)."
+    },
+    {
+      "Cis": "2.1.1.3.2.1.2",
+      "Level": 2,
+      "Reason": "Level 2; the approval is Level 1 only."
+    },
+    {
+      "Cis": "2.2.4.7.2.4.2",
+      "Level": 2,
+      "Reason": "Level 2; the approval is Level 1 only."
+    }
+  ]
+}

@@ -66,6 +66,21 @@
       "Publisher": "Microsoft",
       "Kind": "Vendor recommended configuration",
       "Url": "https://learn.microsoft.com/"
+    },
+    "CIS-INTUNE-OFFICE-1.1.0": {
+      "Name": "CIS Microsoft Intune for Office Benchmark",
+      "Version": "1.1.0, Level 1",
+      "Publisher": "Center for Internet Security",
+      "Kind": "Configuration benchmark",
+      "Url": "https://www.cisecurity.org/benchmark/intune",
+      "Note": "Recommendation numbers only; the benchmark text is licensed and is not reproduced. The approved settings and their accepted values are encoded in Config/cis-intune-office-macro.json."
+    },
+    "MS-APP-PROTECTION-FRAMEWORK": {
+      "Name": "Microsoft Intune Data Protection Framework using app protection policies",
+      "Version": "Learn page read 2026-10-26",
+      "Publisher": "Microsoft",
+      "Kind": "Vendor recommended configuration",
+      "Url": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-framework"
     }
   },
   "controls": {
@@ -880,13 +895,331 @@
         "Relation": "Equivalent",
         "Why": "Satisfied requires automatic version limits, or a manual limit of 100 or more versions with no expiration or an expiration of 30 days or more, so no Satisfied setting is one the note calls not recommended."
       }
+    ],
+    "INT-2.6": [
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.1.1.3.2.1.1",
+        "ItemTitle": "Access: Allow Trusted Locations on the network (Disabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Allow Trusted Locations on the network set to Disabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.1.1.3.2.1.1 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.1.1.3.2.2",
+        "ItemTitle": "Access: Block macros from running in Office files from the Internet (Enabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Block macros from running in Office files from the Internet set to Enabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.1.1.3.2.2 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.1.1.3.2.4",
+        "ItemTitle": "Access: Require that application add-ins are signed by Trusted Publisher (Enabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Require that application add-ins are signed by Trusted Publisher set to Enabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.1.1.3.2.4 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.2.4.7.2.1.2",
+        "ItemTitle": "Excel: Don't allow Dynamic Data Exchange (DDE) server launch in Excel (Enabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Don't allow Dynamic Data Exchange (DDE) server launch in Excel set to Enabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.2.4.7.2.1.2 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.2.4.7.2.1.3",
+        "ItemTitle": "Excel: Don't allow Dynamic Data Exchange (DDE) server lookup in Excel (Enabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Don't allow Dynamic Data Exchange (DDE) server lookup in Excel set to Enabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.2.4.7.2.1.3 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.2.4.7.2.3.2",
+        "ItemTitle": "Excel: Do not open files from the Internet zone in Protected View (Disabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Do not open files from the Internet zone in Protected View set to Disabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.2.4.7.2.3.2 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.2.4.7.2.3.3",
+        "ItemTitle": "Excel: Do not open files in unsafe locations in Protected View (Disabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Do not open files in unsafe locations in Protected View set to Disabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.2.4.7.2.3.3 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.2.4.7.2.3.6",
+        "ItemTitle": "Excel: Turn off Protected View for attachments opened from Outlook (Disabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Turn off Protected View for attachments opened from Outlook set to Disabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.2.4.7.2.3.6 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.2.4.7.2.4.1",
+        "ItemTitle": "Excel: Allow Trusted Locations on the network (Disabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Allow Trusted Locations on the network set to Disabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.2.4.7.2.4.1 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.2.4.7.2.6",
+        "ItemTitle": "Excel: Block macros from running in Office files from the Internet (Enabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Block macros from running in Office files from the Internet set to Enabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.2.4.7.2.6 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.2.4.7.2.8",
+        "ItemTitle": "Excel: Prevent Excel from running XLM macros (Enabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Prevent Excel from running XLM macros set to Enabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.2.4.7.2.8 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.2.4.7.2.9",
+        "ItemTitle": "Excel: Require that application add-ins are signed by Trusted Publisher (Enabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Require that application add-ins are signed by Trusted Publisher set to Enabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.2.4.7.2.9 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.6.6.6.2.2.1",
+        "ItemTitle": "PowerPoint: Do not open files from the Internet zone in Protected View (Disabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Do not open files from the Internet zone in Protected View set to Disabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.6.6.6.2.2.1 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.6.6.6.2.2.2",
+        "ItemTitle": "PowerPoint: Do not open files in unsafe locations in Protected View (Disabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Do not open files in unsafe locations in Protected View set to Disabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.6.6.6.2.2.2 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.6.6.6.2.2.5",
+        "ItemTitle": "PowerPoint: Turn off Protected View for attachments opened from Outlook (Disabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Turn off Protected View for attachments opened from Outlook set to Disabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.6.6.6.2.2.5 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.6.6.6.2.3.1",
+        "ItemTitle": "PowerPoint: Allow Trusted Locations on the network (Disabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Allow Trusted Locations on the network set to Disabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.6.6.6.2.3.1 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.6.6.6.2.4",
+        "ItemTitle": "PowerPoint: Block macros from running in Office files from the Internet (Enabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Block macros from running in Office files from the Internet set to Enabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.6.6.6.2.4 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.6.6.6.2.5",
+        "ItemTitle": "PowerPoint: Require that application add-ins are signed by Trusted Publisher (Enabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Require that application add-ins are signed by Trusted Publisher set to Enabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.6.6.6.2.5 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.11.8.7.2.2.1",
+        "ItemTitle": "Word: Do not open files from the Internet zone in Protected View (Disabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Do not open files from the Internet zone in Protected View set to Disabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.11.8.7.2.2.1 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.11.8.7.2.2.2",
+        "ItemTitle": "Word: Do not open files in unsafe locations in Protected View (Disabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Do not open files in unsafe locations in Protected View set to Disabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.11.8.7.2.2.2 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.11.8.7.2.2.5",
+        "ItemTitle": "Word: Turn off Protected View for attachments opened from Outlook (Disabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Turn off Protected View for attachments opened from Outlook set to Disabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.11.8.7.2.2.5 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.11.8.7.2.3.1",
+        "ItemTitle": "Word: Allow Trusted Locations on the network (Disabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Allow Trusted Locations on the network set to Disabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.11.8.7.2.3.1 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.11.8.7.2.4",
+        "ItemTitle": "Word: Block macros from running in Office files from the Internet (Enabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Block macros from running in Office files from the Internet set to Enabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.11.8.7.2.4 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-OFFICE-1.1.0",
+        "ItemId": "2.11.8.7.2.6",
+        "ItemTitle": "Word: Require that application add-ins are signed by Trusted Publisher (Enabled)",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires Require that application add-ins are signed by Trusted Publisher set to Enabled by at least one assigned Settings Catalog Office policy and by every assigned policy that sets it, the state 2.11.8.7.2.6 audits.",
+        "Condition": "Holds while Config/tp-standards.json IntuneOfficeMacroBaseline approves this benchmark; INT-2.6 is not assessed while it does not."
+      }
+    ],
+    "INT-2.5": [
+      {
+        "Benchmark": "CIS-INTUNE-WINDOWS11-5.0.0",
+        "ItemId": "104.1",
+        "ItemTitle": "Ensure 'Allow Auto Update' is set to 'Enabled'",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Every assigned update ring must set a documented automatic update mode (Update CSP AllowAutoUpdate 0-4); a ring left at the Windows default or a Settings Catalog value of 5 (turn off) is a shortfall."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-WINDOWS11-5.0.0",
+        "ItemId": "104.2",
+        "ItemTitle": "Ensure 'Defer Feature Updates Period in Days' is set to 'Enabled: 180 or more days'",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Every assigned ring must defer feature updates 180 days or more, and no Settings Catalog policy may set fewer."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-WINDOWS11-5.0.0",
+        "ItemId": "104.3",
+        "ItemTitle": "Ensure 'Manage preview builds' is set to 'Disable Preview builds'",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Satisfied only when an assigned Settings Catalog policy sets ManagePreviewBuilds to 0, no ring is on an Insider channel and no policy enables previews; a ring-only tenant is not assessed, because no ring setting is documented as writing this value."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-WINDOWS11-5.0.0",
+        "ItemId": "104.4",
+        "ItemTitle": "Ensure 'Scheduled Install Day' is set to 'Every day'",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Every assigned ring must schedule installs every day (ScheduledInstallDay 0); a weekday, an active-hours schedule or no schedule is a shortfall."
+      },
+      {
+        "Benchmark": "CIS-INTUNE-WINDOWS11-5.0.0",
+        "ItemId": "104.5",
+        "ItemTitle": "Ensure 'Block \"Pause Updates\" ability' is set to 'Block'",
+        "Url": "https://www.cisecurity.org/benchmark/intune",
+        "Relation": "Equivalent",
+        "Why": "Every assigned ring must block user pause (SetDisablePauseUXAccess 1), and no Settings Catalog policy may allow it."
+      }
+    ],
+    "AAD-10.4": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Privileged users have short-lived sign-in sessions (Zero Trust Assessment test 21825)",
+        "ItemTitle": "Privileged users have short-lived sign-in sessions",
+        "Url": "https://github.com/microsoft/zerotrustassessment/blob/main/src/powershell/tests/Test-Assessment.21825.ps1",
+        "Relation": "Stricter",
+        "Why": "21825 passes when every role Microsoft marks isPrivileged is in the role list of an enabled policy with sign-in frequency of 4 hours or less. Satisfied requires that for every isPrivileged role and the tool's privileged list, with sign-in frequency on, all apps, no narrowing and no unapproved exclusion."
+      },
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Guests don't have long lived sign-in sessions (Zero Trust Assessment test 21824)",
+        "ItemTitle": "Guests don't have long lived sign-in sessions",
+        "Url": "https://learn.microsoft.com/entra/fundamentals/zero-trust-protect-tenants#guests-dont-have-long-lived-sign-in-sessions",
+        "Relation": "Subset",
+        "Why": "Satisfied requires an enabled policy that selects guests and external users with a sign-in frequency of 24 hours or less, 1 day, or every time.",
+        "Unchecked": "The test also fails when any other guest-selecting policy lacks a compliant frequency; the tool judges only that a qualifying policy exists. Which guest types the policy selects is listed, not judged."
+      }
+    ],
+    "AAD-12.3": [
+      {
+        "Benchmark": "DISA-ENTRA-ID-STIG-V1R1",
+        "ItemId": "V-270204",
+        "ItemTitle": "Microsoft Entra ID must automatically disable accounts after a 35-day period of account inactivity.",
+        "Url": "https://www.stigviewer.com/stig/microsoft_entra_id/2025-02-28/finding/V-270204",
+        "Relation": "Subset",
+        "Why": "Satisfied requires no enabled member whose last sign-in (or creation date, when it never signed in) is more than 35 days old, the condition the STIG audit lists; a last successful sign-in older than 35 days is also flagged.",
+        "Unchecked": "Guest accounts, which AAD-12.2 judges at 90 days."
+      }
+    ],
+    "AAD-3.6": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Step 6: Configure PIM > Configure activation settings > 'Set maximum activation duration'",
+        "ItemTitle": "Set maximum activation duration (for example: 1-4 hours for high-impact roles)",
+        "Url": "https://learn.microsoft.com/security/zero-trust/adopt/implement-privileged-access-identity#configure-activation-settings",
+        "Relation": "Subset",
+        "Why": "Satisfied requires a maximum PIM activation of 4 hours or less for Global, Privileged Role, Security, Exchange and SharePoint Administrator and 8 hours or less for the tool's other privileged roles.",
+        "Unchecked": "Roles an organization treats as high-impact beyond those five are held to 8 hours; roles outside the tool's privileged list are not judged. The guide gives an example, not a firm value."
+      }
+    ],
+    "PVW-2.2": [
+      {
+        "Benchmark": "MS-ZERO-TRUST",
+        "ItemId": "Communication compliance monitoring is configured for Microsoft Copilot (Zero Trust Assessment test 35039)",
+        "ItemTitle": "Communication compliance monitoring is configured for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/purview/zero-trust-purview-protect-data#communication-compliance-monitoring-is-configured-for-microsoft-copilot",
+        "Relation": "Equivalent",
+        "Why": "Satisfied requires an enabled communication compliance policy with a review mailbox whose rule (joined by Guid, read with -IncludeRuleXml) lists Copilot among its workloads, the three conditions 35039 checks."
+      }
+    ],
+    "INT-3.3": [
+      {
+        "Benchmark": "MS-APP-PROTECTION-FRAMEWORK",
+        "ItemId": "Level 2 enterprise enhanced data protection: Conditional launch (with the Level 1 conditional launch rows it includes)",
+        "ItemTitle": "Level 2 enterprise enhanced data protection: Conditional launch",
+        "Url": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-framework#level-2-enterprise-enhanced-data-protection",
+        "Relation": "Subset",
+        "Why": "Satisfied requires every assigned iOS/iPadOS and Android app protection policy to block jailbroken or rooted devices, set a minimum OS version, allow at most 5 PIN attempts, block access after at most 10080 minutes offline and wipe after at most 30 days offline.",
+        "Unchecked": "Min OS version against Microsoft's N-1 guidance; disabled-account action; the Android rows not read (min patch version, Play Integrity, hardware-backed key, threat scan, device lock, Samsung Knox); the PIN-attempt and jailbreak actions (beta only); data-protection and access-requirement rows outside conditional launch."
+      }
     ]
   },
   "unmapped": {
-    "AAD-10.4": {
-      "Reason": "The evaluator accepts any enabled policy with any interval and any scope. Near-misses that fail the rule: Zero Trust Assessment checks 'Privileged users have short-lived sign-in sessions' (test 21825: every privileged role covered by an enabled policy with sign-in frequency 4 hours or less) and 'Guests don't have long lived sign-in sessions' (test 21824: a policy targeting guests or external users at 24 hours or less, 1 day, or every time) - a 30-day frequency on one group is Satisfied here and fails both. DISA STIG V-270200 (session lock after 15 minutes of inactivity) is a different setting (idle session timeout), not sign-in frequency. ScubaGear 2.0.0 has no sign-in frequency rule.",
-      "EarnBy": "Add a per-population judgment: for each privileged role, an enabled policy including that role with signInFrequency type hours and value 4 or less (cite ZTA 21825), and for guests an enabled policy with includeGuestsOrExternalUsers and 24 hours or less (cite ZTA 21824). The collector would need to store signInFrequency.type and .value."
-    },
     "AAD-11.5": {
       "Reason": "No configuration benchmark recommends CAE strict enforcement as a value. ScubaGear 2.0.0 and the DISA Entra ID STIG V1R1 have no CAE rule; the Learn 'Configure Microsoft Entra for increased security' checks have only 'Network validation is configured through Universal Continuous Access Evaluation', a Global Secure Access feature (Entra Internet/Private Access) that is a different setting. Microsoft's CAE documentation describes strict location enforcement as an option, not a recommended baseline value."
     },
@@ -897,24 +1230,16 @@
       "Reason": "ScubaGear 2.0.0 and the Zero Trust checks have no Terms of Use item. Near-miss: DISA STIG V-270209 (ENTR-ID-000150) requires the DOD Notice and Consent banner in the company branding sign-in page text, a different setting (organizational branding signInPageText), not a CA Terms of Use grant; a tenant with a ToU policy and no banner passes here and fails the STIG.",
       "EarnBy": "Not this control: V-270209 would need a separate check of /organization/{id}/branding signInPageText for the banner text (DoD tenants only)."
     },
-    "AAD-12.3": {
-      "Reason": "Near-miss: DISA STIG V-270204 (ENTR-ID-000090) audits enabled users whose last sign-in is older than 35 days (or never signed in and created more than 35 days ago). The evaluator's 90-day threshold is looser and it ignores unlicensed members, so an account idle for 60 days is Satisfied here and a finding under the STIG. The Zero Trust checks cover inactive guests and stale privileged identities, not all members; ScubaGear 2.0.0 has no inactive-account rule.",
-      "EarnBy": "A STIG-mode threshold of 35 days over all enabled members (licensed or not) would earn V-270204 as Subset (guests would still be AAD-12.2's); keep the 90-day verdict for non-DoD tenants."
-    },
     "AAD-13.1": {
       "Reason": "Secure Score is Microsoft's own scoring of many settings, not a configuration setting, and no benchmark sets a Secure Score threshold. ScubaGear 2.0.0, the DISA STIGs and the Zero Trust checks have no such item; 'All Microsoft Entra recommendations are addressed' is a different signal (Entra recommendations, not Secure Score)."
-    },
-    "AAD-3.6": {
-      "Reason": "No benchmark states a firm maximum PIM activation duration that 8 hours meets. ScubaGear 2.0.0 and the DISA Entra ID STIG V1R1 have no activation-duration rule, and the Zero Trust Assessment checks have none. Near-misses: Zero Trust Phase 1 Step 6 says 'Set maximum activation duration (for example: 1-4 hours for high-impact roles)', an example, and looser than the evaluator's 8-hour threshold would need to be to pass it (a 6-hour setting is Satisfied here and outside 1-4 hours); the PIM deployment plan shows 'example settings' (Global Administrator one hour, Exchange Admin two hours). Neither is a stated recommended value the 8-hour Satisfied state always meets.",
-      "EarnBy": "Not a small change: Microsoft gives only examples. If the owner adopts the Zero Trust 1-4 hour range as the requirement for the high-impact roles, tighten the threshold to 4 hours for those roles and cite Zero Trust Phase 1 Step 6 as Subset; note the collector's 'PT(\\d+)H' parse returns null for minute-only durations such as PT30M, which the evaluator then reports as not assessed."
     },
     "AAD-8.2": {
       "Reason": "ScubaGear 2.0.0 has no access-review rule; the DISA Entra ID STIG V1R1 has none; the Learn 'Configure Microsoft Entra for increased security' checks have none for role reviews. The Zero Trust Assessment repository has a test 21855 'Privileged roles have access reviews' but it is unimplemented ('Planned for future release', skipped as UnderConstruction) and is not published on the Learn page, so it has no audit to match. The ID Governance deployment guide says 'Create access reviews for Global Administrators' without a configuration value, and the evaluator would pass on a review of any single role, not necessarily Global Administrator.",
       "EarnBy": "If Microsoft publishes 21855 with criteria, read each review's scope (role definition ids) and recurrence (settings.recurrence) and require that every privileged role, at minimum Global Administrator, is covered by a recurring review."
     },
     "DEF-4.3": {
-      "Reason": "ScubaGear MS.SECURITYSUITE.4.1v1 lists seven required alerts (suspicious email sending patterns, suspicious connector activity, suspicious email forwarding, messages delayed, tenant restricted from sending unprovisioned email, tenant restricted from sending email, potentially malicious URL click); none concerns OAuth consent (confirmed in the 2026-09-30 review; respected). Microsoft's default alert policy list (https://learn.microsoft.com/defender-xdr/alert-policies) contains no consent or OAuth alert, and the recommended-settings page has no alert rows. The match is also by name, so a citation would rest on wording rather than a setting.",
-      "EarnBy": "None known."
+      "Reason": "ScubaGear 2.0.0 MS.SECURITYSUITE.4.1v1 lists seven required alerts (suspicious email sending patterns, suspicious connector activity, suspicious email forwarding activity, messages delayed, tenant restricted from sending unprovisioned email, tenant restricted from sending email, potentially malicious URL click) and a risky OAuth application alert is not among them; checked against the v2.0.0 baseline text on 2026-10-26. No other benchmark item names the alert.",
+      "EarnBy": ""
     },
     "DEF-4.6": {
       "Reason": "No ScubaGear 2.0.0 rule covers phishing simulation or training. Microsoft Learn Attack simulation training articles (get started, training campaigns, FAQ) describe how to run campaigns but state no recommended configuration or frequency. It is an operational activity, not a tenant setting, so no configuration benchmark in the allowed list applies.",
@@ -963,18 +1288,11 @@
     "INT-2.4": {
       "Reason": "Microsoft's Zero Trust common policies page gives recommended compliance settings for Windows, iOS/iPadOS and Android only, not macOS; no Microsoft-published macOS compliance baseline with a FileVault value was found, and ScubaGear has no Intune baseline. CIS Apple macOS and DISA macOS STIG FileVault rules audit the device's FileVault state, not an Intune compliance-policy rule, so they are a different setting."
     },
-    "INT-2.5": {
-      "Reason": "No allowed benchmark audits the existence of an update ring. No Windows Update deferral or deadline row was found in the Windows MDM security baseline settings lists reviewed; DISA Windows 11 STIG patch rules audit the device's patch level. Any update-ring benchmark item would audit values (deferral days, deadlines) that INT-2.5 does not read."
-    },
     "INT-3.1": {
       "Reason": "Searched Microsoft's Intune enrollment guidance, Zero Trust common policies and the security configuration framework pages: Microsoft documents the enrollment restriction options but publishes no recommended value set. The control is Satisfied by any single restriction on any one platform, so it could not pass a value-specific item anyway."
     },
     "INT-3.2": {
       "Reason": "No allowed benchmark audits that an app configuration policy exists. Microsoft's app configuration guidance (for example Outlook or Edge managed configuration) documents keys without recommending the existence of a policy as a security baseline, and the control reads no key or value."
-    },
-    "INT-3.3": {
-      "Reason": "Near-miss: Microsoft's App Protection Data Protection Framework, Level 2 Conditional launch, 'Device conditions | Min OS version | Format: Major.Minor.Build / Block access' (iOS/iPadOS) and 'Format: Major.Minor / Block access' (Android), with the note recommending the N-1 major version. INT-3.3 accepts any version (for example 9.0 on iOS), so a Satisfied verdict can fail the item's recommended value. Level 1 does not list Min OS version at all.",
-      "EarnBy": "Compare MinimumRequiredOsVersion per platform with an approved minimum (current major minus one) held in Config/tp-standards.json; with that, a Subset citation of the Level 2 Min OS version rows for iOS/iPadOS and Android would hold."
     },
     "INT-4.2": {
       "Reason": "The Windows MDM security baseline's Windows Hello for Business section lists only 'Facial Features Use Enhanced Anti Spoofing' = true, which INT-4.2 does not read. Microsoft's Configure Windows Hello for Business page explains the tenant-wide policy is usually disabled and recommends no state for it. No allowed benchmark audits the tenant-wide enrollment policy state."
@@ -991,10 +1309,6 @@
     },
     "PPL-3.4": {
       "Reason": "Manual control with no verdict. ScubaGear 2.0.0 powerplatform (MS.POWERPLATFORM.1.1-6.1) mentions Power Virtual Agents only in its introduction and has no item on agent publishing channels or authentication; no Zero Trust Assessment Purview test covers Copilot Studio. Not cited."
-    },
-    "PVW-2.2": {
-      "Reason": "ScubaGear 2.0.0 (securitysuite, powerplatform) has no communication compliance item. The only Microsoft-published recommendation found is Zero Trust Assessment test 35039 'Communication compliance monitoring is configured for Microsoft Copilot' (Get-SupervisoryReviewPolicyV2 / Get-SupervisoryReviewRule -IncludeRuleXml): it passes only when an enabled policy has a rule that captures Copilot interactions and a ReviewMailbox. PVW-2.2 is Satisfied by any policy that is not explicitly disabled, with no Copilot scope and no Enabled = $true requirement (unknown counts), so its Satisfied can fail 35039. Not cited.",
-      "EarnBy": "To cite ZTA 35039 (Equivalent), read Get-SupervisoryReviewRule -IncludeRuleXml, require a policy with Enabled = $true, a rule whose XML includes the Copilot interaction location, and a ReviewMailbox; keep the generic 'any policy' check as context only."
     },
     "PVW-2.3": {
       "Reason": "No allowed benchmark states a recommended information-barriers mode. ScubaGear 2.0.0 securitysuite and powerplatform have no information-barriers item; Microsoft's Zero Trust Assessment Purview tests (35001-35041) and 'Implementing Zero Trust with Microsoft Purview' mention information barriers only as an option to 'consider' with no configured value. The Learn information-barriers pages describe the modes and the legacy-to-new migration, which is feature documentation, not a recommended configuration. Not cited."

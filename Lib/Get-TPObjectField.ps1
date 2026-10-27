@@ -125,3 +125,24 @@ function ConvertTo-TPUtcDateTime {
     if ($parsed.Kind -eq [System.DateTimeKind]::Unspecified) { return [datetime]::SpecifyKind($parsed, [System.DateTimeKind]::Utc) }
     return $parsed.ToUniversalTime()
 }
+
+# Hours allowed by an ISO 8601 duration as Graph returns it (PT8H, PT30M,
+# PT1H30M, P1D, P1DT2H). A pattern that read only the hour part ('PT(\d+)H')
+# returned nothing for PT30M and 4 for PT4H30M. Returns a [double], or $null
+# when the value is absent, unreadable, or carries years or months (whose length
+# in hours is not fixed). Never throws.
+function ConvertTo-TPDurationHours {
+    [CmdletBinding()]
+    [OutputType([double])]
+    param([AllowNull()] [AllowEmptyString()] [string] $Duration)
+    $d = ([string]$Duration).Trim()
+    if ($d -cnotmatch '\AP(?:(?<d>\d{1,4})D)?(?:T(?:(?<h>\d{1,5})H)?(?:(?<m>\d{1,6})M)?(?:(?<s>\d{1,7}(?:\.\d{1,7})?)S)?)?\z') { return $null }
+    if ($d -ceq 'P' -or $d -ceq 'PT' -or $d.EndsWith('T')) { return $null }
+    $inv = [cultureinfo]::InvariantCulture
+    $hours = 0.0
+    if ($Matches['d']) { $hours += 24 * [double]::Parse($Matches['d'], $inv) }
+    if ($Matches['h']) { $hours += [double]::Parse($Matches['h'], $inv) }
+    if ($Matches['m']) { $hours += [double]::Parse($Matches['m'], $inv) / 60 }
+    if ($Matches['s']) { $hours += [double]::Parse($Matches['s'], $inv) / 3600 }
+    return $hours
+}

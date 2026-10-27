@@ -2,7 +2,7 @@
 
 Generated from `Config/controls.json` (CIS Microsoft 365 and ScubaGear citations), `Config/scuba-alignment.json` and `Config/benchmark-mappings.json` on 2026-10-26; `Get-TPBenchmarkMapping` returns the same view and `Testing/TP.BenchmarkMapping.Tests.ps1` fails when a control is in neither list.
 
-**154 of 207 controls are mapped to at least one configuration benchmark; 53 are not, each with the reason.** A control cites a benchmark item only when its evaluator judges the setting the item audits and every state it scores Satisfied passes that audit: a similar topic is not enough, so a control with no such item is listed below rather than given a near-miss. Relations: Equivalent (same setting and threshold), Subset (part of what the item requires; the rest is named in the mapping file), Stricter (passes only when the item passes, can fail where it passes); ScubaGear relations are the ones recorded in `Config/scuba-alignment.json`.
+**161 of 208 controls are mapped to at least one configuration benchmark; 47 are not, each with the reason.** A control cites a benchmark item only when its evaluator judges the setting the item audits and every state it scores Satisfied passes that audit: a similar topic is not enough, so a control with no such item is listed below rather than given a near-miss. Relations: Equivalent (same setting and threshold), Subset (part of what the item requires; the rest is named in the mapping file), Stricter (passes only when the item passes, can fail where it passes); ScubaGear relations are the ones recorded in `Config/scuba-alignment.json`.
 
 Control frameworks (NIST SP 800-53, CIS Controls v8.1, CMMC, ISO 27001, SOC 2, HIPAA, PCI DSS, MITRE ATT&CK) are mapped separately in `References` and are not configuration benchmarks.
 
@@ -20,6 +20,8 @@ Control frameworks (NIST SP 800-53, CIS Controls v8.1, CMMC, ISO 27001, SOC 2, H
 | MS-WINDOWS-SECURITY-BASELINE | Microsoft Security Baseline for Windows (Intune MDM security baseline) | Security Baseline for Windows, version 24H2 (same values in 25H2) | Microsoft |
 | CIS-INTUNE-WINDOWS11-5.0.0 | CIS Microsoft Intune for Windows 11 Benchmark | 5.0.0, Level 1 | Center for Internet Security |
 | MS-LEARN-RECOMMENDED | Microsoft Learn: values Microsoft states as recommended or not recommended in product documentation | Learn pages read 2026-10-26 | Microsoft |
+| CIS-INTUNE-OFFICE-1.1.0 | CIS Microsoft Intune for Office Benchmark | 1.1.0, Level 1 | Center for Internet Security |
+| MS-APP-PROTECTION-FRAMEWORK | Microsoft Intune Data Protection Framework using app protection policies | Learn page read 2026-10-26 | Microsoft |
 
 CIS benchmark text is licensed and is not reproduced; only recommendation numbers are cited. Three other CIS and DISA documents were read for this review and inform it without being cited here: the CIS Microsoft Edge Benchmark v5.0.0 (device-side, planned as endpoint checks), the CIS Password Policy Guide v21.12 (guidance; its values differ from CIS Microsoft 365 and the STIG and are listed below), and the CIS Controls v8.1 mappings to NIST SP 800-53 Rev. 5 and HIPAA (used to review the framework citations).
 
@@ -38,6 +40,7 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | AAD-10.1 | Identity Protection Risky User Workflow | ScubaGear 2.0.0 MS.AAD.2.2v1 (Partial) |
 | AAD-10.2 | Privileged Accounts Use Dedicated Cloud-Only Accounts | ScubaGear 2.0.0 MS.AAD.7.3v1 (Equivalent) |
 | AAD-10.3 | Break-Glass Account Sign-In Monitoring | CIS M365 v7.0.0 2.2.1 |
+| AAD-10.4 | Short Sign-in Frequency for Admins and Guests | Microsoft Zero Trust: Privileged users have short-lived sign-in sessions (Zero Trust Assessment test 21825) (Stricter); Microsoft Zero Trust: Guests don't have long lived sign-in sessions (Zero Trust Assessment test 21824) (Subset) |
 | AAD-11.1 | Device Code Authentication Flow Blocked | ScubaGear 2.0.0 MS.AAD.3.9v1 (Equivalent) |
 | AAD-11.2 | No Guest Accounts in Highly Privileged Roles | Microsoft Zero Trust: Guests are not assigned high privileged directory roles (Zero Trust Assessment test 22128) (Equivalent) |
 | AAD-11.3 | Risky Service Principals Reviewed and Remediated | Microsoft Zero Trust: All risky workload identities are triaged (Zero Trust Assessment test 21862) (Subset) |
@@ -46,6 +49,7 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | AAD-11.9 | Workload Identity Conditional Access Policy | Microsoft Zero Trust: Workload Identities are configured with risk-based policies (Zero Trust Assessment test 21883) (Equivalent) |
 | AAD-12.1 | Users Without MFA — Named List | CIS M365 v7.0.0 5.2.3.4; ScubaGear 2.0.0 MS.AAD.3.1v1 (Unsupported) |
 | AAD-12.2 | Stale Guest Accounts — Named List | Microsoft Zero Trust: Inactive guest identities are disabled or removed from the tenant (Zero Trust Assessment test 21858) (Equivalent) |
+| AAD-12.3 | Inactive Member Accounts (35 Days) — Named List | DISA Entra ID STIG V1R1: V-270204 (Subset) |
 | AAD-12.4 | OAuth Apps with Tenant-Wide Consent — Named List | ScubaGear 2.0.0 MS.AAD.5.2v1 (Unsupported) |
 | AAD-14.1 | Application Credentials Current and Short-Lived | ScubaGear 2.0.0 MS.AAD.5.6v1 (Equivalent); Microsoft Zero Trust: Application certificates must be rotated on a regular basis (Zero Trust Assessment test 21992) (Subset) |
 | AAD-15.1 | No Application Holds Tenant-Takeover Permissions | ScubaGear 2.0.0 MS.AAD.5.2v1 (Unsupported) |
@@ -58,6 +62,7 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | AAD-3.3 | PIM Requires MFA on Activation | Microsoft Zero Trust: Phase 1 - Secure the identity control plane, Step 6: Configure activation settings > Require MFA on activation (Subset) |
 | AAD-3.4 | PIM Requires Justification on Activation | Microsoft Zero Trust: Step 6: Configure PIM > Configure activation settings > 'Require justification' (Subset) |
 | AAD-3.5 | PIM GA Activation Requires Approval | CIS M365 v7.0.0 5.3.4; ScubaGear 2.0.0 MS.AAD.7.6v1 (Equivalent) |
+| AAD-3.6 | PIM Max Activation Duration 4 Hours for High-Impact Roles | Microsoft Zero Trust: Step 6: Configure PIM > Configure activation settings > 'Set maximum activation duration' (Subset) |
 | AAD-4.1 | Guest Invite Permissions Restricted | CIS M365 v7.0.0 5.1.6.3; ScubaGear 2.0.0 MS.AAD.8.2v1 (Equivalent) |
 | AAD-4.2 | External Collaboration Settings Restricted | CIS M365 v7.0.0 5.1.2.3 |
 | AAD-4.3 | B2B Guest Default Permissions Restricted | CIS M365 v7.0.0 5.1.6.2; ScubaGear 2.0.0 MS.AAD.8.1v1 (Equivalent) |
@@ -158,6 +163,9 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | INT-1.5 | Antivirus Policy Deployed via Intune | CIS Intune Defender AV 1.0.0: 30 recommendations (2.1–2.50) (Stricter) |
 | INT-2.2 | Attack Surface Reduction Rules Enabled | CIS Intune Defender AV 1.0.0: 17 recommendations (2.10–2.26) (Stricter) |
 | INT-2.3 | Windows Firewall Policy Deployed via Intune | Microsoft Windows security baseline: Firewall > Enable Domain / Private / Public Network Firewall (Subset); CIS Intune Windows 11 5.0.0: 37.1, 37.8, 37.15 (Equivalent) |
+| INT-2.5 | Windows Update Compliance Policy Deployed | CIS Intune Windows 11 5.0.0: 104.1, 104.2, 104.3, 104.4, 104.5 (Equivalent) |
+| INT-2.6 | Office Macro and Active-Content Hardening Deployed | CIS Intune Office 1.1.0: 24 recommendations (2.1.1.3.2.1.1–2.11.8.7.2.6) (Equivalent) |
+| INT-3.3 | Conditional Launch Policies Configured | Microsoft App Protection Framework: Level 2 enterprise enhanced data protection: Conditional launch (with the Level 1 conditional launch rows it includes) (Subset) |
 | INT-4.1 | Windows LAPS Deployed via Intune | Microsoft Windows security baseline: LAPS > Backup Directory (Subset); CIS Intune Windows 11 5.0.0: 107.1 (Equivalent) |
 
 ### PPL
@@ -183,6 +191,7 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | PVW-1.3 | DLP Policy Active for Sensitive Data | CIS M365 v7.0.0 3.2.1 |
 | PVW-1.4 | Sensitivity Labels Published | CIS M365 v7.0.0 3.3.1 |
 | PVW-2.1 | Purview Audit Log Search Enabled | CIS M365 v7.0.0 3.1.1 |
+| PVW-2.2 | Communication Compliance Policy Active | Microsoft Zero Trust: Communication compliance monitoring is configured for Microsoft Copilot (Zero Trust Assessment test 35039) (Equivalent) |
 | PVW-2.5 | Retention Policy Covers Key Workloads | Microsoft Zero Trust: Email retention policies are configured (Zero Trust Assessment test 35028) (Stricter) |
 | PVW-2.6 | Auto-Labeling Policy Active | Microsoft Zero Trust: Auto-labeling policies are in enforcement mode (Zero Trust Assessment test 35020) (Equivalent) |
 | PVW-3.1 | Audit Logs Exported to SIEM | ScubaGear 2.0.0 MS.SECURITYSUITE.4.2v1 (Manual) |
@@ -231,15 +240,12 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 
 | Control | Title | Why no benchmark item applies | Fixable |
 |---|---|---|---|
-| AAD-10.4 | Sign-in Frequency Session Control Configured | The evaluator accepts any enabled policy with any interval and any scope. | Yes |
 | AAD-11.5 | Continuous Access Evaluation Strict Mode | No configuration benchmark recommends CAE strict enforcement as a value. |  |
 | AAD-11.6 | Cross-Tenant Inbound Trust Settings Restricted | ScubaGear 2.0.0 section 8 covers guest access, invitations and allowed domains, not inbound trust; the DISA Entra ID STIG V1R1 has no cross-tenant rule; the Zero Trust checks include only 'Outbound cross-tenant access settings are configured' (outbound B2B collaboration blocked by default), a differ |  |
 | AAD-11.8 | Terms of Use Policy Enforced | ScubaGear 2.0.0 and the Zero Trust checks have no Terms of Use item. | Yes |
-| AAD-12.3 | Stale Licensed Member Accounts — Named List | Near-miss: DISA STIG V-270204 (ENTR-ID-000090) audits enabled users whose last sign-in is older than 35 days (or never signed in and created more than 35 days ago). | Yes |
 | AAD-13.1 | Microsoft Secure Score | Secure Score is Microsoft's own scoring of many settings, not a configuration setting, and no benchmark sets a Secure Score threshold. |  |
-| AAD-3.6 | PIM Max Activation Duration 8 Hours or Less | No benchmark states a firm maximum PIM activation duration that 8 hours meets. | Yes |
 | AAD-8.2 | Access Reviews for Privileged Roles | ScubaGear 2.0.0 has no access-review rule; the DISA Entra ID STIG V1R1 has none; the Learn 'Configure Microsoft Entra for increased security' checks have none for role reviews. | Yes |
-| DEF-4.3 | Risky OAuth Application Alerts Configured | ScubaGear MS.SECURITYSUITE.4.1v1 lists seven required alerts (suspicious email sending patterns, suspicious connector activity, suspicious email forwarding, messages delayed, tenant restricted from sending unprovisioned email, tenant restricted from sending email, potentially malicious URL click); n | Yes |
+| DEF-4.3 | Risky OAuth Application Alerts Configured | ScubaGear 2.0.0 MS.SECURITYSUITE.4.1v1 lists seven required alerts (suspicious email sending patterns, suspicious connector activity, suspicious email forwarding activity, messages delayed, tenant restricted from sending unprovisioned email, tenant restricted from sending email, potentially maliciou |  |
 | DEF-4.6 | Attack Simulation Training Campaigns Active | No ScubaGear 2.0.0 rule covers phishing simulation or training. | Yes |
 | DEF-5.1 | Tenant Allow/Block List Entries Time-Boxed | Microsoft's Tenant Allow/Block List articles (tenant-allow-block-list-about, -email-spoof-configure, -urls-configure) document that allow entries default to 45 days after last use and can be set to never expire, but make no recommendation against never-expiring allows. | Yes |
 | DNS-1.5 | TLS-RPT Record Published | NIST SP 800-177 Rev. |  |
@@ -253,16 +259,13 @@ CIS benchmark text is licensed and is not reproduced; only recommendation number
 | EXO-9.2 | Deleted Item Retention Window at Maximum | Microsoft Learn ('Change how long permanently deleted items are kept for an Exchange Online mailbox', 'Exchange Online limits', 'Mailbox plans in Exchange Online') documents 14 days as the default and 30 as the maximum, and uses 30 in examples, but never recommends it. | Yes |
 | INT-2.1 | Endpoint Detection and Response Policy Deployed | Searched the Microsoft Defender for Endpoint security baseline and Windows MDM security baseline settings lists, the CIS Intune Defender AV benchmark (Config/cis-intune-defender-av.json), and Microsoft's Zero Trust common policies. | Yes |
 | INT-2.4 | macOS FileVault Encryption Required | Microsoft's Zero Trust common policies page gives recommended compliance settings for Windows, iOS/iPadOS and Android only, not macOS; no Microsoft-published macOS compliance baseline with a FileVault value was found, and ScubaGear has no Intune baseline. |  |
-| INT-2.5 | Windows Update Compliance Policy Deployed | No allowed benchmark audits the existence of an update ring. |  |
 | INT-3.1 | Device Enrollment Restrictions Configured | Searched Microsoft's Intune enrollment guidance, Zero Trust common policies and the security configuration framework pages: Microsoft documents the enrollment restriction options but publishes no recommended value set. |  |
 | INT-3.2 | Mobile App Configuration Policies Deployed | No allowed benchmark audits that an app configuration policy exists. |  |
-| INT-3.3 | Conditional Launch Policies Configured | Near-miss: Microsoft's App Protection Data Protection Framework, Level 2 Conditional launch, 'Device conditions \| Min OS version \| Format: Major.Minor.Build / Block access' (iOS/iPadOS) and 'Format: Major.Minor / Block access' (Android), with the note recommending the N-1 major version. | Yes |
 | INT-4.2 | Windows Hello for Business Deployed | The Windows MDM security baseline's Windows Hello for Business section lists only 'Facial Features Use Enhanced Anti Spoofing' = true, which INT-4.2 does not read. |  |
 | INT-4.3 | Device OS Version Compliance Enforced | Microsoft's Zero Trust Windows compliance table lists 'Minimum OS version' with no value ('Enter appropriate values ... |  |
 | INT-4.4 | Mobile Device Compliance Requires PIN or Biometric | Microsoft's iOS/iPadOS and Android security configuration framework pages set 'Require a password' in DEVICE RESTRICTION profiles (for example iOS personal Level 1, Password > Require a password = Yes), a different setting from a compliance-policy passcode rule. | Yes |
 | PPL-3.3 | Copilot Access Restricted to Licensed Users | The 95% threshold is the tool's own heuristic. |  |
 | PPL-3.4 | Copilot Studio Agent Publishing Governed | Manual control with no verdict. |  |
-| PVW-2.2 | Communication Compliance Policy Active | ScubaGear 2.0.0 (securitysuite, powerplatform) has no communication compliance item. | Yes |
 | PVW-2.3 | Information Barriers Mode Configured | No allowed benchmark states a recommended information-barriers mode. |  |
 | PVW-2.4 | Insider Risk Management Policy Active | The control never reaches a verdict, so no item can be audited by it. | Yes |
 | PVW-3.2 | eDiscovery Case Management Configured | Manual control with no verdict. |  |

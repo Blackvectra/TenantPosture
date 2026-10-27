@@ -47,6 +47,63 @@ function Get-TPComplianceActionList {
     return @{ Read = $true; Actions = @($list.ToArray()) }
 }
 
+# Whether a policy read with $expand=assignments is assigned: $true / $false from the
+# expanded list, $null when the list was not returned. The list is read off the object
+# directly, because Get-TPObjectField hands an empty array back as $null, which made a
+# policy with no assignment "not read" and so counted as assigned. Shared by the
+# Intune collectors (the endpoint-security collector calls it as -Item).
+function Get-TPExpandedAssignmentState {
+    [CmdletBinding()]
+    param([Parameter(Mandatory, Position = 0)] [Alias('Item')] [AllowNull()] $Policy)
+    if ($null -eq $Policy) { return $null }
+    if ($Policy -is [System.Collections.IDictionary]) {
+        if (-not $Policy.Contains('assignments')) { return $null }
+        $list = $Policy['assignments']
+    } else {
+        $prop = $Policy.PSObject.Properties['assignments']
+        if ($null -eq $prop) { return $null }
+        $list = $prop.Value
+    }
+    if ($null -eq $list) { return $null }
+    return (@($list | Where-Object { $_ }).Count -gt 0)
+}
+
+# The five Windows Update for Business values INT-2.5 judges, read off one update ring
+# (Graph windowsUpdateForBusinessConfiguration) as Graph returned them. Only properties
+# PRESENT on the object are copied: an absent property is "not returned" (a value not
+# read), which the evaluator keeps apart from a property returned empty ("not set").
+#   automaticUpdateMode                    -> Update/AllowAutoUpdate
+#   featureUpdatesDeferralPeriodInDays     -> Update/DeferFeatureUpdatesPeriodInDays
+#   businessReadyUpdatesOnly               -> Update/BranchReadinessLevel (pre-release channel)
+#   installationSchedule.scheduledInstallDay -> Update/ScheduledInstallDay
+#   userPauseAccess                        -> Update/SetDisablePauseUXAccess
+function Get-TPWufbRingSettings {
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param([Parameter(Mandatory)] [AllowNull()] $Ring)
+    $out = [ordered]@{}
+    if ($null -eq $Ring) { return $out }
+    $has = {
+        param($o, [string] $k)
+        if ($o -is [System.Collections.IDictionary]) { return $o.Contains($k) }
+        return ($null -ne $o -and $null -ne $o.PSObject.Properties[$k])
+    }
+    foreach ($pair in @(@('automaticUpdateMode', 'AutomaticUpdateMode'), @('featureUpdatesDeferralPeriodInDays', 'FeatureUpdatesDeferralPeriodInDays'),
+                         @('businessReadyUpdatesOnly', 'BusinessReadyUpdatesOnly'), @('userPauseAccess', 'UserPauseAccess'))) {
+        if (& $has $Ring $pair[0]) { $out[$pair[1]] = Get-TPObjectField -Item $Ring -Key $pair[0] -Default $null }
+    }
+    if (& $has $Ring 'installationSchedule') {
+        $sch = Get-TPObjectField -Item $Ring -Key 'installationSchedule' -Default $null
+        $out['InstallationSchedule'] = if ($null -eq $sch) { $null } else {
+            [ordered]@{
+                Type                = [string](Get-TPObjectField -Item $sch -Key '@odata.type' -Default '')
+                ScheduledInstallDay = $(if (& $has $sch 'scheduledInstallDay') { Get-TPObjectField -Item $sch -Key 'scheduledInstallDay' -Default $null } else { $null })
+            }
+        }
+    }
+    return $out
+}
+
 function Invoke-TPCollectIntuneDeviceCompliance {
     [CmdletBinding()] param()
     $result = @{
@@ -168,19 +225,23 @@ function Invoke-TPCollectIntuneDeviceCompliance {
                 $page = Invoke-TPGraphRequest -Method GET -Uri $next -ErrorAction Stop
                 foreach ($p in @($page.value)) {
                     $odata = [string](Get-TPObjectField -Item $p -Key '@odata.type' -Default '')
-                    $asg = Get-TPObjectField -Item $p -Key 'assignments' -Default $null
                     $entry = @{
                         Id          = (Get-TPObjectField -Item $p -Key 'id' -Default $null)
                         DisplayName = [string](Get-TPObjectField -Item $p -Key 'displayName' -Default '')
                         Platform    = $odata
                         Description = [string](Get-TPObjectField -Item $p -Key 'description' -Default '')
-                        IsAssigned  = $(if ($null -ne $asg) { @($asg | Where-Object { $_ }).Count -gt 0 } else { $null })
+                        IsAssigned  = Get-TPExpandedAssignmentState -Policy $p
                     }
                     $result.Data.ConfigurationProfiles += $entry
 
-                    # Windows Update for Business rings live in deviceConfigurations
+                    # Windows Update for Business rings live in deviceConfigurations. The list
+                    # returns each derived type's own properties, so the ring's values ride the
+                    # same request (no per-ring read). A ring entry is its own copy: the values
+                    # are INT-2.5's, not part of the generic configuration profile list.
                     if ($odata -match 'windowsUpdateForBusinessConfiguration') {
-                        $result.Data.UpdatePolicies += $entry
+                        $ring = $entry.Clone()
+                        $ring.WufbSettings = Get-TPWufbRingSettings -Ring $p
+                        $result.Data.UpdatePolicies += $ring
                     }
                 }
                 $next = $page['@odata.nextLink']

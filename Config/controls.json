@@ -1920,8 +1920,8 @@
     },
     {
       "ControlId": "AAD-3.6",
-      "Title": "PIM Max Activation Duration 8 Hours or Less",
-      "Description": "PIM role policies set maximum activation duration to 8 hours or less.",
+      "Title": "PIM Max Activation Duration 4 Hours for High-Impact Roles",
+      "Description": "PIM role policies set maximum activation duration to 4 hours or less for the high-impact roles (Global, Privileged Role, Security, Exchange and SharePoint Administrator) and 8 hours or less for the other privileged roles.",
       "BusinessRisk": "Longer activation windows increase the time a compromised activation session can be abused.",
       "Severity": "Low",
       "Workload": "AAD",
@@ -1929,7 +1929,7 @@
       "Automated": true,
       "CollectorDependency": "AAD-IdentityGovernance",
       "EvaluatorFunction": "Test-TPControlAADPIMDuration",
-      "Remediation": "PIM > Roles > Select role > Settings > Maximum activation duration = 8 hours.",
+      "Remediation": "PIM > Microsoft Entra roles > Settings > select the role > Edit > Activation maximum duration: 4 hours or less (for example 1 to 4 hours) for Global, Privileged Role, Security, Exchange and SharePoint Administrator; 8 hours or less for the other privileged roles.",
       "References": {
         "CISControls": [
           "6.8"
@@ -3181,7 +3181,7 @@
     {
       "ControlId": "PVW-2.2",
       "Title": "Communication Compliance Policy Active",
-      "Description": "At least one communication compliance policy is active for regulatory monitoring.",
+      "Description": "An enabled communication compliance policy with a review mailbox has a rule that captures Microsoft Copilot interactions (Microsoft Zero Trust Assessment test 35039). Other communication compliance policies are reported as context.",
       "BusinessRisk": "In regulated industries (finance, healthcare, government), unmonitored communications create compliance liability.",
       "Severity": "Low",
       "Workload": "PVW",
@@ -3456,7 +3456,7 @@
     {
       "ControlId": "INT-2.5",
       "Title": "Windows Update Compliance Policy Deployed",
-      "Description": "Windows Update for Business rings or compliance policy ensures devices receive security updates on schedule.",
+      "Description": "Every assigned Windows Update for Business ring in Intune sets the five Level 1 Windows Update for Business values of the CIS Microsoft Intune for Windows 11 Benchmark v5.0.0: automatic updates on (104.1), feature updates deferred 180 days or more (104.2), preview builds disabled (104.3, set through a Settings Catalog policy because an update ring has no documented setting for it, and no ring on a pre-release channel), a scheduled install day of every day (104.4), and users blocked from pausing updates (104.5).",
       "BusinessRisk": "Unpatched endpoints are the most exploited attack surface. Without managed update policy, critical patches may sit unapplied for months.",
       "Severity": "High",
       "Workload": "INT",
@@ -3464,7 +3464,7 @@
       "Automated": true,
       "CollectorDependency": "Intune-DeviceCompliance",
       "EvaluatorFunction": "Test-TPControlIntuneWindowsUpdate",
-      "Remediation": "Intune > Devices > Windows update rings > Create update ring with feature and quality update schedules.",
+      "Remediation": "In the Intune admin center, Devices > By platform > Windows > Manage updates > Windows updates > Update rings, assign a ring to every Windows device and set in each: Automatic update behavior = Auto install and restart at a scheduled time with Scheduled install day = Every day; Feature update deferral period = 180 days or more; Enable pre-release builds = Not configured; Option to pause Windows updates = Disable. Then assign a Settings Catalog policy that sets Windows Update For Business > Manage preview builds = Disable Preview builds. The finding names each ring and setting that falls short.",
       "References": {
         "CISControls": [
           "7.3"
@@ -3483,6 +3483,39 @@
         "ISO27001": "A.8.8"
       },
       "LicenseRequirement": "M365 Business Premium or Intune Plan 1"
+    },
+    {
+      "ControlId": "INT-2.6",
+      "Title": "Office Macro and Active-Content Hardening Deployed",
+      "Description": "The assigned Intune policies that configure Microsoft 365 Apps (Settings Catalog policies, including the Microsoft 365 Apps security baseline) set the approved standard: the macro and active-content core of the CIS Microsoft Intune for Office Benchmark v1.1.0, Level 1 (Config/cis-intune-office-macro.json) for Word, Excel, PowerPoint and Access. Macros in files from the internet are blocked, VBA macro notification allows digitally signed macros only, Excel XLM macros and DDE server launch and lookup are off, Protected View is kept on for internet files, unsafe locations and Outlook attachments, trusted locations on the network are not allowed, and application add-ins must be signed by a trusted publisher.",
+      "BusinessRisk": "A macro-enabled attachment or download is still one of the most common ways ransomware and remote-access malware reach a workstation. Where a user can enable macros, turn off Protected View, trust a network share or load an unsigned add-in, one convincing phishing email runs attacker code with the user's access.",
+      "Severity": "High",
+      "Workload": "INT",
+      "Category": "Endpoint",
+      "Automated": true,
+      "CollectorDependency": "Intune-EndpointSecurity",
+      "EvaluatorFunction": "Test-TPControlIntuneOfficeMacro",
+      "Remediation": "In Intune, create a Settings Catalog configuration profile for Windows 10 and later (or deploy the Microsoft 365 Apps for Enterprise security baseline) assigned to the users of Microsoft 365 Apps for enterprise, and set for Word, Excel, PowerPoint and Access: Block macros from running in Office files from the Internet = Enabled; VBA Macro Notification Settings = Enabled: Disable all except digitally signed macros (Word, Excel, PowerPoint); Allow Trusted Locations on the network = Disabled; Require that application add-ins are signed by Trusted Publisher = Enabled. For Word, Excel and PowerPoint set Do not open files from the Internet zone in Protected View, Do not open files in unsafe locations in Protected View and Turn off Protected View for attachments opened from Outlook to Disabled. For Excel also set Prevent Excel from running XLM macros, Don't allow Dynamic Data Exchange (DDE) server launch in Excel and Don't allow Dynamic Data Exchange (DDE) server lookup in Excel to Enabled. Pilot with the teams that rely on macros first and sign the macros they need. The finding names each setting that is not set or set to another state. Microsoft documents these policies as applying to Microsoft 365 Apps for enterprise, not Microsoft 365 Apps for business.",
+      "References": {
+        "CISControls": [
+          "2.7",
+          "4.1"
+        ],
+        "CIS": "",
+        "SCuBA": "",
+        "NIST": "CM-6, CM-7, SI-3",
+        "CMMC": "CM.L2-3.4.2",
+        "MITRE": [
+          "T1566.001",
+          "T1204.002",
+          "T1559.002"
+        ],
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
+        "SOC2": "CC6.8",
+        "PCIDSS": "Req 2.2",
+        "ISO27001": "A.8.7, A.8.9"
+      },
+      "LicenseRequirement": "Intune Plan 1 + Microsoft 365 Apps for enterprise (E3/E5)"
     },
     {
       "ControlId": "AAD-8.1",
@@ -3697,8 +3730,8 @@
     },
     {
       "ControlId": "AAD-10.4",
-      "Title": "Sign-in Frequency Session Control Configured",
-      "Description": "CA policy enforces sign-in frequency to limit the lifetime of stolen session tokens.",
+      "Title": "Short Sign-in Frequency for Admins and Guests",
+      "Description": "Enabled CA policies set a sign-in frequency of 4 hours or less for every privileged role (named in the policy's roles) and 24 hours or less (or every time) for guest or external users, limiting the lifetime of stolen session tokens.",
       "BusinessRisk": "Stolen tokens (from AiTM, token theft via malware) remain valid for the full session lifetime. Sign-in frequency limits re-use to the configured window.",
       "Severity": "Medium",
       "Workload": "AAD",
@@ -3706,7 +3739,7 @@
       "Automated": true,
       "CollectorDependency": "AAD-CAPolicies",
       "EvaluatorFunction": "Test-TPControlAADSignInFrequency",
-      "Remediation": "CA policy: Session controls > Sign-in frequency > set to 1 hour for privileged users, 8 hours for standard users.",
+      "Remediation": "CA policy for the privileged directory roles (Users > Directory roles, every privileged role): Session > Sign-in frequency > Periodic reauthentication, 4 hours or less. CA policy for Guest or external users: Session > Sign-in frequency, 24 hours or less (or Every time).",
       "References": {
         "CISControls": [
           "4.3"
@@ -4396,7 +4429,7 @@
     {
       "ControlId": "INT-3.3",
       "Title": "Conditional Launch Policies Configured",
-      "Description": "App protection policies include conditional launch settings to block jailbroken devices and enforce OS version requirements.",
+      "Description": "Every assigned iOS/iPadOS and Android app protection policy meets the conditional launch rows of Microsoft's App Protection Data Protection Framework, Level 2, that state a value: jailbroken/rooted devices blocked, a minimum OS version that blocks access, at most 5 PIN attempts, an offline grace period of at most 10080 minutes before access is blocked and at most 30 days before org data is wiped. Not applicable when the tenant has no iOS/iPadOS or Android app protection policy and no enrolled mobile device.",
       "BusinessRisk": "Jailbroken and rooted devices bypass OS security controls. Without conditional launch, compromised devices access corporate apps with full permissions.",
       "Severity": "High",
       "Workload": "INT",
@@ -5672,8 +5705,8 @@
     },
     {
       "ControlId": "AAD-12.3",
-      "Title": "Stale Licensed Member Accounts — Named List",
-      "Description": "Identifies licensed member accounts with no sign-in activity in 90+ days — likely departed employees.",
+      "Title": "Inactive Member Accounts (35 Days) — Named List",
+      "Description": "Identifies enabled member accounts (licensed or not) whose last sign-in is more than 35 days old, or that never signed in and were created more than 35 days ago (DISA Microsoft Entra ID STIG V-270204) — likely departed employees.",
       "BusinessRisk": "Active accounts for departed employees are a primary threat vector. Former employees know the organization's structure, workflows, and email conventions — making them highly effective social engineers if accounts are ever used maliciously.",
       "Severity": "High",
       "Workload": "AAD",

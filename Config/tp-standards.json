@@ -89,5 +89,12 @@
     "Benchmark": "CIS Microsoft Intune for Microsoft Defender Antivirus Benchmark v1.0.0",
     "Profile": "Level 1 - Workstation",
     "ApprovedDate": "2026-10-25"
+  },
+  "IntuneOfficeMacroBaseline": {
+    "_help": "The configuration standard INT-2.6 judges the assigned Intune Office policies against. Approved by the owner 2026-10-26 (\"macro core\"): the CIS Microsoft Intune for Office Benchmark v1.1.0, Level 1, the macro and active-content subset encoded in Config/cis-intune-office-macro.json (Word, Excel, PowerPoint and Access: macros from the internet blocked, VBA notification set to signed macros only, XLM and DDE off in Excel, Protected View kept on, no trusted locations on the network, add-ins signed by a trusted publisher). Leave Benchmark empty to withdraw the approval; INT-2.6 is then not assessed.",
+    "Benchmark": "CIS Microsoft Intune for Office Benchmark v1.1.0",
+    "Profile": "Level 1",
+    "Subset": "macro core",
+    "ApprovedDate": "2026-10-26"
   }
 }

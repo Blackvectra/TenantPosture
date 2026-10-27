@@ -183,6 +183,24 @@ general Settings Catalog profile, which the collector does not read, and Remote 
 be read with confidence. The benchmark's attack surface reduction rules (2.10 to 2.26) are INT-2.2's,
 judged against the owner-approved rule set, and its Level 2 items are outside the approved profile.
 
+**INT-2.6 — Office Macro and Active-Content Hardening Deployed.** INT-2.6 judges the assigned
+Intune Settings Catalog policies that configure Microsoft 365 Apps (including the Microsoft 365 Apps
+security baseline) against the approved macro and active-content core of the CIS Microsoft Intune for
+Office Benchmark v1.1.0, Level 1 (`Config/cis-intune-office-macro.json`, 27 settings for Word, Excel,
+PowerPoint and Access). Three things are not established and the reports say so. Settings deployed
+through the Office cloud policy service (config.office.com) or on-premises Group Policy are not visible
+through Microsoft Graph for Intune. Intune Administrative Templates policies are listed and checked for
+Office settings (each definition value's category path), but their values are not read: a tenant whose
+Office settings live only there is not assessed, never a Gap, and one that holds Office settings there
+beside a Settings Catalog policy leaves every setting the catalog does not meet unestablished. And
+Microsoft documents the Office macro policies as applying to Microsoft 365 Apps for enterprise, not to
+Microsoft 365 Apps for business; the edition installed on devices is not read. Office settings are
+ADMX-backed and Microsoft publishes no Graph sample of their setting definition ids, so a setting is
+matched by its app namespace (`excel16v2`, `word16v2`, `ppt16v2`, `access16v2`) and the definition's
+display name returned by `$expand=settingDefinitions` (or the ADMX policy name, best effort), and
+Enabled or Disabled by the option's display name before the `_1` / `_0` suffix; the VBA notification
+option is judged by its display name only. Unverified against a live tenant.
+
 **INT-4.2 — Windows Hello for Business Enabled.** The assessment reads the tenant-wide Intune
 enrollment configuration for Windows Hello for Business and nothing else. Microsoft's own guidance
 says that policy applies only at enrollment time, to every device, and "is usually disabled", with

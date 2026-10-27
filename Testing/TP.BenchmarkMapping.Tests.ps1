@@ -108,6 +108,20 @@ Describe 'Benchmark mapping' {
             foreach ($n in $list) { @($cited | Where-Object { [string]$_.Row.ItemId -eq $n }).Count | Should -BeGreaterThan 0 -Because "$n is listed, so a control must cite it" }
         }
 
+        It 'cites only CIS Intune for Office recommendations INT-2.6 judges, never the VBA option it accepts beyond the CIS audit' {
+            $cat = Get-Content (Join-Path $script:RepoRoot 'Config' 'cis-intune-office-macro.json') -Raw | ConvertFrom-Json
+            $plain = @($cat.Settings | Where-Object { -not $_.PSObject.Properties['Option'] } | ForEach-Object { [string]$_.Cis })
+            $vba   = @($cat.Settings | Where-Object { $_.PSObject.Properties['Option'] } | ForEach-Object { [string]$_.Cis })
+            $cited = @($script:Rows | Where-Object { $_.Row.Benchmark -eq 'CIS-INTUNE-OFFICE-1.1.0' })
+            foreach ($x in $cited) {
+                $x.Control | Should -Be 'INT-2.6'
+                $plain | Should -Contain ([string]$x.Row.ItemId)
+                [string]$x.Row.Condition | Should -Not -BeNullOrEmpty -Because 'the citation holds only while the approval is in force'
+            }
+            $cited.Count | Should -Be $plain.Count
+            foreach ($n in $vba) { @($cited | Where-Object { [string]$_.Row.ItemId -eq $n }).Count | Should -Be 0 -Because "INT-2.6 accepts a stricter VBA option the CIS audit for $n fails" }
+        }
+
         It 'INT-1.5 cites the benchmark only while its approval is in force' {
             @($script:Rows | Where-Object { $_.Control -eq 'INT-1.5' -and -not $_.Row.Condition }).Count | Should -Be 0
             & (Get-Module TenantPosture) { Get-TPIntuneAvBaseline } | Should -Not -BeNullOrEmpty

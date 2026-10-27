@@ -2,13 +2,17 @@
 #
 # Invoke-TPCollectIntuneEndpointSecurity.ps1
 # Collects Intune Endpoint Security policies (LAPS, ASR, Firewall, EDR, Antivirus),
-# with the setting values of assigned ASR, Antivirus, Firewall and LAPS policies.
+# with the setting values of assigned ASR, Antivirus, Firewall and LAPS policies, the
+# Policy CSP Update values of assigned general Settings Catalog policies for Windows
+# (INT-2.5), the Office settings of assigned Settings Catalog policies (INT-2.6), and
+# which assigned Administrative Templates policies hold Office settings.
 #
 # READ-ONLY: GET-only Graph calls. Does not create, modify, or remove configuration.
 #
 # Returns: structured hashtable under key 'Intune-EndpointSecurity' via Set-TPRawData.
-# Reads:   Graph deviceManagement/configurationPolicies (and /{id}/settings) and
-#          deviceManagement/intents. Scope: DeviceManagementConfiguration.Read.All (already requested).
+# Reads:   Graph deviceManagement/configurationPolicies (and /{id}/settings),
+#          deviceManagement/intents and deviceManagement/groupPolicyConfigurations (and
+#          /{id}/definitionValues). Scope: DeviceManagementConfiguration.Read.All (already requested).
 #
 # NIST SP 800-53: CM-7 (least functionality), SI-3 (malicious code protection),
 #                 SI-4 (system monitoring), SC-7 (boundary protection),
@@ -41,6 +45,9 @@ function Get-TPIntuneEndpointBucket {
     return $null
 }
 
+# Get-TPExpandedAssignmentState (Collectors/Intune/Invoke-TPCollectIntuneDeviceCompliance.ps1)
+# tells an unassigned policy ("assignments": []) from one whose assignments were not returned.
+
 function Invoke-TPCollectIntuneEndpointSecurity {
     [CmdletBinding()] param()
     $result = @{
@@ -53,6 +60,16 @@ function Invoke-TPCollectIntuneEndpointSecurity {
             AntivirusPolicies         = @()
             # Aggregate union with TemplateType field — used by legacy INT-1.5 evaluator
             EndpointSecurityPolicies  = @()
+            # Assigned general Settings Catalog policies (no endpoint-security template) for
+            # Windows that set a Policy CSP Update node, with every Update value they set,
+            # or whose settings could not be read (SettingsStatus Failed). INT-2.5 reads
+            # Manage preview builds here: an update ring has no such setting.
+            UpdateSettingsPolicies    = @()
+            # INT-2.6: assigned Settings Catalog policies that configure Office (or whose
+            # settings could not be read), and assigned Administrative Templates policies
+            # that hold Office settings (or whose settings could not be read).
+            OfficePolicies            = @()
+            AdminTemplatePolicies     = @()
         }
     }
 
@@ -107,7 +124,6 @@ function Invoke-TPCollectIntuneEndpointSecurity {
                 # family counted a USB-block policy as ASR rules and Credential
                 # Guard as LAPS, so the specific template name decides.
                 $bucket = Get-TPIntuneEndpointBucket -TemplateName $tplName -Family $tplFamily -PolicyName $name
-                $asg = Get-TPObjectField -Item $p -Key 'assignments' -Default $null
 
                 $entry = @{
                     Id                  = (Get-TPObjectField -Item $p -Key 'id' -Default $null)
@@ -118,7 +134,7 @@ function Invoke-TPCollectIntuneEndpointSecurity {
                     TemplateDisplayName = $tplName
                     TemplateType        = $bucket
                     Source              = 'configurationPolicies'
-                    IsAssigned          = $(if ($null -ne $asg) { @($asg | Where-Object { $_ }).Count -gt 0 } else { $null })
+                    IsAssigned          = (Get-TPExpandedAssignmentState -Item $p)
                     CreatedDateTime     = (Get-TPObjectField -Item $p -Key 'createdDateTime' -Default $null)
                     LastModifiedDateTime= (Get-TPObjectField -Item $p -Key 'lastModifiedDateTime' -Default $null)
                 }
@@ -159,6 +175,77 @@ function Invoke-TPCollectIntuneEndpointSecurity {
                         else { $entry.AvSettingsStatus = 'Failed' }
                         if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
                             Register-TPException -Source "Intune-EndpointSecurity-${bucket}Settings" -Message $_.Exception.Message
+                        }
+                    }
+                }
+
+                # One settings read serves two checks on an assigned Windows policy that has no
+                # endpoint-security bucket (same scope, DeviceManagementConfiguration.Read.All):
+                #  - INT-2.5: a general Settings Catalog policy (template family none) that sets a
+                #    Policy CSP Update node (./Device/Vendor/MSFT/Policy/Config/Update/*, definition
+                #    ids containing "_policy_config_update_"); an update ring has no Manage preview
+                #    builds setting. Kept only when it sets one, or when the read failed or stopped
+                #    at the page cap, because it may set one.
+                #  - INT-2.6: Office macro and active-content settings live in Settings Catalog
+                #    policies (and the Microsoft 365 Apps security baseline). The definitions are
+                #    expanded so each Office setting and option is named; only the Office settings
+                #    are kept. A failed or capped read is recorded: such a policy may configure
+                #    Office, so its settings are not established, never assumed absent.
+                $updateCandidate = (-not $bucket -and $tplFamily -in @($null, '', 'none') -and $entry.IsAssigned -ne $false -and $entry.Id -and
+                    ($entry.Platforms -eq '' -or $entry.Platforms -match 'windows'))
+                $officeFamily = [string]$tplFamily -in @('', 'none', 'baseline')
+                $winPlatform  = (-not $entry.Platforms) -or ($entry.Platforms -match 'windows10')
+                $officeCandidate = (-not $bucket -and $officeFamily -and $winPlatform -and $entry.IsAssigned -ne $false -and $entry.Id)
+                if ($updateCandidate -or $officeCandidate) {
+                    $sAll = @(); $sStatus = 'Read'
+                    try {
+                        $sUri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies/$($entry.Id)/settings?`$expand=settingDefinitions"
+                        $sPages = 0
+                        while ($sUri -and $sPages -lt 20) {
+                            $sPage = Invoke-TPGraphRequest -Method GET -Uri $sUri -ErrorAction Stop
+                            if ($sPage.value) { $sAll += $sPage.value }
+                            $sUri = $sPage['@odata.nextLink']
+                            $sPages++
+                        }
+                        if ($sUri) { $sStatus = 'Partial' }
+                    } catch {
+                        $sStatus = 'Failed'
+                        if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                            Register-TPException -Source 'Intune-EndpointSecurity-PolicySettings' -Message $_.Exception.Message
+                        }
+                    }
+                    if ($updateCandidate) {
+                        if ($sStatus -eq 'Failed') {
+                            $result.Data.UpdateSettingsPolicies += @{
+                                Id = $entry.Id; DisplayName = $entry.DisplayName; Platforms = $entry.Platforms; IsAssigned = $entry.IsAssigned
+                                SettingValues = $null; SettingsStatus = 'Failed'
+                            }
+                        } else {
+                            $vals = Get-TPAvSettingValues -Settings $sAll
+                            $upd = [ordered]@{}
+                            foreach ($k in @($vals.Keys)) { if ([string]$k -match '_policy_config_update_') { $upd[$k] = $vals[$k] } }
+                            if ($upd.Count -gt 0 -or $sStatus -eq 'Partial') {
+                                $result.Data.UpdateSettingsPolicies += @{
+                                    Id = $entry.Id; DisplayName = $entry.DisplayName; Platforms = $entry.Platforms; IsAssigned = $entry.IsAssigned
+                                    SettingValues = $upd; SettingsStatus = $sStatus
+                                }
+                            }
+                        }
+                    }
+                    if ($officeCandidate) {
+                        $officeEntry = [ordered]@{
+                            Id = $entry.Id; DisplayName = $name; IsAssigned = $entry.IsAssigned
+                            TemplateFamily = $tplFamily; TemplateDisplayName = $tplName
+                            OfficeSettingsStatus = $sStatus; OfficeSettingValues = $null; OfficeSettingLabels = $null
+                        }
+                        if ($sStatus -ne 'Failed') {
+                            $cap = Get-TPOfficeSettingCapture -Settings $sAll
+                            $officeEntry.OfficeSettingValues = $cap.Values
+                            $officeEntry.OfficeSettingLabels = $cap.Labels
+                        }
+                        $officeValues = $officeEntry.OfficeSettingValues
+                        if ($officeEntry.OfficeSettingsStatus -ne 'Read' -or ($null -ne $officeValues -and $officeValues.Count -gt 0)) {
+                            $result.Data.OfficePolicies += $officeEntry
                         }
                     }
                 }
@@ -233,13 +320,86 @@ function Invoke-TPCollectIntuneEndpointSecurity {
             }
         }
 
+        # ── Administrative Templates (groupPolicyConfigurations) ─────────────
+        # INT-2.6 does not read the VALUES of these policies; it reads which assigned ones
+        # hold Office settings (each definition value's category path), because an Office
+        # macro setting configured only here is not visible in the Settings Catalog read,
+        # and a tenant whose Office settings live only here is therefore not assessed,
+        # never a Gap. A refused assignments expand falls back to the plain list, and a
+        # policy whose assignment is unknown is kept.
+        $gpFailed = $false
+        try {
+            $gpAll = @(); $gpPages = 0; $assignRead = $true
+            $next = 'https://graph.microsoft.com/beta/deviceManagement/groupPolicyConfigurations?$select=id,displayName&$expand=assignments'
+            try {
+                while ($next -and $gpPages -lt 50) {
+                    $page = Invoke-TPGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                    if ($page.value) { $gpAll += $page.value }
+                    $next = $page['@odata.nextLink']; $gpPages++
+                }
+            } catch {
+                $assignRead = $false; $gpAll = @(); $gpPages = 0
+                $next = 'https://graph.microsoft.com/beta/deviceManagement/groupPolicyConfigurations?$select=id,displayName'
+                while ($next -and $gpPages -lt 50) {
+                    $page = Invoke-TPGraphRequest -Method GET -Uri $next -ErrorAction Stop
+                    if ($page.value) { $gpAll += $page.value }
+                    $next = $page['@odata.nextLink']; $gpPages++
+                }
+            }
+            if ($next) { throw "Pagination cap reached ($gpPages pages); Administrative Templates list may be truncated." }
+            foreach ($g in $gpAll) {
+                $gid = [string](Get-TPObjectField -Item $g -Key 'id' -Default '')
+                if (-not $gid) { continue }
+                $isAssigned = if (-not $assignRead) { $null } else { Get-TPExpandedAssignmentState -Item $g }
+                if ($isAssigned -eq $false) { continue }
+                $gEntry = [ordered]@{
+                    Id = $gid; DisplayName = [string](Get-TPObjectField -Item $g -Key 'displayName' -Default '')
+                    IsAssigned = $isAssigned; DefinitionsStatus = 'NotRun'; OfficeDefinitionCount = 0; OfficeSettingNames = @()
+                }
+                try {
+                    $dUri = "https://graph.microsoft.com/beta/deviceManagement/groupPolicyConfigurations/$gid/definitionValues?`$expand=definition(`$select=id,displayName,categoryPath,classType)"
+                    $dAll = @(); $dPages = 0
+                    while ($dUri -and $dPages -lt 20) {
+                        $dPage = Invoke-TPGraphRequest -Method GET -Uri $dUri -ErrorAction Stop
+                        if ($dPage.value) { $dAll += $dPage.value }
+                        $dUri = $dPage['@odata.nextLink']; $dPages++
+                    }
+                    $office = @(foreach ($dv in $dAll) {
+                        $def = Get-TPObjectField -Item $dv -Key 'definition' -Default $null
+                        $cp = [string](Get-TPObjectField -Item $def -Key 'categoryPath' -Default '')
+                        if ($cp -match '(^|\\)Microsoft (Access|Excel|PowerPoint|Word|Visio|Outlook|Office|Project|Publisher|OneNote) 2016(\\|$)') {
+                            [string](Get-TPObjectField -Item $def -Key 'displayName' -Default '')
+                        }
+                    })
+                    $gEntry.DefinitionsStatus = $(if ($dUri) { 'Partial' } else { 'Read' })
+                    $gEntry.OfficeDefinitionCount = $office.Count
+                    $gEntry.OfficeSettingNames = @($office | Where-Object { $_ } | Select-Object -First 25)
+                } catch {
+                    $gEntry.DefinitionsStatus = 'Failed'
+                    if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                        Register-TPException -Source 'Intune-EndpointSecurity-AdminTemplates' -Message $_.Exception.Message
+                    }
+                }
+                if ($gEntry.DefinitionsStatus -ne 'Read' -or $gEntry.OfficeDefinitionCount -gt 0) { $result.Data.AdminTemplatePolicies += $gEntry }
+            }
+        } catch {
+            $gpFailed = $true
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'Intune-EndpointSecurity-AdminTemplates' -Message $_.Exception.Message
+            }
+        }
+
         $result.Data.SectionStatus = @{
+            OfficePolicies            = $(if ($cfgFailed) { 'Failed' } else { 'Collected' })
+            AdminTemplatePolicies     = $(if ($gpFailed) { 'Failed' } else { 'Collected' })
             LAPSPolicies              = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
             ASRPolicies               = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
             FirewallPolicies          = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
             EndpointDetectionPolicies = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
             AntivirusPolicies         = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
             EndpointSecurityPolicies  = $(if ($cfgFailed -and $intentFailed) { 'Failed' } else { 'Collected' })
+            # Fed by configurationPolicies alone: the legacy intents carry no Update settings.
+            UpdateSettingsPolicies    = $(if ($cfgFailed) { 'Failed' } else { 'Collected' })
         }
 
         $result.Success = $true
@@ -254,7 +414,7 @@ function Invoke-TPCollectIntuneEndpointSecurity {
     # per CLAUDE.md collector contract.
     if (Get-Command Register-TPCoverage -ErrorAction SilentlyContinue) {
         $status = if ($result.Success) { 'Collected' } else { 'Failed' }
-        $note   = "LAPS=$($result.Data.LAPSPolicies.Count) ASR=$($result.Data.ASRPolicies.Count) FW=$($result.Data.FirewallPolicies.Count) EDR=$($result.Data.EndpointDetectionPolicies.Count) AV=$($result.Data.AntivirusPolicies.Count)"
+        $note   = "LAPS=$($result.Data.LAPSPolicies.Count) ASR=$($result.Data.ASRPolicies.Count) FW=$($result.Data.FirewallPolicies.Count) EDR=$($result.Data.EndpointDetectionPolicies.Count) AV=$($result.Data.AntivirusPolicies.Count) Office=$($result.Data.OfficePolicies.Count) AdminTemplates=$($result.Data.AdminTemplatePolicies.Count)"
         Register-TPCoverage -Family 'Intune-EndpointSecurity' -Status $status -Note $note
     }
 }
