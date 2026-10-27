@@ -123,6 +123,14 @@ function Invoke-TPCollectSharePoint {
                         if ($v -is [bool]) { $v } else { switch ([string]$v) { 'True' { $true } 'False' { $false } default { $null } } } }
                     $shellInt = { param([string] $k) $v = Get-TPObjectField -Item $t -Key $k -Default $null
                         $n = 0; if ($null -ne $v -and [int]::TryParse([string]$v, [ref]$n)) { $n } else { $null } }
+                    # A string value Get-SPOTenant did not return stays $null (not read).
+                    $shellStr = { param([string] $k) $v = Get-TPObjectField -Item $t -Key $k -Default $null
+                        if ($null -eq $v -or [string]::IsNullOrWhiteSpace([string]$v)) { $null } else { [string]$v } }
+                    # A list's size: $null when the property was not returned, else
+                    # the number of non-blank entries (an empty list is 0, not unread).
+                    $shellCount = { param([string] $k)
+                        $p = $t.PSObject.Properties[$k]
+                        if ($null -eq $p) { $null } else { @(@($p.Value) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count } }
                     $result.Data.TenantSettingsSPO = @{
                         RequireAnonymousLinksExpireInDays = (& $shellInt 'RequireAnonymousLinksExpireInDays')  # SPO-2.2
                         EmailAttestationRequired          = (& $shellBool 'EmailAttestationRequired')          # SPO-2.6
@@ -139,6 +147,14 @@ function Invoke-TPCollectSharePoint {
                         EnableAutoExpirationVersionTrim   = (& $shellBool 'EnableAutoExpirationVersionTrim')
                         MajorVersionLimit                 = (& $shellInt 'MajorVersionLimit')
                         ExpireVersionsAfterDays           = (& $shellInt 'ExpireVersionsAfterDays')
+                        # CIS Microsoft 365 v7.0.0 settings judged in
+                        # Evaluators/Test-TPControlCollabCis.ps1 (SPO-5.x).
+                        DisallowInfectedFileDownload      = (& $shellBool 'DisallowInfectedFileDownload')      # SPO-5.1
+                        EnableAzureADB2BIntegration       = (& $shellBool 'EnableAzureADB2BIntegration')       # SPO-5.2
+                        OneDriveSharingCapability         = (& $shellStr 'OneDriveSharingCapability')          # SPO-5.3
+                        WhoCanShareAuthenticatedGuestAllowListCount = (& $shellCount 'WhoCanShareAuthenticatedGuestAllowList')  # SPO-5.6
+                        WhoCanShareAnonymousAllowListCount          = (& $shellCount 'WhoCanShareAnonymousAllowList')           # SPO-5.6 (context)
+                        DefaultLinkPermission             = (& $shellStr 'DefaultLinkPermission')              # SPO-5.7
                     }
                 }
             } catch {

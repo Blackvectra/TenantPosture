@@ -7,11 +7,11 @@
 
 ## Introduction
 
-This baseline lists the 22 Microsoft Teams controls evaluated by TenantPosture. Each control produces a finding of **Satisfied**, **Partial**, **Gap**, **Not Applicable** or **Error**.
+This baseline lists the 28 Microsoft Teams controls evaluated by TenantPosture. Each control produces a finding of **Satisfied**, **Partial**, **Gap**, **Not Applicable** or **Error**.
 
 This file is generated from `Config/controls.json`, which is the single source of truth for control IDs, titles, severities, remediation and framework citations. Do not edit it by hand — change the control definition and regenerate, or the two will disagree. `Testing/*.BaselineDocs.Tests.ps1` fails the build if they do.
 
-**Severity breakdown:** 5 High · 11 Medium · 6 Low
+**Severity breakdown:** 5 High · 15 Medium · 8 Low
 
 ---
 
@@ -696,6 +696,192 @@ Set-CsTeamsEventsPolicy -Identity Global -EventAccessType EveryoneInCompanyExclu
 | HIPAA | §164.502, §164.308(a)(4) |
 | PCI DSS | Req 7.2.4 |
 | MITRE ATT&CK | T1078 |
+
+---
+
+### TMS-5.1 — External Unmanaged Teams Users Cannot Initiate Conversations
+
+**Severity:** Medium  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+Unmanaged (personal or free) Teams accounts cannot search for users in the organization or start a chat or meeting with them: AllowTeamsConsumerInbound is False, communication with unmanaged accounts is off entirely, or the Global external access policy sets EnableTeamsConsumerInbound to False.
+
+**Business risk:**
+Unmanaged Teams accounts take minutes to create and carry no accountability. Letting them start conversations hands phishing, malware delivery (DarkGate) and social engineering (Midnight Blizzard) a direct channel to staff outside email filtering.
+
+**Remediation:**
+Set-CsTenantFederationConfiguration -AllowTeamsConsumerInbound $false (or Set-CsExternalAccessPolicy -Identity Global -EnableTeamsConsumerInbound $false). Teams admin center > Users > External access: clear "External users with Teams accounts not managed by an organization can contact users in my organization".
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-20, SC-7 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.2.3 |
+| CIS Controls v8.1 | 4.8 |
+| CMMC 2.0 | AC.L1-3.1.20 |
+| ISO/IEC 27001:2022 | A.5.14, A.8.22 |
+| SOC 2 | CC6.6 |
+| HIPAA | §164.312(e)(1) |
+| PCI DSS | Req 1.4 |
+| MITRE ATT&CK | T1566, T1534 |
+
+---
+
+### TMS-5.2 — Communication With Trial-Only Teams Tenants Blocked
+
+**Severity:** Medium  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+ExternalAccessWithTrialTenants is Blocked, so users in Teams tenants that hold only trial licenses cannot chat, call or meet with users in the organization (Microsoft's default).
+
+**Business risk:**
+Trial tenants are free, short-lived and used for spam and phishing over Teams. Allowing them lets attackers reach staff from tenants with no purchased license and no accountability.
+
+**Remediation:**
+Set-CsTenantFederationConfiguration -ExternalAccessWithTrialTenants Blocked (MicrosoftTeams module 6.4.0 or later). Add a needed trial domain to AllowedTrialTenantDomains instead of allowing every trial tenant.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-20, SC-7 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.2.4 |
+| CIS Controls v8.1 | 4.8 |
+| CMMC 2.0 | AC.L1-3.1.20 |
+| ISO/IEC 27001:2022 | A.5.14, A.8.22 |
+| SOC 2 | CC6.6 |
+| HIPAA | §164.312(e)(1) |
+| PCI DSS | Req 1.4 |
+| MITRE ATT&CK | T1566, T1534 |
+
+---
+
+### TMS-5.3 — Only Organizers and Co-organizers Can Present
+
+**Severity:** Low  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+The Global meeting policy sets the default "Who can present" to only organizers and co-organizers (DesignatedPresenterRoleMode = OrganizerOnlyUserOverride); everyone else joins as an attendee unless the organizer changes it.
+
+**Business risk:**
+When everyone joins as a presenter, any participant, including an external or anonymous one, can take over the screen and share malicious content, links or confidential material with the whole meeting.
+
+**Remediation:**
+Set-CsTeamsMeetingPolicy -Identity Global -DesignatedPresenterRoleMode OrganizerOnlyUserOverride. Teams admin center > Meetings > Meeting policies > Global > Who can present: Only organizers and co-organizers.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-3, AC-6 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.5.6 |
+| CIS Controls v8.1 | 6.8 |
+| CMMC 2.0 | AC.L2-3.1.5 |
+| ISO/IEC 27001:2022 | A.5.15, A.8.2 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.312(a)(1) |
+| PCI DSS | Req 7.2 |
+| MITRE ATT&CK | T1534 |
+
+---
+
+### TMS-5.4 — External Meeting Chat Disabled
+
+**Severity:** Medium  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+Users cannot read or send chat in meetings hosted by organizations the tenant has no trusted relationship with (Global meeting policy AllowExternalNonTrustedMeetingChat = False).
+
+**Business risk:**
+Chat in an untrusted organization's meeting carries links and files from unknown senders to staff outside email filtering, a route for phishing and malware.
+
+**Remediation:**
+Set-CsTeamsMeetingPolicy -Identity Global -AllowExternalNonTrustedMeetingChat $false. Teams admin center > Meetings > Meeting policies > Global > External meeting chat: Off.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-20, SC-7 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.5.8 |
+| CIS Controls v8.1 | 4.8 |
+| CMMC 2.0 | AC.L1-3.1.20 |
+| ISO/IEC 27001:2022 | A.5.14, A.8.22 |
+| SOC 2 | CC6.6 |
+| HIPAA | §164.312(e)(1) |
+| PCI DSS | Req 1.4 |
+| MITRE ATT&CK | T1566, T1534 |
+
+---
+
+### TMS-5.5 — Meeting Recording Off by Default
+
+**Severity:** Low  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+Meeting recording is off in the Global meeting policy (AllowCloudRecording = False); users who need to record are assigned a separate meeting policy that allows it.
+
+**Business risk:**
+Recordings capture confidential discussion, shared screens and personal information into stored files. Allowing every user to record by default spreads that content beyond the people who need it.
+
+**Remediation:**
+Set-CsTeamsMeetingPolicy -Identity Global -AllowCloudRecording $false, and grant a separate policy that allows recording to the users who need it.
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | AC-3, AC-6 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.5.9 |
+| CIS Controls v8.1 | 3.3 |
+| CMMC 2.0 | AC.L2-3.1.5 |
+| ISO/IEC 27001:2022 | A.5.15, A.8.2 |
+| SOC 2 | CC6.3 |
+| HIPAA | §164.312(a)(1) |
+| PCI DSS | Req 7.2 |
+| MITRE ATT&CK | T1123 |
+
+---
+
+### TMS-5.6 — Users Can Report Security Concerns in Teams
+
+**Severity:** Medium  |  **Category:** Collaboration  |  **Automated:** Yes
+
+**License required:** Included (M365 Business Standard+)
+
+**Description:**
+Users can report a suspicious Teams message (Global messaging policy AllowSecurityEndUserReporting = True), and the user reported settings keep reports in the organization: Teams reports go to the reporting mailbox only (ReportChatMessageEnabled = False, ReportChatMessageToCustomizedAddressEnabled = True) and junk, not-junk and phishing reports go to a named reporting mailbox.
+
+**Business risk:**
+Without a reporting path, a malicious Teams message a user recognizes never reaches the security team, and reports sent only to Microsoft are not visible to the people who must respond.
+
+**Remediation:**
+Set-CsTeamsMessagingPolicy -Identity Global -AllowSecurityEndUserReporting $true; Set-ReportSubmissionPolicy -Identity DefaultReportSubmissionPolicy -ReportChatMessageEnabled $false -ReportChatMessageToCustomizedAddressEnabled $true -ReportJunkToCustomizedAddress $true -ReportNotJunkToCustomizedAddress $true -ReportPhishToCustomizedAddress $true -ReportJunkAddresses <mailbox> -ReportNotJunkAddresses <mailbox> -ReportPhishAddresses <mailbox> (and the report submission rule for the same mailbox).
+
+**Framework mappings:**
+
+| Framework | Reference |
+|---|---|
+| NIST SP 800-53 Rev 5 | IR-6, SI-4 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 8.6.1 |
+| CIS Controls v8.1 | 17.3 |
+| CMMC 2.0 | IR.L2-3.6.2 |
+| ISO/IEC 27001:2022 | A.6.8 |
+| SOC 2 | CC7.3 |
+| HIPAA | §164.308(a)(6)(ii) |
+| PCI DSS | Req 12.10.1 |
+| MITRE ATT&CK | T1566, T1534 |
 
 ---
 

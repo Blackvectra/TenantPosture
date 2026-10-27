@@ -30,6 +30,7 @@ function Invoke-TPCollectTeams {
             GuestMeetingPolicy   = $null
             BroadcastPolicy      = $null
             EventsPolicy         = $null
+            MessagingPolicy      = $null
             SectionStatus        = @{
                 FederationConfig     = 'NotRun'
                 ExternalAccessPolicy = 'NotRun'
@@ -39,6 +40,7 @@ function Invoke-TPCollectTeams {
                 GuestMeetingPolicy   = 'NotRun'
                 BroadcastPolicy      = 'NotRun'
                 EventsPolicy         = 'NotRun'
+                MessagingPolicy      = 'NotRun'
             }
         }
     }
@@ -78,6 +80,9 @@ function Invoke-TPCollectTeams {
                 AllowTeamsConsumer                  = & $b $fed 'AllowTeamsConsumer'
                 AllowTeamsConsumerInbound           = & $b $fed 'AllowTeamsConsumerInbound'
                 TreatDiscoveredPartnersAsUnverified = & $b $fed 'TreatDiscoveredPartnersAsUnverified'
+                # TMS-5.2 (CIS 8.2.4): Allowed / Blocked (Microsoft's default is
+                # Blocked). $null when the module (before 6.4.0) does not return it.
+                ExternalAccessWithTrialTenants      = $(if ($null -ne (& $f $fed 'ExternalAccessWithTrialTenants')) { [string](& $f $fed 'ExternalAccessWithTrialTenants') } else { $null })
                 AllowedDomains                      = @($allowedList)
                 BlockedDomains                      = @($blockedList)
             }
@@ -115,6 +120,9 @@ function Invoke-TPCollectTeams {
                 # EnabledExceptAnonymous / EnabledInMeetingOnlyForAllExceptAnonymous);
                 # the name TMS-3.3 read, AllowMeetingChat, is not a property.
                 MeetingChatEnabledType                     = [string](& $f $meet 'MeetingChatEnabledType')
+                # TMS-5.3 (CIS 8.5.6) and TMS-5.4 (CIS 8.5.8). $null when not returned.
+                DesignatedPresenterRoleMode                = $(if ($null -ne (& $f $meet 'DesignatedPresenterRoleMode')) { [string](& $f $meet 'DesignatedPresenterRoleMode') } else { $null })
+                AllowExternalNonTrustedMeetingChat         = & $b $meet 'AllowExternalNonTrustedMeetingChat'
             }
         }
 
@@ -144,6 +152,13 @@ function Invoke-TPCollectTeams {
                 AllowTownhalls              = [string](& $f $ev 'AllowTownhalls')
                 TownhallEventAttendeeAccess = [string](& $f $ev 'TownhallEventAttendeeAccess')
             }
+        }
+
+        # Global messaging policy (TMS-5.6, CIS 8.6.1): "Report a security
+        # concern" is AllowSecurityEndUserReporting.
+        & $section 'MessagingPolicy' 'Get-CsTeamsMessagingPolicy' @{ Identity = 'Global' } {
+            param($msg)
+            @{ AllowSecurityEndUserReporting = & $b $msg 'AllowSecurityEndUserReporting' }
         }
 
         & $section 'ClientConfiguration' 'Get-CsTeamsClientConfiguration' @{} {

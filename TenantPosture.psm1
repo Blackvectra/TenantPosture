@@ -344,6 +344,8 @@ $script:ExportedFunctions = @(
     'Test-TPControlTeamsExternalChat', 'Test-TPControlTeamsPSTN',
     'Test-TPControlTeamsWatermarks', 'Test-TPControlTeamsAutoAdmit',
     'Test-TPControlTeamsMeetingChat', 'Test-TPControlTeamsChatCopy',
+    'Test-TPControlTeamsConsumerInbound', 'Test-TPControlTeamsTrialTenants', 'Test-TPControlTeamsPresenterRole', 'Test-TPControlTeamsExternalMeetingChat', 'Test-TPControlTeamsCloudRecording', 'Test-TPControlTeamsSecurityReporting',
+    'Test-TPControlSPOInfectedFileDownload', 'Test-TPControlSPOB2BIntegration', 'Test-TPControlSPOOneDriveSharing', 'Test-TPControlSPOGuestResharing', 'Test-TPControlSPODomainAllowList', 'Test-TPControlSPOSharingGroups', 'Test-TPControlSPODefaultLinkPermission',
     'Test-TPControlTeamsMeetingRecordingScope', 'Test-TPControlTeamsAnonymousStart',
     'Test-TPControlTeamsFederationAllowlist', 'Test-TPControlTeamsLiveEvents', 'Test-TPControlTeamsRecordingRetention',
 

@@ -6992,6 +6992,405 @@
         "PCIDSS": "Req 5.4.2"
       },
       "LicenseRequirement": "Defender for Office 365 Plan 1 (M365 Business Premium)"
+    },
+    {
+      "ControlId": "TMS-5.1",
+      "Title": "External Unmanaged Teams Users Cannot Initiate Conversations",
+      "Description": "Unmanaged (personal or free) Teams accounts cannot search for users in the organization or start a chat or meeting with them: AllowTeamsConsumerInbound is False, communication with unmanaged accounts is off entirely, or the Global external access policy sets EnableTeamsConsumerInbound to False.",
+      "BusinessRisk": "Unmanaged Teams accounts take minutes to create and carry no accountability. Letting them start conversations hands phishing, malware delivery (DarkGate) and social engineering (Midnight Blizzard) a direct channel to staff outside email filtering.",
+      "Severity": "Medium",
+      "Workload": "TMS",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "Teams",
+      "EvaluatorFunction": "Test-TPControlTeamsConsumerInbound",
+      "Remediation": "Set-CsTenantFederationConfiguration -AllowTeamsConsumerInbound $false (or Set-CsExternalAccessPolicy -Identity Global -EnableTeamsConsumerInbound $false). Teams admin center > Users > External access: clear \"External users with Teams accounts not managed by an organization can contact users in my organization\".",
+      "References": {
+        "CISControls": [
+          "4.8"
+        ],
+        "CIS": "8.2.3",
+        "SCuBA": "",
+        "NIST": "AC-20, SC-7",
+        "CMMC": "AC.L1-3.1.20",
+        "MITRE": [
+          "T1566",
+          "T1534"
+        ],
+        "ISO27001": "A.5.14, A.8.22",
+        "SOC2": "CC6.6",
+        "HIPAA": "§164.312(e)(1)",
+        "PCIDSS": "Req 1.4"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "TMS-5.2",
+      "Title": "Communication With Trial-Only Teams Tenants Blocked",
+      "Description": "ExternalAccessWithTrialTenants is Blocked, so users in Teams tenants that hold only trial licenses cannot chat, call or meet with users in the organization (Microsoft's default).",
+      "BusinessRisk": "Trial tenants are free, short-lived and used for spam and phishing over Teams. Allowing them lets attackers reach staff from tenants with no purchased license and no accountability.",
+      "Severity": "Medium",
+      "Workload": "TMS",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "Teams",
+      "EvaluatorFunction": "Test-TPControlTeamsTrialTenants",
+      "Remediation": "Set-CsTenantFederationConfiguration -ExternalAccessWithTrialTenants Blocked (MicrosoftTeams module 6.4.0 or later). Add a needed trial domain to AllowedTrialTenantDomains instead of allowing every trial tenant.",
+      "References": {
+        "CISControls": [
+          "4.8"
+        ],
+        "CIS": "8.2.4",
+        "SCuBA": "",
+        "NIST": "AC-20, SC-7",
+        "CMMC": "AC.L1-3.1.20",
+        "MITRE": [
+          "T1566",
+          "T1534"
+        ],
+        "ISO27001": "A.5.14, A.8.22",
+        "SOC2": "CC6.6",
+        "HIPAA": "§164.312(e)(1)",
+        "PCIDSS": "Req 1.4"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "TMS-5.3",
+      "Title": "Only Organizers and Co-organizers Can Present",
+      "Description": "The Global meeting policy sets the default \"Who can present\" to only organizers and co-organizers (DesignatedPresenterRoleMode = OrganizerOnlyUserOverride); everyone else joins as an attendee unless the organizer changes it.",
+      "BusinessRisk": "When everyone joins as a presenter, any participant, including an external or anonymous one, can take over the screen and share malicious content, links or confidential material with the whole meeting.",
+      "Severity": "Low",
+      "Workload": "TMS",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "Teams",
+      "EvaluatorFunction": "Test-TPControlTeamsPresenterRole",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -DesignatedPresenterRoleMode OrganizerOnlyUserOverride. Teams admin center > Meetings > Meeting policies > Global > Who can present: Only organizers and co-organizers.",
+      "References": {
+        "CISControls": [
+          "6.8"
+        ],
+        "CIS": "8.5.6",
+        "SCuBA": "",
+        "NIST": "AC-3, AC-6",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1534"
+        ],
+        "ISO27001": "A.5.15, A.8.2",
+        "SOC2": "CC6.3",
+        "HIPAA": "§164.312(a)(1)",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "TMS-5.4",
+      "Title": "External Meeting Chat Disabled",
+      "Description": "Users cannot read or send chat in meetings hosted by organizations the tenant has no trusted relationship with (Global meeting policy AllowExternalNonTrustedMeetingChat = False).",
+      "BusinessRisk": "Chat in an untrusted organization's meeting carries links and files from unknown senders to staff outside email filtering, a route for phishing and malware.",
+      "Severity": "Medium",
+      "Workload": "TMS",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "Teams",
+      "EvaluatorFunction": "Test-TPControlTeamsExternalMeetingChat",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -AllowExternalNonTrustedMeetingChat $false. Teams admin center > Meetings > Meeting policies > Global > External meeting chat: Off.",
+      "References": {
+        "CISControls": [
+          "4.8"
+        ],
+        "CIS": "8.5.8",
+        "SCuBA": "",
+        "NIST": "AC-20, SC-7",
+        "CMMC": "AC.L1-3.1.20",
+        "MITRE": [
+          "T1566",
+          "T1534"
+        ],
+        "ISO27001": "A.5.14, A.8.22",
+        "SOC2": "CC6.6",
+        "HIPAA": "§164.312(e)(1)",
+        "PCIDSS": "Req 1.4"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "TMS-5.5",
+      "Title": "Meeting Recording Off by Default",
+      "Description": "Meeting recording is off in the Global meeting policy (AllowCloudRecording = False); users who need to record are assigned a separate meeting policy that allows it.",
+      "BusinessRisk": "Recordings capture confidential discussion, shared screens and personal information into stored files. Allowing every user to record by default spreads that content beyond the people who need it.",
+      "Severity": "Low",
+      "Workload": "TMS",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "Teams",
+      "EvaluatorFunction": "Test-TPControlTeamsCloudRecording",
+      "Remediation": "Set-CsTeamsMeetingPolicy -Identity Global -AllowCloudRecording $false, and grant a separate policy that allows recording to the users who need it.",
+      "References": {
+        "CISControls": [
+          "3.3"
+        ],
+        "CIS": "8.5.9",
+        "SCuBA": "",
+        "NIST": "AC-3, AC-6",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1123"
+        ],
+        "ISO27001": "A.5.15, A.8.2",
+        "SOC2": "CC6.3",
+        "HIPAA": "§164.312(a)(1)",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "TMS-5.6",
+      "Title": "Users Can Report Security Concerns in Teams",
+      "Description": "Users can report a suspicious Teams message (Global messaging policy AllowSecurityEndUserReporting = True), and the user reported settings keep reports in the organization: Teams reports go to the reporting mailbox only (ReportChatMessageEnabled = False, ReportChatMessageToCustomizedAddressEnabled = True) and junk, not-junk and phishing reports go to a named reporting mailbox.",
+      "BusinessRisk": "Without a reporting path, a malicious Teams message a user recognizes never reaches the security team, and reports sent only to Microsoft are not visible to the people who must respond.",
+      "Severity": "Medium",
+      "Workload": "TMS",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "Teams",
+      "EvaluatorFunction": "Test-TPControlTeamsSecurityReporting",
+      "Remediation": "Set-CsTeamsMessagingPolicy -Identity Global -AllowSecurityEndUserReporting $true; Set-ReportSubmissionPolicy -Identity DefaultReportSubmissionPolicy -ReportChatMessageEnabled $false -ReportChatMessageToCustomizedAddressEnabled $true -ReportJunkToCustomizedAddress $true -ReportNotJunkToCustomizedAddress $true -ReportPhishToCustomizedAddress $true -ReportJunkAddresses <mailbox> -ReportNotJunkAddresses <mailbox> -ReportPhishAddresses <mailbox> (and the report submission rule for the same mailbox).",
+      "References": {
+        "CISControls": [
+          "17.3"
+        ],
+        "CIS": "8.6.1",
+        "SCuBA": "",
+        "NIST": "IR-6, SI-4",
+        "CMMC": "IR.L2-3.6.2",
+        "MITRE": [
+          "T1566",
+          "T1534"
+        ],
+        "ISO27001": "A.6.8",
+        "SOC2": "CC7.3",
+        "HIPAA": "§164.308(a)(6)(ii)",
+        "PCIDSS": "Req 12.10.1"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.1",
+      "Title": "SharePoint Infected Files Cannot Be Downloaded",
+      "Description": "A file SharePoint, OneDrive or Teams has detected as infected cannot be downloaded from the Virus Found page (Set-SPOTenant DisallowInfectedFileDownload = True).",
+      "BusinessRisk": "By default users can still download a file detected as malicious, so a single click reintroduces malware the platform already caught onto an endpoint.",
+      "Severity": "Medium",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPOInfectedFileDownload",
+      "Remediation": "Set-SPOTenant -DisallowInfectedFileDownload $true",
+      "References": {
+        "CISControls": [
+          "10.1"
+        ],
+        "CIS": "7.3.1",
+        "SCuBA": "",
+        "NIST": "SI-3",
+        "CMMC": "SI.L1-3.14.2",
+        "MITRE": [
+          "T1204.002",
+          "T1105"
+        ],
+        "ISO27001": "A.8.7",
+        "SOC2": "CC6.8",
+        "HIPAA": "§164.308(a)(5)(ii)(B)",
+        "PCIDSS": "Req 5.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.2",
+      "Title": "SharePoint and OneDrive Integration With Entra B2B Enabled",
+      "Description": "Sharing a SharePoint or OneDrive file or folder with an external person creates a Microsoft Entra guest account (Set-SPOTenant EnableAzureADB2BIntegration = True), so Entra guest settings, access reviews and Conditional Access apply.",
+      "BusinessRisk": "Without the integration, files are shared through SharePoint's own one-time passcodes with no guest account, so external recipients sit outside Entra access policies, MFA and access reviews and are hard to audit.",
+      "Severity": "Medium",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPOB2BIntegration",
+      "Remediation": "Set-SPOTenant -EnableAzureADB2BIntegration $true",
+      "References": {
+        "CISControls": [
+          "6.7"
+        ],
+        "CIS": "7.2.2",
+        "SCuBA": "",
+        "NIST": "AC-2, AC-20",
+        "CMMC": "AC.L1-3.1.1",
+        "MITRE": [
+          "T1078.004"
+        ],
+        "ISO27001": "A.5.16, A.5.19",
+        "SOC2": "CC6.2",
+        "HIPAA": "§164.312(a)(1)",
+        "PCIDSS": "Req 8.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.3",
+      "Title": "OneDrive Content Sharing Restricted",
+      "Description": "OneDrive content can be shared only with people in the organization (OneDriveSharingCapability = Disabled), or SharePoint external sharing is off, which OneDrive cannot exceed.",
+      "BusinessRisk": "Open OneDrive sharing lets users send personal and work files to anyone outside the organization, often without the file owner noticing, through links that are hard to track.",
+      "Severity": "Medium",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPOOneDriveSharing",
+      "Remediation": "Set-SPOTenant -OneDriveSharingCapability Disabled. SharePoint admin center > Policies > Sharing > External sharing: set OneDrive to Only people in your organization; move external collaboration to governed SharePoint sites.",
+      "References": {
+        "CISControls": [
+          "3.3"
+        ],
+        "CIS": "7.2.4",
+        "SCuBA": "",
+        "NIST": "AC-3, AC-4",
+        "CMMC": "AC.L1-3.1.1",
+        "MITRE": [
+          "T1567.002",
+          "T1530"
+        ],
+        "ISO27001": "A.5.14, A.8.12",
+        "SOC2": "CC6.7",
+        "HIPAA": "§164.312(e)(1)",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.4",
+      "Title": "SharePoint Guests Cannot Share Items They Do Not Own",
+      "Description": "Guests cannot reshare files, folders or sites they do not own (Set-SPOTenant PreventExternalUsersFromResharing = True, read from Graph isResharingByExternalUsersEnabled = False).",
+      "BusinessRisk": "When guests can reshare, content reaches people its owner never chose, and the organization loses control of who outside it holds access.",
+      "Severity": "Medium",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPOGuestResharing",
+      "Remediation": "Set-SPOTenant -PreventExternalUsersFromResharing $true. SharePoint admin center > Policies > Sharing > More external sharing settings: clear \"Allow guests to share items they don't own\".",
+      "References": {
+        "CISControls": [
+          "3.3"
+        ],
+        "CIS": "7.2.5",
+        "SCuBA": "",
+        "NIST": "AC-3",
+        "CMMC": "AC.L1-3.1.1",
+        "MITRE": [
+          "T1213.002",
+          "T1530"
+        ],
+        "ISO27001": "A.5.14, A.5.15",
+        "SOC2": "CC6.2",
+        "HIPAA": "§164.312(a)(1)",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.5",
+      "Title": "SharePoint External Sharing Limited to Allowed Domains",
+      "Description": "External sharing in SharePoint and OneDrive is limited to an allow list naming at least one approved domain (SharingDomainRestrictionMode = AllowList), or external sharing is off.",
+      "BusinessRisk": "Without a domain allow list, a user can share content with any external domain, including one an attacker controls, an easy route for sending data out of the tenant.",
+      "Severity": "Medium",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPODomainAllowList",
+      "Remediation": "Set-SPOTenant -SharingDomainRestrictionMode AllowList -SharingAllowedDomainList \"partner1.com partner2.com\". SharePoint admin center > Policies > Sharing > More external sharing settings > Limit external sharing by domain > Allow only specific domains.",
+      "References": {
+        "CISControls": [
+          "3.3"
+        ],
+        "CIS": "7.2.6",
+        "SCuBA": "",
+        "NIST": "AC-4, SC-7",
+        "CMMC": "AC.L1-3.1.20",
+        "MITRE": [
+          "T1567.002",
+          "T1537"
+        ],
+        "ISO27001": "A.5.14, A.8.12",
+        "SOC2": "CC6.7",
+        "HIPAA": "§164.312(e)(1)",
+        "PCIDSS": "Req 1.4"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.6",
+      "Title": "SharePoint External Sharing Restricted by Security Group",
+      "Description": "Only members of named security groups can share SharePoint and OneDrive content externally, with authenticated guests only (Get-SPOTenant WhoCanShareAuthenticatedGuestAllowList names at least one group), or external sharing is off.",
+      "BusinessRisk": "When every user can share externally, one compromised account can send files to any outside address; limiting external sharing to a group keeps that right with the people who need it.",
+      "Severity": "Medium",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPOSharingGroups",
+      "Remediation": "SharePoint admin center > Policies > Sharing > More external sharing settings: select \"Allow only users in specific security groups to share externally\", add the security group, and keep \"Can share with\" at Authenticated guests only.",
+      "References": {
+        "CISControls": [
+          "6.8"
+        ],
+        "CIS": "7.2.8",
+        "SCuBA": "",
+        "NIST": "AC-3, AC-6",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1567.002",
+          "T1530"
+        ],
+        "ISO27001": "A.5.15, A.8.2",
+        "SOC2": "CC6.3",
+        "HIPAA": "§164.312(a)(1)",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
+    },
+    {
+      "ControlId": "SPO-5.7",
+      "Title": "SharePoint Default Sharing Link Permission Is View",
+      "Description": "Sharing links default to view-only (Set-SPOTenant DefaultLinkPermission = View), so a user must deliberately choose edit.",
+      "BusinessRisk": "With edit as the default, a link shared without changing the option lets every recipient change or delete the content, granting more access than the share usually needs.",
+      "Severity": "Low",
+      "Workload": "SPO",
+      "Category": "Collaboration",
+      "Automated": true,
+      "CollectorDependency": "SharePoint",
+      "EvaluatorFunction": "Test-TPControlSPODefaultLinkPermission",
+      "Remediation": "Set-SPOTenant -DefaultLinkPermission View. SharePoint admin center > Policies > Sharing > File and folder links: set the default permission to View.",
+      "References": {
+        "CISControls": [
+          "3.3"
+        ],
+        "CIS": "7.2.11",
+        "SCuBA": "",
+        "NIST": "AC-6",
+        "CMMC": "AC.L2-3.1.5",
+        "MITRE": [
+          "T1565.001"
+        ],
+        "ISO27001": "A.5.15, A.8.2",
+        "SOC2": "CC6.3",
+        "HIPAA": "§164.312(c)(1)",
+        "PCIDSS": "Req 7.2"
+      },
+      "LicenseRequirement": "Included (M365 Business Standard+)"
     }
   ]
 }

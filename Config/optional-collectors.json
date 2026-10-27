@@ -15,7 +15,12 @@
         "SPO-2.7": "",
         "SPO-3.2": "",
         "SPO-3.3": "",
-        "SPO-3.4": ""
+        "SPO-3.4": "",
+        "SPO-5.1": "",
+        "SPO-5.2": "",
+        "SPO-5.3": "only when SharePoint external sharing is enabled (OneDrive's own level is read from the shell); with SharePoint sharing off it is assessed from Graph",
+        "SPO-5.6": "only when SharePoint external sharing is enabled (the sharing security groups are read from the shell); with sharing off it is assessed from Graph",
+        "SPO-5.7": ""
       }
     }
   }

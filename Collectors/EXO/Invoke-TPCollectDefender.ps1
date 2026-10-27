@@ -242,6 +242,52 @@ function Invoke-TPCollectDefender {
             }
         }
 
+        # ── User reported settings (TMS-5.6, CIS 8.6.1) ──────────────────
+        # Get-ReportSubmissionPolicy holds where user-reported email and Teams
+        # messages go (Microsoft Learn, "User reported settings in Microsoft
+        # Teams" and Set-ReportSubmissionPolicy). Its own section: a refused or
+        # absent cmdlet leaves it unread (Available = $false, reason kept),
+        # never "not configured". A tenant that returns no policy is recorded
+        # as Exists = $false, which the evaluator reports. Pinned to Exchange
+        # Online, where Microsoft documents the cmdlet.
+        try {
+            $rspCmd = (Get-TPExoCommand -Name 'Get-ReportSubmissionPolicy' -Session ExchangeOnline).Command
+            if (-not $rspCmd) { throw 'Get-ReportSubmissionPolicy is not available in the Exchange Online session.' }
+            $rsp = @(& $rspCmd -ErrorAction Stop | Where-Object { $null -ne $_ }) | Select-Object -First 1
+            # A switch is True/False (bool, or the string form); anything else is not read ($null).
+            $rspBool = { param([string] $k)
+                $v = Get-TPObjectField -Item $rsp -Key $k -Default $null
+                if ($v -is [bool]) { $v } elseif ([string]$v -in @('True', 'False')) { [string]$v -eq 'True' } else { $null } }
+            # An address list: $null when the property was not returned, else the non-blank entries.
+            $rspList = { param([string] $k)
+                $present = if ($rsp -is [System.Collections.IDictionary]) { $rsp.Contains($k) } else { $null -ne $rsp.PSObject.Properties[$k] }
+                if (-not $present) { return $null }
+                ,@(@(Get-TPObjectField -Item $rsp -Key $k -Default @()) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ }) }
+            if ($null -eq $rsp) {
+                $result.Data['ReportSubmissionPolicy'] = @{ Available = $true; Exists = $false }
+            } else {
+                $result.Data['ReportSubmissionPolicy'] = @{
+                    Available                                   = $true
+                    Exists                                      = $true
+                    Identity                                    = [string](Get-TPObjectField -Item $rsp -Key 'Identity' -Default '')
+                    ReportJunkToCustomizedAddress               = (& $rspBool 'ReportJunkToCustomizedAddress')
+                    ReportNotJunkToCustomizedAddress            = (& $rspBool 'ReportNotJunkToCustomizedAddress')
+                    ReportPhishToCustomizedAddress              = (& $rspBool 'ReportPhishToCustomizedAddress')
+                    ReportJunkAddresses                         = (& $rspList 'ReportJunkAddresses')
+                    ReportNotJunkAddresses                      = (& $rspList 'ReportNotJunkAddresses')
+                    ReportPhishAddresses                        = (& $rspList 'ReportPhishAddresses')
+                    ReportChatMessageEnabled                    = (& $rspBool 'ReportChatMessageEnabled')
+                    ReportChatMessageToCustomizedAddressEnabled = (& $rspBool 'ReportChatMessageToCustomizedAddressEnabled')
+                    ReportChatMessageAddresses                  = (& $rspList 'ReportChatMessageAddresses')
+                }
+            }
+        } catch {
+            $result.Data['ReportSubmissionPolicy'] = @{ Available = $false; Error = $_.Exception.Message }
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                Register-TPException -Source 'Defender-ReportSubmissionPolicy' -Message $_.Exception.Message
+            }
+        }
+
         # ── Preset security policy rules ──────────────────────────────────
         # Standard / Strict presets are switched on and scoped by these rules
         # (EOP = anti-spam/anti-phish/anti-malware, ATP = Safe Links /

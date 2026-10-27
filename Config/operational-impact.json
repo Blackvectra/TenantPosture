@@ -451,7 +451,20 @@
     "DEF-6.1": "admin-review-workload",
     "DEF-6.2": "admin-review-workload",
     "DEF-6.3": "mail-flow-quarantine",
-    "DEF-6.4": "none-visible"
+    "DEF-6.4": "none-visible",
+    "TMS-5.1": "external-collab-friction",
+    "TMS-5.2": "external-collab-friction",
+    "TMS-5.3": "meeting-friction",
+    "TMS-5.4": "external-collab-friction",
+    "TMS-5.5": "meeting-friction",
+    "TMS-5.6": "admin-review-workload",
+    "SPO-5.1": "none-visible",
+    "SPO-5.2": "external-collab-friction",
+    "SPO-5.3": "sharing-restriction",
+    "SPO-5.4": "sharing-restriction",
+    "SPO-5.5": "sharing-restriction",
+    "SPO-5.6": "sharing-restriction",
+    "SPO-5.7": "sharing-restriction"
   },
   "deviceControls": {
     "DEV-1.1": "device-encryption",
@@ -690,6 +703,40 @@
     "DEF-6.4": {
       "Summary": "Teams chat messages later identified as malware or high confidence phishing are removed from the chat for everyone in it.",
       "Users": "Nothing, until a message is purged; then it is replaced by a notice that it was blocked. Quarantined Teams messages are available to administrators only."
+    },
+    "TMS-5.3": {
+      "Summary": "New meetings default to only the organizer and co-organizers presenting.",
+      "Users": "Attendees who expect to share their screen ask the organizer to make them a presenter; organizers can still change the default in meeting options.",
+      "Reversible": "Yes."
+    },
+    "TMS-5.5": {
+      "Summary": "Users on the Global meeting policy can no longer record meetings.",
+      "Watchouts": "Assign a policy that allows recording to the teams who rely on it (training, sales demos, compliance) before changing the Global policy.",
+      "Reversible": "Yes."
+    },
+    "TMS-5.6": {
+      "Admins": "Reported Teams messages and email land in the reporting mailbox; someone has to own and work that mailbox, including reports about colleagues that belong with HR.",
+      "Reversible": "Yes."
+    },
+    "SPO-5.1": {
+      "Users": "A file flagged as infected can no longer be downloaded from the Virus Found page; a false positive has to be released by an administrator.",
+      "Reversible": "Yes."
+    },
+    "SPO-5.2": {
+      "Summary": "Every external file share creates an Entra guest account, so guest invitation settings and Conditional Access apply.",
+      "Watchouts": "Entra external collaboration settings now decide who can share files with outsiders; check who may invite guests before turning it on.",
+      "Reversible": "Yes; shares made while it was on keep their guest accounts."
+    },
+    "SPO-5.5": {
+      "Watchouts": "Agree the partner domain list with the teams that share content first: sharing with any other domain stops until it is added."
+    },
+    "SPO-5.6": {
+      "Watchouts": "Users outside the named security groups can no longer share externally; populate the group with the people who share today before turning it on."
+    },
+    "SPO-5.7": {
+      "Summary": "New sharing links default to view only.",
+      "Users": "A user who wants a recipient to edit chooses Edit in the sharing dialog; existing links are unchanged.",
+      "Reversible": "Yes."
     }
   }
 }

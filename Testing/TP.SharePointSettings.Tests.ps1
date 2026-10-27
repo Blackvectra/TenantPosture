@@ -200,4 +200,88 @@ Describe 'SharePoint settings are read for the control that names them' {
             }
         }
     }
+
+    # CIS Microsoft 365 v7.0.0 SharePoint / OneDrive recommendations no earlier
+    # control read (SPO-5.x, Evaluators/Test-TPControlCollabCis.ps1).
+    Context 'CIS v7 SharePoint settings (SPO-5.1 .. SPO-5.7)' {
+        It 'SPO-5.1 (7.3.1) / SPO-5.2 (7.2.2): True passes, False is a Gap, no shell or not returned is not assessed' {
+            foreach ($p in @(@('Test-TPControlSPOInfectedFileDownload','SPO-5.1','DisallowInfectedFileDownload'), @('Test-TPControlSPOB2BIntegration','SPO-5.2','EnableAzureADB2BIntegration'))) {
+                (Run $p[0] $p[1] @{} @{ $p[2] = $true }).State  | Should -Be 'Satisfied' -Because $p[1]
+                (Run $p[0] $p[1] @{} @{ $p[2] = $false }).State | Should -Be 'Gap' -Because $p[1]
+                $f = Run $p[0] $p[1]
+                $f.State  | Should -Be 'NotApplicable'
+                $f.Detail | Should -Match '-IncludeSharePointShell'
+                $f = Run $p[0] $p[1] @{} @{ $p[2] = $null }
+                $f.State  | Should -Be 'NotApplicable'
+                $f.Detail | Should -Match ([regex]::Escape($p[2]))
+                @($f.FrameworkIds).Count | Should -BeGreaterThan 0
+            }
+        }
+        It 'SPO-5.3 (7.2.4): Disabled passes; guest-only levels are part-way; Anyone is a Gap; SharePoint sharing off passes from Graph alone' {
+            (Run 'Test-TPControlSPOOneDriveSharing' 'SPO-5.3' @{} @{ OneDriveSharingCapability = 'Disabled' }).State                        | Should -Be 'Satisfied'
+            (Run 'Test-TPControlSPOOneDriveSharing' 'SPO-5.3' @{} @{ OneDriveSharingCapability = 'ExistingExternalUserSharingOnly' }).State  | Should -Be 'Partial'
+            (Run 'Test-TPControlSPOOneDriveSharing' 'SPO-5.3' @{} @{ OneDriveSharingCapability = 'ExternalUserAndGuestSharing' }).State      | Should -Be 'Gap'
+            (Run 'Test-TPControlSPOOneDriveSharing' 'SPO-5.3' @{ SharingCapability = 'disabled' }).State | Should -Be 'Satisfied' -Because 'OneDrive cannot be more permissive than SharePoint'
+            (Run 'Test-TPControlSPOOneDriveSharing' 'SPO-5.3').State | Should -Be 'NotApplicable' -Because 'sharing on and the shell not connected'
+            (Run 'Test-TPControlSPOOneDriveSharing' 'SPO-5.3' @{} @{ OneDriveSharingCapability = $null }).State | Should -Be 'NotApplicable'
+        }
+        It 'SPO-5.4 (7.2.5): reads Graph isResharingByExternalUsersEnabled; not returned is not assessed, never a pass' {
+            (Run 'Test-TPControlSPOGuestResharing' 'SPO-5.4' @{ IsResharingByExternalUsersEnabled = $false }).State | Should -Be 'Satisfied'
+            (Run 'Test-TPControlSPOGuestResharing' 'SPO-5.4' @{ IsResharingByExternalUsersEnabled = $true }).State  | Should -Be 'Gap'
+            (Run 'Test-TPControlSPOGuestResharing' 'SPO-5.4' @{ IsResharingByExternalUsersEnabled = $null }).State  | Should -Be 'NotApplicable'
+        }
+        It 'SPO-5.5 (7.2.6): an allow list naming a domain passes, a block list or none is a Gap, an empty allow list is not assessed' {
+            (Run 'Test-TPControlSPODomainAllowList' 'SPO-5.5' @{ SharingDomainRestrictionMode = 'allowList'; SharingAllowedDomainList = @('partner.example') }).State | Should -Be 'Satisfied'
+            (Run 'Test-TPControlSPODomainAllowList' 'SPO-5.5' @{ SharingDomainRestrictionMode = 'blockList'; SharingBlockedDomainList = @('bad.example') }).State   | Should -Be 'Gap'
+            (Run 'Test-TPControlSPODomainAllowList' 'SPO-5.5' @{ SharingDomainRestrictionMode = 'none' }).State | Should -Be 'Gap'
+            (Run 'Test-TPControlSPODomainAllowList' 'SPO-5.5' @{ SharingDomainRestrictionMode = 'allowList'; SharingAllowedDomainList = @() }).State | Should -Be 'NotApplicable'
+            (Run 'Test-TPControlSPODomainAllowList' 'SPO-5.5' @{ SharingDomainRestrictionMode = '' }).State | Should -Be 'NotApplicable'
+            (Run 'Test-TPControlSPODomainAllowList' 'SPO-5.5' @{ SharingCapability = 'disabled'; SharingDomainRestrictionMode = 'none' }).State | Should -Be 'Satisfied'
+        }
+        It 'SPO-5.6 (7.2.8): a group sharing with authenticated guests passes; Anyone-only groups or none is a Gap' {
+            (Run 'Test-TPControlSPOSharingGroups' 'SPO-5.6' @{} @{ WhoCanShareAuthenticatedGuestAllowListCount = 1; WhoCanShareAnonymousAllowListCount = 0 }).State | Should -Be 'Satisfied'
+            $f = Run 'Test-TPControlSPOSharingGroups' 'SPO-5.6' @{} @{ WhoCanShareAuthenticatedGuestAllowListCount = 0; WhoCanShareAnonymousAllowListCount = 2 }
+            $f.State  | Should -Be 'Gap'
+            $f.Detail | Should -Match 'share with Anyone'
+            (Run 'Test-TPControlSPOSharingGroups' 'SPO-5.6' @{ SharingCapability = 'disabled' }).State | Should -Be 'Satisfied'
+            $f = Run 'Test-TPControlSPOSharingGroups' 'SPO-5.6' @{} @{ WhoCanShareAuthenticatedGuestAllowListCount = $null }
+            $f.State  | Should -Be 'NotApplicable'
+            $f.Detail | Should -Match 'WhoCanShareAuthenticatedGuestAllowList\b'
+        }
+        It 'SPO-5.7 (7.2.11): View passes, Edit is a Gap, anything else is not assessed' {
+            (Run 'Test-TPControlSPODefaultLinkPermission' 'SPO-5.7' @{} @{ DefaultLinkPermission = 'View' }).State | Should -Be 'Satisfied'
+            (Run 'Test-TPControlSPODefaultLinkPermission' 'SPO-5.7' @{} @{ DefaultLinkPermission = 'Edit' }).State | Should -Be 'Gap'
+            (Run 'Test-TPControlSPODefaultLinkPermission' 'SPO-5.7' @{} @{ DefaultLinkPermission = 'None' }).State | Should -Be 'NotApplicable'
+        }
+        It 'the collector reads the new shell values from Get-SPOTenant; an empty group list is 0 and an absent one is not read' {
+            $mod = Get-Module 'TenantPosture'
+            $origGraph = & $mod { ${function:Invoke-TPGraphRequest} }
+            & $mod {
+                Set-Item -Path 'function:script:Get-SPOTenant' -Value {
+                    # No WhoCanShareAnonymousAllowList: an older module.
+                    [pscustomobject]@{ DisallowInfectedFileDownload = $true; EnableAzureADB2BIntegration = $false; OneDriveSharingCapability = 'Disabled'
+                                       DefaultLinkPermission = 'Edit'; WhoCanShareAuthenticatedGuestAllowList = @() }
+                }
+                Set-Item -Path 'function:script:Invoke-TPGraphRequest' -Value { throw 'no Graph in this test' }
+            }
+            try {
+                Clear-TPState
+                Invoke-TPCollectSharePoint 3>$null | Out-Null
+                $sh = (Get-TPRawData -Key 'SharePoint').Data.TenantSettingsSPO
+                $sh['DisallowInfectedFileDownload'] | Should -BeExactly $true
+                $sh['EnableAzureADB2BIntegration']  | Should -BeExactly $false
+                $sh['OneDriveSharingCapability']    | Should -Be 'Disabled'
+                $sh['DefaultLinkPermission']        | Should -Be 'Edit'
+                $sh['WhoCanShareAuthenticatedGuestAllowListCount'] | Should -Be 0
+                $null -eq $sh['WhoCanShareAnonymousAllowListCount'] | Should -BeTrue -Because 'not returned is not read'
+                Test-TPControlSPOSharingGroups | Out-Null
+                @(Get-TPFindings | Where-Object ControlId -eq 'SPO-5.6')[0].State | Should -Be 'NotApplicable' -Because 'an empty group list with the sharing capability unread cannot tell sharing off from open'
+            } finally {
+                & $mod { param($o)
+                    Remove-Item -Path 'function:script:Get-SPOTenant' -ErrorAction SilentlyContinue
+                    Set-Item -Path 'function:script:Invoke-TPGraphRequest' -Value $o
+                } $origGraph
+            }
+        }
+    }
 }
