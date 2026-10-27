@@ -28,6 +28,47 @@
   an undocumented impact is "Plan after review", unlicensed items are "Needs a license decision", and a "Coming
   Microsoft changes" section is rendered from `Config/microsoft-changes.json` when that file exists. A partial run
   is refused. Four new suites: `TP.ReportTheme`, `TP.FleetDashboard`, `TP.RemediationProof`, `TP.OnboardingReport`.
+- **[Tooling] Warn when the PowerShell running the tool is out of support or about to be.**
+  `Get-TPPowerShellSupportStatus` reads `Config/powershell-lifecycle.json` (dates from Microsoft's PowerShell Support
+  Lifecycle page: 7.4 LTS and 7.5 end on 2026-11-10, 7.6 LTS runs to 2028-11-14) and the entry point, the
+  distribution-list scan, the installer and `Get-TPModuleHealth` print a warning within 90 days of the date, after it,
+  or on a preview build. A warning only; the run is never refused. Move to 7.6 (Exchange module 3.10.0 or later).
+- **[Docs] AAD-6.4 no longer states a November 2026 rollout date** for the agent blueprint setting: no official
+  Microsoft page gives one, only third-party summaries of a message-center post.
+- **[Accuracy] Seven ScubaGear v2.0.0 citations reviewed and added (2026-10-27).** Each was checked against the
+  policy's released text and its Rego check and against the evaluator's Satisfied states, and recorded with its
+  relation in `Config/scuba-alignment.json`: SPO-5.7 cites `MS.SHAREPOINT.2.2v1` (Equivalent: default sharing link
+  permission View, the setting ScubaGear reads; `MS.SHAREPOINT.3.2v1` audits Anyone-link permissions instead).
+  Partial: AAD-17.3 and AAD-17.5 both cite `MS.AAD.3.5v2` (SMS and voice call; email OTP); AAD-7.5 cites
+  `MS.AAD.6.1v1` (stricter: every verified domain, an unset value read as the 90-day default, which ScubaGear accepts);
+  EXO-10.1 cites `MS.EXO.6.2v1` (stricter than the rule, and ScubaGear's check also fails a disabled policy that still
+  names `*`); SPO-5.3 cites `MS.SHAREPOINT.1.2v1` (stricter: Existing guests is an NRG Partial); SPO-5.5 cites
+  `MS.SHAREPOINT.1.3v1` (the approved-domain half); and AAD-3.2 now cites `MS.AAD.7.4v1` (permanent active privileged
+  assignments, stricter and looser in named ways) in place of `MS.AAD.7.3v1`, which it never checked (AAD-10.2's rule).
+  `MS.EXO.6.1v1` (contacts) stays uncited. 90 of 253 controls cite SCuBA (25 Equivalent, 54 Partial, 3 Manual and 8
+  Unsupported citations), and on an all-satisfied run the BOD 25-01 view reads 17 met, 24 partly checked and 15 manual,
+  pinned in `TP.Bod2501.Tests.ps1`. No evaluator changed.
+
+- **[Report] CISA BOD 25-01 required-configurations view (`-BOD2501`, implied by `-AllFiles`).** For government
+  clients: `Config/bod-25-01-required.json` encodes the 56 Microsoft 365 policies CISA's BOD 25-01 Required
+  Configurations page lists (retrieved 2026-10-27, by policy ID; the released ScubaGear v2.0.0 baselines mark the same
+  56 as BOD 25-01 requirements), each with its SHALL statement and CISA's dates. `Get-TPBod2501View` joins each policy
+  to the controls that cite it and their recorded ScubaGear relation: `Tool-verified: met`, `Tool-verified:
+  shortfall`, `Partly checked` (naming what the tool does not check), `Not assessed`, `Manual evidence required` or
+  `Product not assessed by this tool`. With `-ScubaResultsPath` ScubaGear's own result sits beside each policy and a
+  disagreement is flagged `Results differ — review`. `Publish-TPBod2501View` writes Markdown and a self-contained
+  HTML page whose first page says it is a technical readiness view, not an attestation, that the directive binds
+  FCEB agencies and that ScubaGear's report is what CISA expects. A view: no finding and no score changes. On a run
+  with every control satisfied, 17 policies read met, 24 partly checked and 15 need manual evidence (after the
+  ScubaGear citations added below; 16, 18 and 22 before them).
+
+- **[Accuracy] ScubaGear alignment re-checked against the released v2.0.0 (2026-10-27).** `Config/scuba-alignment.json`
+  now records the v2.0.0 tag (commit `6e5a1a4`) and its migration file (SHA-256 `f53e082b…`, 56 rows: it adds
+  `MS.SHAREPOINT.3.3v1` to `v2` and corrects the range targets of `MS.DEFENDER.1.2v1` to `1.5v1`), with the
+  2026-09-30 check kept as `PreviousCheck`. The released text of every cited rule was compared with the earlier
+  commit: SPO-2.7 was reviewed against `MS.SHAREPOINT.3.3v2` (it judges the Existing guests case; Partial, stricter
+  at 15 days), PPL-1.1's strength is recorded as SHALL, and TMS-2.4's note records the new instruction to keep the
+  accepted SMTP domains list empty, which neither tool reads. No relation changed.
 
 - **[Assessment] Copilot Studio agent security (PPL-4.1 to PPL-4.10, 253 controls).** A new collector,
   `Collectors/PowerPlatform/Invoke-TPCollectCopilotStudio.ps1` (raw key `CopilotStudio`), reads the Dataverse `bot`,
@@ -94,7 +135,7 @@
   lifetime limits must cover service principals, SPO-1.2 needs the SharePoint shell, and Intune's default enrollment
   restriction (which allows personal devices) is now Partial or a Gap. No new Graph scope.
 - **[Controls] AAD-6.4: users cannot create agent identity blueprints (209 controls).** Microsoft Entra Agent ID lets any
-  user create agent identity blueprints by default from November 2026, and the app-registration restriction (AAD-6.1)
+  user create agent identity blueprints by default as the setting rolls out, and the app-registration restriction (AAD-6.1)
   does not cover them. AAD-6.4 reads `allowedToCreateAgentIdentityBlueprints` from the beta authorization policy: False
   passes, True is a Gap, and a tenant that does not return the setting yet is not assessed. No new Graph scope.
 - **[Controls] INT-2.6 judges Office macro hardening (208 controls).** The assigned Intune Settings Catalog Office policies

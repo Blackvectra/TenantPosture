@@ -32,6 +32,15 @@ Describe 'ScubaGear citations match the recorded alignment' {
         $script:Align.Source.MigrationFileSha256 | Should -Match '^[0-9a-f]{64}$'
         $script:Align.Source.CheckedOn | Should -Match '^\d{4}-\d{2}-\d{2}$'
     }
+    It 'records the released v2.0.0 migration file it was checked against (2026-10-27 release review)' {
+        $script:Align.Source.ToolTag | Should -Be 'v2.0.0'
+        $script:Align.Source.ToolTagCommit | Should -Be '6e5a1a421b36c5a1fb3fd983b8c4bcd5b7a6c61d'
+        $script:Align.Source.MigrationFileSha256 | Should -Be 'f53e082bd23db8800dc07f6a6ad5ca6721bee6e633e74c9cf728807c42a00b15'
+        $script:Align.Source.MigrationRows | Should -Be 56
+        $script:Align.Source.PreviousCheck.MigrationRows | Should -Be 55
+        # The released file corrected the MS.DEFENDER.1.2v1 to 1.5v1 range targets.
+        @($script:Align.Mappings | Where-Object { [string]$_.MigrationNewId -match '1\.4v[2-5]$' }) | Should -BeNullOrEmpty
+    }
     It 'every control that cites a ScubaGear rule has an alignment entry whose current id is the citation' {
         foreach ($k in $script:Cited.Keys) {
             $script:ByControl.ContainsKey($k) | Should -BeTrue -Because "$k cites $($script:Cited[$k]) with no recorded alignment"

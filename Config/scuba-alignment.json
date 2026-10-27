@@ -3,10 +3,21 @@
     "Tool": "CISA ScubaGear",
     "ToolVersion": "2.0.0",
     "ToolRepository": "https://github.com/cisagov/ScubaGear",
+    "ToolTag": "v2.0.0",
+    "ToolTagCommit": "6e5a1a421b36c5a1fb3fd983b8c4bcd5b7a6c61d",
+    "ToolTagCommitDate": "2026-10-22",
+    "ToolReleasedOn": "2026-10-27",
     "MigrationFile": "PowerShell/ScubaGear/mappings/scuba-baseline-policy-migrations.csv",
-    "MigrationFileSha256": "471085b4b3504fdd6b6fe33caa3fadd08934dae07db4374a8515c75b82805415",
-    "MigrationRows": 55,
-    "CheckedOn": "2026-09-30",
+    "MigrationFileSha256": "f53e082bd23db8800dc07f6a6ad5ca6721bee6e633e74c9cf728807c42a00b15",
+    "MigrationRows": 56,
+    "CheckedOn": "2026-10-27",
+    "ReleaseReview": "Re-checked against the released v2.0.0 tag. Its migration file adds one row to the 2026-09-30 copy (MS.SHAREPOINT.3.3v1 to v2: the rule now also applies when the external sharing slider is set to Existing guests) and corrects several old-id descriptions and the range targets of MS.DEFENDER.1.2v1 to 1.5v1 (now MS.SECURITYSUITE.1.1v1 - MS.SECURITYSUITE.1.4v1; the 2026-09-30 copy read 1.4v2 to 1.4v5), which this file records as MigrationNewId; no current id NRG cites changed. The released baseline text of every rule NRG cites was compared with the text at commit df84e9d: the changes are editorial (wording, punctuation, admin center navigation) except MS.SECURITYSUITE.5.2v1, whose statement changed from the OMB M-21-31 minimum to \"retained and searchable for a minimum of 3 months and retrievable for a minimum of 12 months\" (the recorded notes already judge that text), and MS.TEAMS.4.1v1, whose instructions now also ask that the accepted SMTP domains list stay empty (see TMS-2.4). The 109 current policy ids in the released baselines equal Config/framework-baselines/scuba-ids-v2.0.0.txt.",
+    "PreviousCheck": {
+      "CheckedOn": "2026-09-30",
+      "Commit": "df84e9d658ced4b8343ebd303c409b9e56c08f0f",
+      "MigrationFileSha256": "471085b4b3504fdd6b6fe33caa3fadd08934dae07db4374a8515c75b82805415",
+      "MigrationRows": 55
+    },
     "RuleVersions": "Rule ids carry their own version suffix (v1, v2, v3); the current id is the one ScubaGear 2.0.0 emits. Where the migration file maps an old id to a range or to None, the mapping below was decided per requirement against the NRG evaluator.",
     "ObsoleteIdsMappedToNone": [
       "MS.EXO.8.3v1",
@@ -195,10 +206,10 @@
       "CitedBefore": "MS.AAD.7.3v1",
       "CitedIdStatus": "current",
       "MigrationNewId": null,
-      "Current": "MS.AAD.7.3v1",
-      "Relation": "Unsupported",
+      "Current": "MS.AAD.7.4v1",
+      "Relation": "Partial",
       "RequirementStrength": "SHALL",
-      "Note": "MS.AAD.7.3 is cloud-only privileged accounts. AAD-3.2 is about permanent versus eligible assignments (PIM), a different requirement. Covered by AAD-10.2."
+      "Note": "Re-cited 2026-10-27: MS.AAD.7.3v1 (cloud-only privileged accounts, AAD-10.2's requirement) was removed and MS.AAD.7.4v1 cited, the rule AAD-3.2 judges: no permanent active assignment to a highly privileged role. ScubaGear's check fails a role holding any active assignment with no end date, unless the principal is listed as an exemption in its configuration file, and requires Entra ID P2. Stricter: Satisfied also needs at least one PIM-eligible assignment, and every active assignment that is not a PIM activation counts as permanent, a time-bound one included (end dates are not read). Looser: service principals are not judged; NRG's 17-role list omits Hybrid Identity Administrator, one of ScubaGear's eight highly privileged roles; and cloud-only Global Administrators excluded from Conditional Access are set aside as emergency access accounts (the exception the rule's note allows) by that inference, not by an approved list. PIM not licensed is not assessed."
     },
     {
       "Control": "AAD-3.5",
@@ -315,7 +326,7 @@
       "Title": "Safe Links Enabled and Hardened",
       "CitedBefore": "MS.DEFENDER.1.3v1",
       "CitedIdStatus": "migrated",
-      "MigrationNewId": "MS.SECURITYSUITE.1.1v1 - MS.SECURITYSUITE.1.4v3",
+      "MigrationNewId": "MS.SECURITYSUITE.1.1v1 - MS.SECURITYSUITE.1.4v1",
       "Current": "MS.SECURITYSUITE.7.1v1",
       "Relation": "Partial",
       "RequirementStrength": "SHOULD",
@@ -326,7 +337,7 @@
       "Title": "Spoof Intelligence Enabled",
       "CitedBefore": "MS.DEFENDER.1.3v1",
       "CitedIdStatus": "migrated",
-      "MigrationNewId": "MS.SECURITYSUITE.1.1v1 - MS.SECURITYSUITE.1.4v3",
+      "MigrationNewId": "MS.SECURITYSUITE.1.1v1 - MS.SECURITYSUITE.1.4v1",
       "Current": null,
       "Relation": "Unsupported",
       "RequirementStrength": "",
@@ -348,7 +359,7 @@
       "Title": "Zero-Hour Auto Purge Enabled",
       "CitedBefore": "MS.DEFENDER.1.2v1",
       "CitedIdStatus": "migrated",
-      "MigrationNewId": "MS.SECURITYSUITE.1.1v1 - MS.SECURITYSUITE.1.4v2",
+      "MigrationNewId": "MS.SECURITYSUITE.1.1v1 - MS.SECURITYSUITE.1.4v1",
       "Current": "MS.SECURITYSUITE.1.2v1",
       "Relation": "Partial",
       "RequirementStrength": "SHALL",
@@ -458,7 +469,7 @@
       "Title": "Safe Links Protects Office Applications",
       "CitedBefore": "MS.DEFENDER.1.3v1",
       "CitedIdStatus": "migrated",
-      "MigrationNewId": "MS.SECURITYSUITE.1.1v1 - MS.SECURITYSUITE.1.4v3",
+      "MigrationNewId": "MS.SECURITYSUITE.1.1v1 - MS.SECURITYSUITE.1.4v1",
       "Current": "MS.SECURITYSUITE.7.1v1",
       "Relation": "Partial",
       "RequirementStrength": "SHOULD",
@@ -623,7 +634,7 @@
       "Title": "Anti-Spam Inbound Policy Properly Configured",
       "CitedBefore": "MS.DEFENDER.1.2v1",
       "CitedIdStatus": "migrated",
-      "MigrationNewId": "MS.SECURITYSUITE.1.1v1 - MS.SECURITYSUITE.1.4v2",
+      "MigrationNewId": "MS.SECURITYSUITE.1.1v1 - MS.SECURITYSUITE.1.4v1",
       "Current": null,
       "Relation": "Unsupported",
       "RequirementStrength": "",
@@ -736,8 +747,8 @@
       "MigrationNewId": null,
       "Current": "MS.POWERPLATFORM.3.1v1",
       "Relation": "Equivalent",
-      "RequirementStrength": "",
-      "Note": "Tenant isolation enabled. (The ScubaGear run reported this rule as \"test results missing\".)"
+      "RequirementStrength": "SHALL",
+      "Note": "Tenant isolation enabled. The released v2.0.0 baseline marks the rule SHALL (last modified April 2026) and CISA lists it as a BOD 25-01 required configuration. (The 2026-09-30 ScubaGear run reported this rule as \"test results missing\".)"
     },
     {
       "Control": "PPL-1.2",
@@ -875,12 +886,12 @@
       "Control": "SPO-2.7",
       "Title": "Reauthentication Required for Sharing Links",
       "CitedBefore": "MS.SHAREPOINT.3.3v1",
-      "CitedIdStatus": "unknown",
-      "MigrationNewId": null,
+      "CitedIdStatus": "migrated",
+      "MigrationNewId": "MS.SHAREPOINT.3.3v2",
       "Current": "MS.SHAREPOINT.3.3v2",
       "Relation": "Partial",
       "RequirementStrength": "SHALL",
-      "Note": "Rule renumbered to v2 (verification-code reauthentication 30 days or less); NRG checks reauthentication for sharing links, review against the v2 text."
+      "Note": "Checked 2026-10-27 against the released v2 text (\"Reauthentication days for people who use a verification code SHALL be set to 30 days or less\"; v2 also applies when the sharing slider is Existing guests). SPO-2.7 reads the verification-code reauthentication setting (EmailAttestationRequired and EmailAttestationReAuthDays, SharePoint shell) and judges it for every sharing level except \"Only people in your organization\", so the Existing guests case is judged. Stricter than the rule: Satisfied needs 15 days or fewer (CIS 7.2.10), so every NRG pass meets v2, while 16 to 30 days is an NRG Partial that meets v2. Not assessed without the SharePoint shell."
     },
     {
       "Control": "TMS-1.1",
@@ -924,7 +935,7 @@
       "Current": "MS.TEAMS.4.1v1",
       "Relation": "Equivalent",
       "RequirementStrength": "SHALL",
-      "Note": "Teams email integration disabled."
+      "Note": "Teams email integration disabled (AllowEmailIntoChannel = False), the setting ScubaGear's automated check reads. The v2.0.0 implementation steps also ask that the \"Accept channel email from these SMTP domains\" list stay empty; neither ScubaGear's check nor NRG reads that list, a list that limits which domains may send to a channel and so matters only while email into channels is allowed."
     },
     {
       "Control": "TMS-2.7",
@@ -1013,6 +1024,83 @@
       "Relation": "Equivalent",
       "RequirementStrength": "SHOULD",
       "Note": "Added 2026-10-26: Satisfied requires the enabled default application management policy to restrict passwordLifetime to 180 days or less with no exempted actors or created-after date, which is 5.6. It also restricts asymmetricKeyLifetime to 180 days, stricter than MS.AAD.5.7v1's 365, which is met but not cited (one ScubaGear rule per control)."
+    },
+    {
+      "Control": "AAD-17.3",
+      "Title": "SMS and Voice Call Authentication Methods Disabled",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.AAD.3.5v2",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. The v2 rule requires SMS, voice call and email OTP disabled; ScubaGear reads the Sms, Voice and Email method states in the authentication methods policy. AAD-17.3 judges the same policy's Sms and Voice states (Satisfied only when both read disabled); Email OTP is AAD-17.5's half, so each control covers part of the rule."
+    },
+    {
+      "Control": "AAD-17.5",
+      "Title": "Email OTP Authentication Method Disabled",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.AAD.3.5v2",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. Covers the email OTP third of the v2 rule (Email method state disabled in the authentication methods policy, the setting ScubaGear reads); SMS and voice call are AAD-17.3's part."
+    },
+    {
+      "Control": "AAD-7.5",
+      "Title": "Passwords Set to Never Expire",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.AAD.6.1v1",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. Both read each domain's passwordValidityPeriodInDays. Stricter than ScubaGear's check, so every NRG pass meets the rule: NRG requires 2147483647 on every verified domain, federated and subdomains included, and reads an unset value as Microsoft's 90-day default (a shortfall), while ScubaGear judges managed verified domains only, takes a subdomain's value from its root, and accepts an unset value (null) as never expiring, which its v2.0.0 instructions say Microsoft treats as never expire for tenants created after October 2021. A tenant whose domains read null therefore passes ScubaGear and is an NRG shortfall: report both."
+    },
+    {
+      "Control": "EXO-10.1",
+      "Title": "External Calendar Sharing Not Available",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.EXO.6.2v1",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. Stricter than the rule, which lets calendar details be shared with specific domains: Satisfied needs the default sharing policy disabled outright and no other enabled sharing policy sharing calendars with every domain (*) or anonymously, so every pass meets the rule. It differs from ScubaGear's automated check, which fails any sharing policy whose domain entries name * with a calendar action whether or not the policy is enabled: a disabled default policy that still lists *:CalendarSharingFreeBusySimple is an NRG pass and a ScubaGear failure. Contacts sharing (MS.EXO.6.1v1) is not checked by any NRG control."
+    },
+    {
+      "Control": "SPO-5.3",
+      "Title": "OneDrive Content Sharing Restricted",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.SHAREPOINT.1.2v1",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. Same setting (OneDriveSharingCapability). Stricter: Satisfied needs Only people in your organization (Disabled, or SharePoint external sharing off, which OneDrive cannot exceed), while the rule also accepts Existing guests, which NRG scores Partial (CIS 7.2.4). Every NRG pass meets the rule. Not assessed without the SharePoint shell unless SharePoint sharing is off."
+    },
+    {
+      "Control": "SPO-5.5",
+      "Title": "SharePoint External Sharing Limited to Allowed Domains",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.SHAREPOINT.1.3v1",
+      "Relation": "Partial",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. Covers the approved-domain half, the setting ScubaGear's automated check reads (sharing domain restriction mode set to the allow list, not applicable when sharing is limited to the organization). Stricter: the allow list must name at least one domain. The rule's approved-security-group alternative is not credited here (SPO-5.6 reads the security group allow list, and ScubaGear does not check it), so a tenant restricting sharing by security group alone is an NRG Gap."
+    },
+    {
+      "Control": "SPO-5.7",
+      "Title": "SharePoint Default Sharing Link Permission Is View",
+      "CitedBefore": null,
+      "CitedIdStatus": "added",
+      "MigrationNewId": null,
+      "Current": "MS.SHAREPOINT.2.2v1",
+      "Relation": "Equivalent",
+      "RequirementStrength": "SHALL",
+      "Note": "Added 2026-10-27. Default sharing link permission View (DefaultLinkPermission, the setting ScubaGear reads). Needs the SharePoint shell. MS.SHAREPOINT.3.2v1 (the permissions Anyone links may grant, FileAnonymousLinkType and FolderAnonymousLinkType) is a different setting and is not checked."
     }
   ]
 }

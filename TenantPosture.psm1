@@ -195,6 +195,7 @@ $script:ExportedFunctions = @(
     'Get-TPControlOperationalImpact', 'Publish-TPSSP', 'Group-TPSSPImpact', 'Get-TPSSPImpactLabel',
     'Get-TPSSPQuestionnaireItems', 'Publish-TPSSPQuestionnaire', 'Read-TPQuestionnaireFields',
     'Get-TPHipaaReadiness', 'Get-TPHipaaCatalog', 'Get-TPHipaaCitationsFromText', 'Publish-TPHipaaReadiness',
+    'Get-TPBod2501View', 'Get-TPBod2501Catalog', 'Publish-TPBod2501View',
     'ConvertTo-TPSSPClientSlug', 'ConvertTo-TPSSPAnswerPsd1', 'ConvertTo-TPSSPPsd1String',
     'Get-TPManualReviewItems', 'Get-TPManualReviewAnswers',
     'ConvertTo-TPManualReviewAnswerPsd1', 'Publish-TPManualReviewQuestionnaire',
@@ -235,7 +236,7 @@ $script:ExportedFunctions = @(
     'Get-TPReportTheme', 'Read-TPRunRecord', 'Get-TPRunRecordTime', 'Get-TPFleetModel', 'Publish-TPFleetDashboard', 'Get-TPRemediationProof', 'Publish-TPRemediationProof', 'Get-TPOnboardingModel', 'Publish-TPOnboardingReport',
     'Get-TPModuleHealth',
     'Repair-TPModuleHealth',
-    'Get-TPModuleInstallScope', 'Get-TPExoModuleFloor', 'Get-TPExoPreflightNotes', 'Get-TPCloudFileHint', 'Get-TPMsalConflictHint', 'Get-TPGapSummary', 'Format-TPGapSummary', 'Get-TPControlViewMap', 'Get-TPEvidenceLimitMap', 'Get-TPEvidenceLimitNote', 'Get-TPEvidenceLimitMd', 'Test-TPSafeModuleVersionPath', 'Get-TPConnectErrorText', 'Get-TPExoConnectHint',
+    'Get-TPModuleInstallScope', 'Get-TPExoModuleFloor', 'Get-TPExoPreflightNotes', 'Get-TPPowerShellSupportStatus', 'Get-TPCloudFileHint', 'Get-TPMsalConflictHint', 'Get-TPGapSummary', 'Format-TPGapSummary', 'Get-TPControlViewMap', 'Get-TPEvidenceLimitMap', 'Get-TPEvidenceLimitNote', 'Get-TPEvidenceLimitMd', 'Test-TPSafeModuleVersionPath', 'Get-TPConnectErrorText', 'Get-TPExoConnectHint',
     'Get-TPControlAutomationAudit',
     # ── Distribution-list scan, the -DistributionListsOnly mode: read-only and Exchange Online only ──
     'Invoke-TPCollectDistributionLists', 'Test-TPDistributionLists', 'Get-TPDistributionListBaseline', 'Get-TPDistributionListStandards',

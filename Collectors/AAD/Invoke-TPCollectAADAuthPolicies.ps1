@@ -141,8 +141,9 @@ function Invoke-TPCollectAADAuthPolicies {
         # Whether ordinary users can create agent identity blueprints (AAD-6.4). The
         # setting ("Users can create agent blueprints", Entra ID > Users > User settings)
         # is defaultUserRolePermissions.allowedToCreateAgentIdentityBlueprints, returned
-        # only by the beta authorization policy and on by default from Microsoft's
-        # November 2026 rollout. A tenant that does not return it yet is $null, never a
+        # only by the beta authorization policy and on by default as Microsoft rolls it
+        # out (no official Microsoft page states a date; third-party summaries of a
+        # message-center post do, and are not a source). A tenant that does not return it yet is $null, never a
         # value: the evaluator reports it not assessed. Same scope (Policy.Read.All).
         # https://learn.microsoft.com/entra/identity/role-based-access-control/delegate-app-roles#restrict-who-can-create-applications-and-agents
         try {
