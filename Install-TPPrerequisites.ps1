@@ -299,6 +299,8 @@ if ($scopeInfo.UserPathIsSynced) {
 Write-Host ""
 
 $psVer    = $PSVersionTable.PSVersion
+$psSupport = Get-TPPowerShellSupportStatus
+if ($psSupport.Level -eq 'Warning') { Write-Host "  [!] $($psSupport.Text)" -ForegroundColor Yellow }
 $exoFloor = Get-TPExoModuleFloor
 if (-not $exoFloor.Supported) {
     Write-Host "  [!] $($exoFloor.Reason)" -ForegroundColor Red

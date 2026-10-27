@@ -132,9 +132,17 @@ function Get-TPModuleHealth {
             Sort-Object -Unique)
     } catch { $msalLoaded = @() }
 
+    # PowerShell's own support lifecycle beside the module state: an out-of-support shell gets no
+    # security updates and is never a conflict risk, so it is reported, not counted in HasConflictRisk.
+    $psSupport = $null
+    if (Get-Command Get-TPPowerShellSupportStatus -ErrorAction SilentlyContinue) {
+        try { $psSupport = Get-TPPowerShellSupportStatus } catch { $psSupport = $null }
+    }
+
     [ordered]@{
         Modules            = @($modules)
         LoadedMsalVersions = @($msalLoaded)
         HasConflictRisk    = $anyRisk
+        PowerShellSupport  = $psSupport
     }
 }

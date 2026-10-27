@@ -234,7 +234,7 @@ $script:ExportedFunctions = @(
     'Get-TPBaselineTenantComparison', 'Publish-TPBaselineTenantComparison',
     'Get-TPModuleHealth',
     'Repair-TPModuleHealth',
-    'Get-TPModuleInstallScope', 'Get-TPExoModuleFloor', 'Get-TPExoPreflightNotes', 'Get-TPCloudFileHint', 'Get-TPMsalConflictHint', 'Get-TPGapSummary', 'Format-TPGapSummary', 'Get-TPControlViewMap', 'Get-TPEvidenceLimitMap', 'Get-TPEvidenceLimitNote', 'Get-TPEvidenceLimitMd', 'Test-TPSafeModuleVersionPath', 'Get-TPConnectErrorText', 'Get-TPExoConnectHint',
+    'Get-TPModuleInstallScope', 'Get-TPExoModuleFloor', 'Get-TPExoPreflightNotes', 'Get-TPPowerShellSupportStatus', 'Get-TPCloudFileHint', 'Get-TPMsalConflictHint', 'Get-TPGapSummary', 'Format-TPGapSummary', 'Get-TPControlViewMap', 'Get-TPEvidenceLimitMap', 'Get-TPEvidenceLimitNote', 'Get-TPEvidenceLimitMd', 'Test-TPSafeModuleVersionPath', 'Get-TPConnectErrorText', 'Get-TPExoConnectHint',
     'Get-TPControlAutomationAudit',
     # ── Distribution-list scan, the -DistributionListsOnly mode: read-only and Exchange Online only ──
     'Invoke-TPCollectDistributionLists', 'Test-TPDistributionLists', 'Get-TPDistributionListBaseline', 'Get-TPDistributionListStandards',

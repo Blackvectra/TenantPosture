@@ -140,3 +140,67 @@ function Get-TPExoPreflightNotes {
     }
     return @($notes)
 }
+
+# Is the PowerShell running the tool still supported by Microsoft? The dates come from
+# Config/powershell-lifecycle.json, copied from Microsoft's PowerShell Support Lifecycle page
+# (7.4 LTS and 7.5 end on 2026-11-10; 7.6 LTS runs to 2028-11-14). An operator on an
+# out-of-support release gets no security updates for the shell that holds tenant tokens,
+# and the Exchange module's floor rises with PowerShell (Get-TPExoModuleFloor), so this is a
+# warning, never a refusal: the run still works. A release line not in the file (a preview,
+# or a release newer than the file) is reported as unknown, never as supported.
+function Get-TPPowerShellSupportStatus {
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param(
+        # A string or version object: $PSVersionTable.PSVersion is a SemanticVersion, which
+        # a [version] parameter cannot bind when it carries a preview label.
+        [object] $PSVersion = $PSVersionTable.PSVersion,
+        [datetime] $AsOf = [datetime]::UtcNow,
+        [string] $Path
+    )
+    if (-not $Path) { $Path = Join-Path (Split-Path -Parent $PSScriptRoot) 'Config' 'powershell-lifecycle.json' }
+    $text = [string]$PSVersion
+    $PreReleaseLabel = $null
+    if ($text -match '\A(\d+)\.(\d+)(?:\.\d+)?(?:-([0-9A-Za-z.]+))?') { $line = '{0}.{1}' -f $Matches[1], $Matches[2]; $PreReleaseLabel = $Matches[3] }
+    else { $line = $text }
+    $PSVersion = ($text -split '-', 2)[0]
+    $result = [ordered]@{ Version = [string]$PSVersion; Line = $line; EndOfSupport = $null; State = 'Unknown'; Level = 'None'; Text = ''; Source = $null }
+    $catalog = $null
+    try { $catalog = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop } catch {
+        $result.Text = "PowerShell $PSVersion support status was not checked: the lifecycle file could not be read."
+        return $result
+    }
+    $result.Source = [string]$catalog.source
+    $upgrade = 'Install the current LTS release: winget install --id Microsoft.PowerShell --source winget'
+    if (-not [string]::IsNullOrWhiteSpace($PreReleaseLabel)) {
+        $result.State = 'Preview'; $result.Level = 'Warning'
+        $result.Text  = "PowerShell $PSVersion-$PreReleaseLabel is a preview release; Microsoft does not support previews in production. $upgrade"
+        return $result
+    }
+    $entry = @($catalog.releases | Where-Object { [string]$_.Line -eq $line }) | Select-Object -First 1
+    if (-not $entry) {
+        $result.Text = "PowerShell $PSVersion is not in the tool's lifecycle list ($($catalog.sourceRetrieved)); its support status was not checked."
+        return $result
+    }
+    $eos = [datetime]::MinValue
+    if (-not [datetime]::TryParseExact([string]$entry.EndOfSupport, 'yyyy-MM-dd', [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal, [ref]$eos)) {
+        $result.Text = "PowerShell $PSVersion support status was not checked: the lifecycle file's date for $line is not a date."
+        return $result
+    }
+    $result.EndOfSupport = $eos.ToString('yyyy-MM-dd')
+    $warnDays = 90
+    if ($catalog.PSObject.Properties['warnDays'] -and [int]::TryParse([string]$catalog.warnDays, [ref]$null)) { $warnDays = [int]$catalog.warnDays }
+    # Support ends at the end of the stated day; compare dates, not instants.
+    $today = $AsOf.ToUniversalTime().Date
+    if ($today -gt $eos.Date) {
+        $result.State = 'EndOfSupport'; $result.Level = 'Warning'
+        $result.Text  = "PowerShell $line reached end of support on $($result.EndOfSupport) and no longer receives security updates. $upgrade"
+    } elseif (($eos.Date - $today).TotalDays -le $warnDays) {
+        $result.State = 'EndingSoon'; $result.Level = 'Warning'
+        $result.Text  = "PowerShell $line reaches end of support on $($result.EndOfSupport) ($([int]($eos.Date - $today).TotalDays) days). Move to the current LTS before then; on 7.6 the Exchange module floor is 3.10.0. $upgrade"
+    } else {
+        $result.State = 'Supported'
+        $result.Text  = "PowerShell $line is supported until $($result.EndOfSupport)."
+    }
+    return $result
+}
