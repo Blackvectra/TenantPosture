@@ -29,7 +29,8 @@ Describe 'Evaluators tightened to CIS Microsoft 365 Foundations v7.0.0' {
         It '<Cid> cites CIS <Rec>' -TestCases @(
             @{ Cid = 'DEF-1.5'; Rec = '2.1.7' }, @{ Cid = 'AAD-12.1'; Rec = '5.2.3.4' }, @{ Cid = 'EXO-1.4'; Rec = '2.1.9' },
             @{ Cid = 'SPO-1.4'; Rec = '7.2.9' }, @{ Cid = 'SPO-3.4'; Rec = '7.2.9' }, @{ Cid = 'SPO-2.6'; Rec = '7.2.10' },
-            @{ Cid = 'SPO-2.7'; Rec = '7.2.10' }, @{ Cid = 'PVW-1.3'; Rec = '3.2.1' }, @{ Cid = 'AAD-3.1'; Rec = '1.1.3' }) {
+            @{ Cid = 'SPO-2.7'; Rec = '7.2.10' }, @{ Cid = 'PVW-1.3'; Rec = '3.2.1' }, @{ Cid = 'AAD-3.1'; Rec = '1.1.3' },
+            @{ Cid = 'AAD-1.3'; Rec = '5.2.2.5' }, @{ Cid = 'AAD-10.2'; Rec = '1.1.1' }, @{ Cid = 'AAD-14.1'; Rec = '5.1.5.4' }) {
             param($Cid, $Rec)
             ($script:Controls | Where-Object ControlId -eq $Cid).References.CIS | Should -Be $Rec
         }
@@ -171,5 +172,69 @@ Describe 'Evaluators tightened to CIS Microsoft 365 Foundations v7.0.0' {
         It 'an enforced policy whose workloads were not recorded is not assessed' {
             (Dlp @(@{ Name = 'Old'; Enabled = $true; Mode = 'Enable' })).State | Should -Be 'NotApplicable'
         }
+    }
+    # AAD-1.3 (5.2.2.5): an enabled policy naming every one of the 15 administrator
+    # roles CIS lists (Maester's CIS v7.0.0 check uses the same list), all resources,
+    # no narrowing condition, the phishing-resistant strength alone. AAD-10.2 (1.1.1)
+    # and AAD-14.1 (5.1.5.4) are pinned through the real collectors in
+    # TP.IdentityTruth.Tests.ps1.
+    Context 'AAD-1.3 names every administrator role CIS 5.2.2.5 lists' {
+        BeforeAll {
+            $script:Cis = @(& (Get-Module TenantPosture) { @($script:TPCis5225AdminRoles.Keys) })
+            $script:PwAdmin = '966707d0-3269-4727-9be2-8c3a10f19b9d'
+            $script:GReader = 'f2ef992c-3afb-46b9-b7cf-a126ee74c451'
+            function script:Pol {
+                param([string[]] $Users = @(), [string[]] $Roles = $script:Cis, [string[]] $ExRoles = @(), [string[]] $ClientApps = @('all'),
+                      [string[]] $Grant = @(), [object[]] $AuthFlows = @(), [string[]] $SignInRisk = @(), [string] $Operator = 'OR')
+                @{ DisplayName = 'Admins: phishing-resistant'; State = 'enabled'
+                   Conditions = @{ ClientAppTypes = $ClientApps; SignInRiskLevels = $SignInRisk; UserRiskLevels = @(); AuthFlows = $AuthFlows; Platforms = @(); ExcludePlatforms = @()
+                       Locations = @{ Include = @(); Exclude = @() }
+                       Users = @{ IncludeUsers = $Users; ExcludeUsers = @(); IncludeGroups = @(); ExcludeGroups = @(); IncludeRoles = $Roles; ExcludeRoles = $ExRoles }
+                       Applications = @{ Include = @('All'); Exclude = @(); UserActions = @() }
+                       Devices = @{ FilterMode = ''; FilterRule = '' } }
+                   GrantControls = @{ Operator = $Operator; BuiltInControls = $Grant; CustomControls = @(); TermsOfUse = @(); AuthStrengthId = '00000000-0000-0000-0000-000000000004'; AuthStrengthName = 'Phishing-resistant MFA' } }
+            }
+            function script:Run13([object[]] $Policies) {
+                Clear-TPState
+                Set-TPRawData -Key 'AAD-AuthPolicies' -Data (Bag @{ SecurityDefaults = @{ IsEnabled = $false } })
+                Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{ RoleDefinitions = @(@{ Id = '62e90394-69f5-4237-9190-012177145e10'; DisplayName = 'Global Administrator'; IsPriv = $true }) })
+                Set-TPRawData -Key 'AAD-CAPolicies' -Data (Bag @{ Policies = $Policies })
+                Verdict 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3'
+            }
+        }
+        It 'the role set is the 15 roles 5.2.2.5 lists, Global Reader and Password Administrator included' {
+            $script:Cis.Count | Should -Be 15
+            $script:Cis | Should -Contain $script:PwAdmin
+            $script:Cis | Should -Contain $script:GReader
+        }
+        It 'a policy naming all 15 roles passes' { (Run13 @(Pol)).State | Should -Be 'Satisfied' }
+        It 'a policy leaving out Password Administrator does not pass, and names it' {
+            $f = Run13 @(Pol -Roles @($script:Cis | Where-Object { $_ -ne $script:PwAdmin }))
+            $f.State | Should -Not -Be 'Satisfied'; $f.Detail | Should -Match 'Password Administrator'
+        }
+        It 'a policy including and then excluding Global Reader does not pass' {
+            $f = Run13 @(Pol -ExRoles @($script:GReader))
+            $f.State | Should -Not -Be 'Satisfied'; $f.Detail | Should -Match 'Global Reader'
+        }
+        It 'an All users policy alone is credited for coverage but is Partial, since the audit looks for the roles' {
+            $f = Run13 @(Pol -Users @('All') -Roles @())
+            $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'does not pass that recommendation'
+        }
+        It 'an All users policy beside one naming the 15 roles passes' {
+            (Run13 @((Pol -Users @('All') -Roles @()), (Pol))).State | Should -Be 'Satisfied'
+        }
+        It 'a policy limited to the modern client app types is a narrowing condition 5.2.2.5 does not accept' {
+            (Run13 @(Pol -ClientApps @('browser', 'mobileAppsAndDesktopClients'))).State | Should -Not -Be 'Satisfied'
+        }
+        It 'an authentication-flow condition does not pass' {
+            $f = Run13 @(Pol -AuthFlows @(@{ transferMethods = 'deviceCodeFlow' }))
+            $f.State | Should -Not -Be 'Satisfied'; $f.Detail | Should -Match 'authentication flows'
+        }
+        It 'a sign-in risk condition does not pass' { (Run13 @(Pol -SignInRisk @('high'))).State | Should -Not -Be 'Satisfied' }
+        It 'block combined with the strength does not pass' {
+            $f = Run13 @(Pol -Grant @('block') -Operator 'AND')
+            $f.State | Should -Not -Be 'Satisfied'; $f.Detail | Should -Match 'blocks access'
+        }
+        It 'the strength offered as an alternative to MFA (OR) does not pass' { (Run13 @(Pol -Grant @('mfa') -Operator 'OR')).State | Should -Not -Be 'Satisfied' }
     }
 }

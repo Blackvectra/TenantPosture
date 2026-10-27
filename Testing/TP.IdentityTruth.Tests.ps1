@@ -242,7 +242,10 @@ Describe 'Identity controls report what the tenant is configured to do' {
         It 'AAD-11.2 / 10.2: an ELIGIBLE guest or synced Global Administrator counts' {
             Clear-TPState
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{ RoleAssignments = @((Asg 'a' 'A' 'a@x.com')); PrivRoles = @((Asg 'a' 'A' 'a@x.com'))
-                AllPrivilegedAssignments = @((Asg 'g' 'Guest' 'g_msp.com#EXT#@x.onmicrosoft.com'), (Asg 'b' 'Bob' 'bob@x.com' $true)); SectionStatus = @{ RoleAssignments = 'Collected' } })
+                AllPrivilegedAssignments = @((Asg 'g' 'Guest' 'g_msp.com#EXT#@x.onmicrosoft.com'), (Asg 'b' 'Bob' 'bob@x.com' $true))
+                RoleEligibilitySchedules = @((Asg 'g' 'Guest' 'g_msp.com#EXT#@x.onmicrosoft.com'), (Asg 'b' 'Bob' 'bob@x.com' $true))
+                RoleDefinitions = @(@{ Id = $script:GA; DisplayName = 'Global Administrator'; IsPriv = $true })
+                SectionStatus = @{ RoleAssignments = 'Collected'; RoleEligibilitySchedules = 'Collected' } })
             (V 'Test-TPControlAADNoGuestInPrivRoles' 'AAD-11.2').State | Should -Be 'Gap'
             (V 'Test-TPControlAADPrivCloudOnly' 'AAD-10.2').State      | Should -Be 'Gap'
         }
@@ -1773,6 +1776,83 @@ Describe 'Benchmark gap fixes (AAD)' {
         }
     }
 
+    # AAD-10.2 (CIS 1.1.1): every role whose catalog name contains "Administrator",
+    # plus Global Reader, judged on onPremisesSyncEnabled, through the real collector.
+    Context 'AAD-10.2 cloud-only administrators (real roles collector, CIS 1.1.1)' {
+        BeforeAll {
+            $script:GR  = 'f2ef992c-3afb-46b9-b7cf-a126ee74c451'
+            $script:HIA = '8ac3fc64-6eca-42ea-9e69-59f4c7b60eb2'
+            $script:RR  = '4a5d8f65-41da-4de4-8968-e035b65339cf'
+            function script:Run-Cloud([object[]] $Assign, [object[]] $Elig = @(), [bool] $DefsFail = $false, [bool] $EligFail = $false) {
+                Clear-TPState
+                $script:T_Asg = $Assign; $script:T_Elig = $Elig; $script:T_DefsFail = $DefsFail; $script:T_EligFail = $EligFail
+                Set-Graph {
+                    param([Parameter(Position = 0)][string] $Uri, [Parameter(Position = 1)][string] $Method = 'GET', $Headers, [string] $OutputType = 'HashTable')
+                    if ($Uri -match '/beta/roleManagement/directory/roleDefinitions') { return @{ value = @() } }
+                    if ($Uri -match 'roleDefinitions') {
+                        if ($script:T_DefsFail) { throw 'Graph 503 ServiceUnavailable' }
+                        return @{ value = @(
+                            @{ id = '62e90394-69f5-4237-9190-012177145e10'; displayName = 'Global Administrator'; isBuiltIn = $true; isEnabled = $true },
+                            @{ id = $script:HIA; displayName = 'Hybrid Identity Administrator'; isBuiltIn = $true; isEnabled = $true },
+                            @{ id = $script:GR;  displayName = 'Global Reader'; isBuiltIn = $true; isEnabled = $true },
+                            @{ id = $script:RR;  displayName = 'Reports Reader'; isBuiltIn = $true; isEnabled = $true }) } }
+                    if ($Uri -match 'roleAssignments') { return @{ value = @($script:T_Asg) } }
+                    if ($Uri -match 'roleEligibilitySchedules') { if ($script:T_EligFail) { throw 'Graph 403 Forbidden' }; return @{ value = @($script:T_Elig) } }
+                    return @{ value = @() }
+                }
+                Invoke-TPCollectAADRoles 3>$null | Out-Null
+                V 'Test-TPControlAADPrivCloudOnly' 'AAD-10.2'
+            }
+            # Raw Graph shape with $expand=principal. -Sync 'absent' leaves the property out.
+            function script:CAsg([string] $Role, [string] $Upn, $Sync = $null) {
+                $pr = @{ '@odata.type' = '#microsoft.graph.user'; id = "id-$Upn"; displayName = $Upn; userPrincipalName = $Upn; userType = 'Member' }
+                if (-not ($Sync -is [string] -and $Sync -eq 'absent')) { $pr.onPremisesSyncEnabled = $Sync }
+                @{ id = "a-$Upn-$Role"; principalId = "id-$Upn"; roleDefinitionId = $Role; directoryScopeId = '/'; principal = $pr }
+            }
+        }
+        It 'cites CIS 1.1.1' {
+            ((Get-Content (Join-Path $script:RepoRoot 'Config/controls.json') -Raw | ConvertFrom-Json).controls | Where-Object ControlId -eq 'AAD-10.2').References.CIS | Should -Be '1.1.1'
+        }
+        It 'cloud-only holders (null returned) of Administrator roles and Global Reader are Satisfied' {
+            $f = Run-Cloud @((CAsg $script:GA 'ga@contoso.com'), (CAsg $script:GR 'gr@contoso.com' $false))
+            $f.State | Should -Be 'Satisfied'; $f.Detail | Should -Match 'Global Reader'
+            @((Get-TPRawData -Key 'AAD-DirectoryRoles').Data.RoleAssignments)[0].OnPremisesSyncReturned | Should -BeTrue
+        }
+        It 'a synced Hybrid Identity Administrator (outside the 17-role list) is a Gap' {
+            $f = Run-Cloud @((CAsg $script:GA 'ga@contoso.com'), (CAsg $script:HIA 'hia@corp.example' $true))
+            $f.State | Should -Be 'Gap'; @($f.AffectedObjects)[0].Role | Should -Be 'Hybrid Identity Administrator'
+        }
+        It 'a synced Global Reader is a Gap' {
+            (Run-Cloud @((CAsg $script:GR 'gr@corp.example' $true))).State | Should -Be 'Gap'
+        }
+        It 'a synced account ELIGIBLE for an Administrator role is a Gap' {
+            (Run-Cloud @((CAsg $script:GA 'ga@contoso.com')) -Elig @((CAsg $script:HIA 'hia@corp.example' $true))).State | Should -Be 'Gap'
+        }
+        It 'a synced holder of a role without "Administrator" in its name (Reports Reader) is outside 1.1.1' {
+            (Run-Cloud @((CAsg $script:GA 'ga@contoso.com'), (CAsg $script:RR 'rr@corp.example' $true))).State | Should -Be 'Satisfied'
+        }
+        It 'onPremisesSyncEnabled not returned on a holder is not assessed, never a pass' {
+            $f = Run-Cloud @((CAsg $script:GA 'ga@contoso.com' 'absent'))
+            $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'onPremisesSyncEnabled'
+        }
+        It 'the role catalog not read is not assessed' {
+            $f = Run-Cloud @((CAsg $script:GA 'ga@contoso.com')) -DefsFail $true
+            $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'role catalog'
+        }
+        It 'eligibility not read still judges active assignments (what the CIS audit lists) and says so' {
+            $f = Run-Cloud @((CAsg $script:GA 'ga@contoso.com')) -EligFail $true
+            $f.State | Should -Be 'Satisfied'; $f.Detail | Should -Match 'PIM-eligible assignments were not read'
+        }
+        It 'a results file from before the returned flag was recorded is not assessed' {
+            Clear-TPState
+            Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{
+                RoleDefinitions = @(@{ Id = $script:GA; DisplayName = 'Global Administrator' })
+                RoleAssignments = @(@{ PrincipalId = 'a'; PrincipalType = '#microsoft.graph.user'; RoleDefinitionId = $script:GA; OnPremisesSyncEnabled = $null })
+                SectionStatus = @{ RoleAssignments = 'Collected' } })
+            (V 'Test-TPControlAADPrivCloudOnly' 'AAD-10.2').State | Should -Be 'NotApplicable'
+        }
+    }
+
     Context 'AAD-11.4 token protection scope (CIS 5.2.2.16)' {
         BeforeAll { $script:TEAMS = 'cc15fd57-2c6c-4117-a88c-83b1d56b4bbe' }
         It 'requires some users, Exchange Online, SharePoint Online and Teams Services selected, the Windows platform and mobile apps and desktop clients only' {
@@ -1918,11 +1998,21 @@ Describe 'Benchmark gap fixes (AAD)' {
                 V 'Test-TPControlAADAppCredentialExpiry' 'AAD-14.1'
             }
             # Raw shape of tenantAppManagementPolicy (Graph v1.0).
-            function script:Amp([bool] $Enabled = $true, [string] $Pw = 'P180D', [string] $Key = 'P180D', [string] $State = 'enabled', $After = $null) {
-                @{ id = '00000000-0000-0000-0000-000000000000'; isEnabled = $Enabled
+            # CIS 5.1.5.4 / 5.1.5.6 apply the limit to service principals as well:
+            # -SpPw / -SpKey set those ('' leaves the restriction out), -NoSp drops the
+            # servicePrincipalRestrictions block.
+            function script:Amp([bool] $Enabled = $true, [string] $Pw = 'P180D', [string] $Key = 'P180D', [string] $State = 'enabled', $After = $null,
+                                [string] $SpPw = 'P180D', [string] $SpKey = 'P180D', [switch] $NoSp) {
+                $a = @{ id = '00000000-0000-0000-0000-000000000000'; isEnabled = $Enabled
                    applicationRestrictions = @{
                        passwordCredentials = @(@{ restrictionType = 'passwordLifetime'; state = $State; maxLifetime = $Pw; restrictForAppsCreatedAfterDateTime = $After })
                        keyCredentials      = @(@{ restrictionType = 'asymmetricKeyLifetime'; state = $State; maxLifetime = $Key; restrictForAppsCreatedAfterDateTime = $After }) } }
+                if (-not $NoSp) {
+                    $a.servicePrincipalRestrictions = @{
+                        passwordCredentials = @(if ($SpPw) { @{ restrictionType = 'passwordLifetime'; state = 'enabled'; maxLifetime = $SpPw; restrictForAppsCreatedAfterDateTime = $null } })
+                        keyCredentials      = @(if ($SpKey) { @{ restrictionType = 'asymmetricKeyLifetime'; state = 'enabled'; maxLifetime = $SpKey; restrictForAppsCreatedAfterDateTime = $null } }) }
+                }
+                $a
             }
         }
         It 'no credentials and the policy capping both at 180 days for every app is Satisfied' {
@@ -1946,6 +2036,35 @@ Describe 'Benchmark gap fixes (AAD)' {
             Set-TPRawData -Key 'AAD-Inventory' -Data (Bag @{ AppCredentials = @(); SectionStatus = @{ AppCredentials = 'Collected' } })
             $f = V 'Test-TPControlAADAppCredentialExpiry' 'AAD-14.1'
             $f.State | Should -Be 'NotApplicable' -Because 'a results file from before the policy was read is not a pass'
+        }
+        # CIS 5.1.5.4 (secrets) and 5.1.5.6 (certificates): the limit applies to
+        # application registrations AND service principals, at 180 days or less.
+        It 'CIS 5.1.5.4: 180 days passes, 181 days or a missing limit on service principals does not' {
+            (Run-AppPolicy (Amp -Pw 'P180D' -SpPw 'P180D')).State | Should -Be 'Satisfied'
+            $f = Run-AppPolicy (Amp -Pw 'P181D')
+            $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'client secrets \(passwordLifetime\) on application registrations falls short: it allows 181 days'
+            $f = Run-AppPolicy (Amp -SpPw 'P181D')
+            $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'client secrets \(passwordLifetime\) on service principals falls short'
+            $f = Run-AppPolicy (Amp -SpPw '')
+            $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'no lifetime limit for client secrets \(passwordLifetime\) on service principals'
+            $f = Run-AppPolicy (Amp -SpKey '')
+            $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'certificates \(asymmetricKeyLifetime\) on service principals'
+            (Get-TPRawData -Key 'AAD-Inventory').Data.AppManagementPolicy.ServicePrincipalKeyRestrictions.Count | Should -Be 0
+        }
+        It 'a policy with no servicePrincipalRestrictions block sets no service-principal limit (a shortfall)' {
+            $f = Run-AppPolicy (Amp -NoSp)
+            $f.State | Should -Be 'Partial'; $f.Detail | Should -Match 'on service principals'
+        }
+        It 'a results file from before the service-principal restrictions were collected is not assessed, never a pass' {
+            Clear-TPState
+            Set-TPRawData -Key 'AAD-Inventory' -Data (Bag @{
+                AppCredentials = @()
+                AppManagementPolicy = @{ IsEnabled = $true
+                    PasswordRestrictions = @(@{ RestrictionType = 'passwordLifetime'; State = 'enabled'; MaxLifetime = 'P180D'; RestrictForAppsCreatedAfterDateTime = ''; ExcludedActorAttributes = 0 })
+                    KeyRestrictions      = @(@{ RestrictionType = 'asymmetricKeyLifetime'; State = 'enabled'; MaxLifetime = 'P180D'; RestrictForAppsCreatedAfterDateTime = ''; ExcludedActorAttributes = 0 }) }
+                SectionStatus = @{ AppCredentials = 'Collected'; AppManagementPolicy = 'Collected' } })
+            $f = V 'Test-TPControlAADAppCredentialExpiry' 'AAD-14.1'
+            $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'on service principals was not read'
         }
         It 'an expired or long-lived credential stays a Gap even with the policy in place' {
             Clear-TPState

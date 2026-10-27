@@ -293,15 +293,19 @@ Describe 'Role-name resolution guard (AAD-10.2 / AAD-11.2)' {
         $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
         Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
 
-        function Set-Roles([object[]]$Assignments) {
+        # AAD-10.2 judges role ids against the tenant role catalog (CIS 1.1.1);
+        # -NoCatalog leaves the catalog unread.
+        function Set-Roles([object[]]$Assignments, [switch]$NoCatalog) {
             Clear-TPState
             $priv = @($Assignments | Where-Object { $_.IsPriv })
+            $catalog = if ($NoCatalog) { @() } else { @(@{ Id = '62e90394-69f5-4237-9190-012177145e10'; DisplayName = 'Global Administrator'; IsPriv = $true }) }
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data @{ Success = $true; Data = @{
-                RoleAssignments = $Assignments; PrivRoles = $priv
+                RoleAssignments = $Assignments; PrivRoles = $priv; RoleDefinitions = $catalog
                 SectionStatus = @{ RoleAssignments = 'Collected'; RoleEligibilitySchedules = 'Collected'; PrivilegedRoleFlags = 'Collected' } } }
         }
         function User([string]$Role, [bool]$Synced, [bool]$Priv = $true) {
-            @{ PrincipalType = '#microsoft.graph.user'; PrincipalUserType = 'Member'; RoleDefinitionName = $Role; OnPremisesSyncEnabled = $Synced
+            $rid = if ($Role -eq 'Global Administrator') { '62e90394-69f5-4237-9190-012177145e10' } else { $Role }
+            @{ PrincipalType = '#microsoft.graph.user'; PrincipalUserType = 'Member'; RoleDefinitionName = $Role; RoleDefinitionId = $rid; OnPremisesSyncEnabled = $Synced; OnPremisesSyncReturned = $true
                PrincipalUPN = 'a@contoso.com'; PrincipalDisplayName = 'A'; IsPriv = $Priv }
         }
         # Microsoft first-party SP holding a hidden internal role: name never resolves.
@@ -323,7 +327,7 @@ Describe 'Role-name resolution guard (AAD-10.2 / AAD-11.2)' {
     }
 
     It 'still refuses to score when a USER assignment name did not resolve (a real lookup failure)' {
-        Set-Roles @((User '62e90394-69f5-4237-9190-012177145e10' $false))
+        Set-Roles @((User '62e90394-69f5-4237-9190-012177145e10' $false)) -NoCatalog
         Test-TPControlAADPrivCloudOnly
         (Verdict 'AAD-10.2').State | Should -Be 'NotApplicable'
         Test-TPControlAADNoGuestInPrivRoles

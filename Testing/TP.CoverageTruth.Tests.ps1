@@ -163,10 +163,13 @@ Describe 'Coverage is judged on who is protected, not on which policies exist' {
             (V 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Partial'
             $real = Pol -Name 'Generic policy' -Grant @() -StrengthId '00000000-0000-0000-0000-000000000004' -StrengthName 'Phishing-resistant MFA'
             Ca @($real)
-            (V 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Satisfied'
+            # An All users policy is credited for the coverage; CIS 5.2.2.5's audit
+            # looks for the administrator roles by name, so it stays Partial.
+            $v = V 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3'
+            $v.State | Should -Be 'Partial'; $v.Detail | Should -Match 'Verified: Phishing-resistant MFA .* by: Generic policy'; $v.Detail | Should -Match 'does not pass that recommendation'
         }
         It 'AAD-1.3: a role-scoped policy with no role catalog read is not assessed (never Satisfied, never a Gap)' {
-            Ca @(Pol -Name 'admins' -Users @() -IncludeRoles @('ROLE-A') -StrengthId '00000000-0000-0000-0000-000000000004' -StrengthName 'Phishing-resistant MFA')
+            Ca @(Pol -Name 'admins' -Users @() -IncludeRoles @(& (Get-Module TenantPosture) { @($script:TPCis5225AdminRoles.Keys) }) -StrengthId '00000000-0000-0000-0000-000000000004' -StrengthName 'Phishing-resistant MFA')
             $v = V 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3'
             $v.State | Should -Be 'NotApplicable'; $v.Detail | Should -Match 'role catalog was not read'
         }

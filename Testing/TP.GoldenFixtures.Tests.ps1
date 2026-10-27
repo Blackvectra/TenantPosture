@@ -139,11 +139,11 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
 
     Context 'AAD-1.3 — Phishing-Resistant MFA for Admins' {
 
-        It 'Satisfied when a role-targeted policy uses an Authentication Strength' {
+        It 'Satisfied when a role-targeted policy naming every CIS 5.2.2.5 role uses an Authentication Strength' {
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw 'AAD' @{ RoleDefinitions = @(@{ Id = '62e90394-69f5-4237-9190-012177145e10'; DisplayName = 'Global Administrator'; IsPriv = $true }) })
             Set-TPRawData -Key 'AAD-CAPolicies' -Data (NewRaw 'AAD' @{
                 Policies = @( NewCaPolicy -DisplayName 'Admins: phish-resistant' -State 'enabled' `
-                                -IncludeRoles @('62e90394-69f5-4237-9190-012177145e10') `
+                                -IncludeRoles @(& (Get-Module TenantPosture) { @($script:TPCis5225AdminRoles.Keys) }) `
                                 -AuthStrengthId '00000000-0000-0000-0000-000000000004' )
             })
             (GetVerdict 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Satisfied'
@@ -189,7 +189,7 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (NewRaw 'AAD' @{ RoleDefinitions = @(@{ Id = '62e90394-69f5-4237-9190-012177145e10'; DisplayName = 'Global Administrator'; IsPriv = $true }) })
             $mk = { param([string[]] $Combos)
                 $p = NewCaPolicy -DisplayName 'Admins: custom' -State 'enabled' `
-                        -IncludeRoles @('62e90394-69f5-4237-9190-012177145e10') -AuthStrengthId 'd6c840e6-b1ff-4cc2-8253-10409d809f22'
+                        -IncludeRoles @(& (Get-Module TenantPosture) { @($script:TPCis5225AdminRoles.Keys) }) -AuthStrengthId 'd6c840e6-b1ff-4cc2-8253-10409d809f22'
                 $p.GrantControls | Add-Member -NotePropertyName AuthStrengthName -NotePropertyValue 'Custom'
                 $p.GrantControls | Add-Member -NotePropertyName AuthStrengthCombinations -NotePropertyValue $Combos
                 $p }
@@ -508,7 +508,7 @@ Describe 'Golden fixtures — Critical controls produce the right verdict' {
                     (NewCaPolicy -DisplayName 'Block legacy' -State 'enabled' `
                         -ClientAppTypes @('other', 'exchangeActiveSync') -BuiltInControls @('block')),
                     (NewCaPolicy -DisplayName 'Admins phish-resistant' -State 'enabled' `
-                        -IncludeRoles @('62e90394-69f5-4237-9190-012177145e10') `
+                        -IncludeRoles @(& (Get-Module TenantPosture) { @($script:TPCis5225AdminRoles.Keys) }) `
                         -AuthStrengthId '00000000-0000-0000-0000-000000000004')
                 )
             })

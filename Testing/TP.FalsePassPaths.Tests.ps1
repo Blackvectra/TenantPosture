@@ -118,12 +118,12 @@ Describe 'False-pass paths from the 2026-10-11 review' {
         It 'AAD-1.3: a browser-only phishing-resistant admin policy is a shortfall, never Satisfied' {
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data (Bag @{ RoleDefinitions = @(@{ Id = $script:GA; DisplayName = 'Global Administrator'; IsPriv = $true }) })
             $roles = Get-TPRawData -Key 'AAD-DirectoryRoles'
-            Ca @(Pol -Name 'admin-fido' -Users @() -Roles @($script:GA) -ClientApps @('browser') -StrengthId '00000000-0000-0000-0000-000000000004' -Combos @('fido2'))
+            Ca @(Pol -Name 'admin-fido' -Users @() -Roles @(& (Get-Module TenantPosture) { @($script:TPCis5225AdminRoles.Keys) }) -ClientApps @('browser') -StrengthId '00000000-0000-0000-0000-000000000004' -Combos @('fido2'))
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data $roles
             $v = V 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3'
             $v.State | Should -Be 'Gap' -Because "only a narrower policy delivers it (got: $($v.Detail))"
             $v.Detail | Should -Match 'limited to some client app types'
-            Ca @(Pol -Name 'admin-fido' -Users @() -Roles @($script:GA) -StrengthId '00000000-0000-0000-0000-000000000004' -Combos @('fido2'))
+            Ca @(Pol -Name 'admin-fido' -Users @() -Roles @(& (Get-Module TenantPosture) { @($script:TPCis5225AdminRoles.Keys) }) -StrengthId '00000000-0000-0000-0000-000000000004' -Combos @('fido2'))
             Set-TPRawData -Key 'AAD-DirectoryRoles' -Data $roles
             (V 'Test-TPControlAADPhishResistantMFA' 'AAD-1.3').State | Should -Be 'Satisfied'
         }

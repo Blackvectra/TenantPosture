@@ -380,6 +380,44 @@ function Test-TPControlAADLegacyAuth {
 }
 
 # ── AAD-1.3 Phishing-Resistant MFA for Admins ────────────────────────────────
+# The 15 administrator roles CIS Microsoft 365 Foundations Benchmark v7.0.0
+# recommendation 5.2.2.5 requires the policy to name (built-in role template ids,
+# which equal the role definition ids in every tenant). The list is the one
+# Maester's CIS v7.0.0 check for 5.2.2.5 uses (Get-MtCisAdministratorRole,
+# shared with its 5.2.2.1 and 5.2.2.4 checks). It is AAD-1.3's own set: the
+# collector's 17-role privileged list that other controls use lacks Global
+# Reader and Password Administrator and is deliberately left unchanged.
+$script:TPCis5225AdminRoles = [ordered]@{
+    '9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3' = 'Application Administrator'
+    'c4e39bd9-1100-46d3-8c65-fb160da0071f' = 'Authentication Administrator'
+    'b0f54661-2d74-4c50-afa3-1ec803f12efe' = 'Billing Administrator'
+    '158c047a-c907-4556-b7ef-446551a6b5f7' = 'Cloud Application Administrator'
+    'b1be1c3e-b65d-4f19-8427-f6fa0d97feb9' = 'Conditional Access Administrator'
+    '29232cdf-9323-42fd-ade2-1d097af3e4de' = 'Exchange Administrator'
+    '62e90394-69f5-4237-9190-012177145e10' = 'Global Administrator'
+    'f2ef992c-3afb-46b9-b7cf-a126ee74c451' = 'Global Reader'
+    '729827e3-9c14-49f7-bb1b-9608f156bbb8' = 'Helpdesk Administrator'
+    '966707d0-3269-4727-9be2-8c3a10f19b9d' = 'Password Administrator'
+    '7be44c8a-adaf-4e2a-84d6-ab2649e08a13' = 'Privileged Authentication Administrator'
+    'e8611ab8-c189-46e8-94e1-60213ab1f814' = 'Privileged Role Administrator'
+    '194ae4cb-b126-40b2-bd5b-6091b380977d' = 'Security Administrator'
+    'f28a1f50-f6e7-4571-818b-6a12f2af6b6c' = 'SharePoint Administrator'
+    'fe930be7-5e62-47db-91af-98c3a49a38b1' = 'User Administrator'
+}
+
+# Why a role-scoped policy falls short of CIS 5.2.2.5's role list: the roles it
+# does not include, or includes and then excludes. '' when every one is covered.
+function Get-TPCis5225RoleShortfall {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([AllowNull()] $Policy)
+    $inc = @(Get-TPNestedProperty -Object $Policy -Path 'Conditions.Users.IncludeRoles' -Default @() | Where-Object { $_ } | ForEach-Object { ([string]$_).ToLowerInvariant() })
+    $exc = @(Get-TPNestedProperty -Object $Policy -Path 'Conditions.Users.ExcludeRoles' -Default @() | Where-Object { $_ } | ForEach-Object { ([string]$_).ToLowerInvariant() })
+    $missing = @($script:TPCis5225AdminRoles.Keys | Where-Object { $_ -notin $inc -or $_ -in $exc } | ForEach-Object { $script:TPCis5225AdminRoles[$_] })
+    if ($missing.Count -eq 0) { return '' }
+    return "it does not cover $($missing.Count) of the $($script:TPCis5225AdminRoles.Count) administrator roles CIS 5.2.2.5 lists ($($missing -join ', '))"
+}
+
 function Test-TPControlAADPhishResistantMFA {
     [CmdletBinding()] param()
 
@@ -456,16 +494,26 @@ function Test-TPControlAADPhishResistantMFA {
                 foreach ($d in $defs) { if ((Get-TPObjectField -Item $d -Key 'IsPriv' -Default $false) -eq $true) { $privIds[[string](Get-TPObjectField -Item $d -Key 'Id' -Default '')] = $true } }
             }
         }
-        $cands = @(); $narrowed = @(); $roleUnverified = @()
+        $cands = @(); $narrowed = @(); $roleUnverified = @(); $cisNamed = @()
         foreach ($p in $phishResistantPolicies) {
             $nm = [string]$p.DisplayName
             # Role scope is judged below; a policy that reaches only the browser (or
             # only the desktop clients) leaves the other sign-ins unprotected.
-            $nar = @(Get-TPCANarrowing -Policy $p -RequiredClientAppTypes (Get-TPCAInteractiveClientAppTypes) -Ignore @('applies to only some users, groups or roles'))
+            # CIS 5.2.2.5 accepts no narrowing condition: every client app type
+            # (legacy ones included), no platform, location, device-filter, risk or
+            # authentication-flow condition, all resources with none excluded.
+            $nar = @(Get-TPCANarrowing -Policy $p -RequiredClientAppTypes @('browser', 'mobileAppsAndDesktopClients', 'exchangeActiveSync', 'other') -Ignore @('applies to only some users, groups or roles'))
+            $flows = @(@(Get-TPNestedProperty -Object $p -Path 'Conditions.AuthFlows' -Default @()) | Where-Object { $null -ne $_ } | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'transferMethods' -Default '') } | Where-Object { $_ })
+            if ($flows.Count -gt 0) { $nar += "limited to some authentication flows ($($flows -join ', '))" }
+            # A block beside the strength makes the policy a block, not a
+            # phishing-resistant MFA requirement (CIS 5.2.2.5 audits the strength).
+            if (@((Get-TPCAGrantAlternatives -Policy $p).Controls) -contains 'block') { $nar += 'its grant also blocks access, so it is a block rather than a phishing-resistant MFA requirement' }
             if (-not (Test-TPCAAllUsers $p)) {
                 $rc = Get-TPCAAdminRoleCoverage -Policy $p -PrivRoleIds $privIds
                 if ($null -eq $rc) { $roleUnverified += $nm }
                 elseif ($rc.CoveredCount -lt $rc.TotalPriv) { $nar += "it covers $($rc.CoveredCount) of $($rc.TotalPriv) privileged roles" }
+                $cisShort = Get-TPCis5225RoleShortfall -Policy $p
+                if ($cisShort) { $nar += $cisShort } else { $cisNamed += $nm }
             }
             if ($nar.Count -gt 0) { $narrowed += [pscustomobject]@{ Name = $nm; Why = ($nar -join '; ') } }
             else { $cands += [pscustomobject]@{ Name = $nm; Exclusions = @(Get-TPCAPrincipalExclusions -Policy $p) } }
@@ -476,10 +524,17 @@ function Test-TPControlAADPhishResistantMFA {
         if ($cov.Kind -ne 'None' -and $roleUnverified.Count -gt 0 -and @($cov.FullNames | Where-Object { $_ -notin $roleUnverified }).Count -eq 0) {
             $cv.NotEstablished = @($cv.NotEstablished) + "whether $($roleUnverified -join ', ') covers every privileged role, because this tenant's role catalog was not read."
         }
+        # CIS 5.2.2.5's audit looks for a policy that names the administrator roles.
+        # An All users policy covers administrators too, but does not pass that audit
+        # as written, so it is credited for the coverage and the missing role-scoped
+        # policy is a shortfall of its own.
+        if ($cov.Kind -ne 'None' -and @($cands | Where-Object { $_.Name -in $cisNamed }).Count -eq 0) {
+            $cv.Shortfalls = @($cv.Shortfalls) + "no qualifying policy names the $($script:TPCis5225AdminRoles.Count) administrator roles CIS 5.2.2.5 lists ($(@($script:TPCis5225AdminRoles.Values) -join ', ')); the coverage comes from a policy targeting All users, which protects administrators but does not pass that recommendation's audit."
+        }
         Add-TPExpectedStateFinding -ControlId $controlId -Control $control -FrameworkIds $citations `
             -Verified $cv.Verified -Shortfalls $cv.Shortfalls -NotEstablished $cv.NotEstablished -AffectedObjects $cv.AffectedObjects `
             -CurrentValue "Phishing-resistant MFA for admins: $($cov.Kind) coverage" `
-            -RequiredValue 'CA policy with a phishing-resistant authentication strength covering every privileged role'
+            -RequiredValue 'CA policy with a phishing-resistant authentication strength naming every CIS 5.2.2.5 administrator role and every privileged role in the tenant catalog, on all resources with no narrowing condition'
     } elseif ($unknownStrengthPolicies.Count -gt 0) {
         # A strength is required, but which methods it allows could not be
         # read, so phishing resistance is unverified in either direction.
@@ -2043,65 +2098,116 @@ function Test-TPControlAADIdentityProtection {
 }
 
 # ── AAD-10.2 Privileged Accounts Dedicated Cloud-Only ────────────────────────
+# CIS Microsoft 365 Foundations Benchmark v7.0.0 recommendation 1.1.1 audits the
+# holders of every directory role whose name contains "Administrator", plus Global
+# Reader, for onPremisesSyncEnabled. The role set is taken from THIS tenant's role
+# catalog by name (AAD-DirectoryRoles RoleDefinitions), never from the collector's
+# 17-name privileged list, which leaves out Global Reader, Password Administrator,
+# Hybrid Identity Administrator and many more. Active assignments are what the
+# CIS audit lists; PIM-eligible ones are judged too when they were read, because
+# an eligible synced account escalates on-premises compromise just the same.
+function Test-TPCis111RoleName {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([AllowNull()] [string] $Name)
+    if (-not $Name) { return $false }
+    return ($Name -like '*Administrator*' -or $Name -eq 'Global Reader')
+}
+
 function Test-TPControlAADPrivCloudOnly {
     [CmdletBinding()] param()
     $cid = 'AAD-10.2'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
     $roles = Get-TPRawData -Key 'AAD-DirectoryRoles'
     if (-not $roles -or -not $roles.Success) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -FrameworkIds $cit `
             -Title $ctrl.Title -Detail 'Directory role data not collected'; return
     }
-    # AllPrivilegedAssignments includes PIM-eligible assignments: a synced
-    # account eligible for Global Administrator escalates on-premises
-    # compromise to the tenant exactly as a permanent one does.
-    $privPool = @(Get-TPNestedProperty -Object $roles -Path 'Data.AllPrivilegedAssignments' -Default @())
-    if ($privPool.Count -eq 0) { $privPool = @($roles.Data['PrivRoles']) }
-    $seen10 = [System.Collections.Generic.HashSet[string]]::new()
-    $syncedPriv = @($privPool | Where-Object {
-        $_.OnPremisesSyncEnabled -eq $true -and $_.PrincipalType -notmatch 'servicePrincipal' -and
-        $seen10.Add([string](Get-TPObjectField -Item $_ -Key 'PrincipalId' -Default (Get-TPObjectField -Item $_ -Key 'PrincipalUPN' -Default ([guid]::NewGuid().ToString()))))
-    })
-    if (@($roles.Data['PrivRoles']).Count -eq 0 -and -not (Test-TPRoleSectionCollected -Roles $roles -Section 'RoleAssignments')) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category `
+    if (-not (Test-TPRoleSectionCollected -Roles $roles -Section 'RoleAssignments')) {
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -FrameworkIds $cit `
             -Title $ctrl.Title `
-            -Detail 'Role assignment enumeration did not complete (see Exceptions) — on-premises synced privileged accounts could not be assessed.'
+            -Detail 'Role assignment enumeration did not complete (see Exceptions) — on-premises synced administrator accounts could not be assessed.'
         return
     }
-    # PrivRoles is derived from the same roleDefinitions lookup as AAD-11.2
-    # (IsPriv = privRoleNames -contains RoleDefinitionName) and carries no
-    # SectionStatus of its own — a failed lookup degrades every
-    # RoleDefinitionName to the raw GUID, IsPriv never matches, and PrivRoles
-    # empties silently regardless of what is actually assigned, so "no synced
-    # privileged accounts" was reported from role data that was never
-    # resolved. Check the raw RoleAssignments list, which still carries the
-    # (possibly-degraded) names, for that signature directly.
-    if (-not (Test-TPRoleNamesResolved -Assignments $roles.Data['RoleAssignments'])) {
+    # The role set comes from the tenant's own role catalog. Without it, which
+    # assignments belong to an administrator role cannot be told from their ids.
+    $catalog = @{}
+    foreach ($d in @(Get-TPNestedProperty -Object $roles -Path 'Data.RoleDefinitions' -Default @() | Where-Object { $null -ne $_ })) {
+        $rid = ([string](Get-TPObjectField -Item $d -Key 'Id' -Default '')).ToLowerInvariant()
+        if ($rid) { $catalog[$rid] = [string](Get-TPObjectField -Item $d -Key 'DisplayName' -Default '') }
+    }
+    if ($catalog.Count -eq 0) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
-            -Detail 'Role definition names did not resolve (role-template lookup failed), so on-premises synced privileged accounts could not be reliably identified by role name. Not assessed.'
+            -Detail 'The tenant role catalog (role definitions) was not read, so which role assignments belong to an administrator role (every role whose name contains "Administrator", plus Global Reader) could not be established. Not assessed.'
         return
     }
-    if ($syncedPriv.Count -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
-            -Detail 'No privileged role assignments are using on-premises synced accounts.'
-    } else {
-        # v4.6.4 PII FIX: prior code interpolated the full PrincipalUPN list into
-        # Detail (renders in HTML client report → PII leak). Move UPNs to the
-        # structured AffectedObjects field; keep Detail count-only.
-        $affected = @($syncedPriv | ForEach-Object {
-            [ordered]@{
-                DisplayName    = [string]$_.PrincipalUPN
-                AssignmentType = 'OnPremSyncedPrivilegedRole'
-            }
-        })
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category `
-            -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail "$($syncedPriv.Count) privileged account(s) are synced from on-premises AD. On-prem compromise directly escalates to cloud tenant. See AffectedObjects for the per-account list." `
-            -CurrentValue "Synced privileged accounts: $($syncedPriv.Count)" `
-            -RequiredValue 'Zero synced accounts in privileged roles' -Remediation $ctrl.Remediation `
-            -AffectedObjects $affected
+    $cisRoleIds = @($catalog.Keys | Where-Object { Test-TPCis111RoleName $catalog[$_] })
+
+    $rows = [System.Collections.Generic.List[object]]::new()
+    foreach ($a in @(Get-TPNestedProperty -Object $roles -Path 'Data.RoleAssignments' -Default @() | Where-Object { $null -ne $_ })) { $rows.Add([pscustomobject]@{ Row = $a; Source = 'active' }) }
+    $eligRead = Test-TPRoleSectionCollected -Roles $roles -Section 'RoleEligibilitySchedules'
+    if ($eligRead) {
+        foreach ($e in @(Get-TPNestedProperty -Object $roles -Path 'Data.RoleEligibilitySchedules' -Default @() | Where-Object { $null -ne $_ })) { $rows.Add([pscustomobject]@{ Row = $e; Source = 'eligible' }) }
     }
+
+    $synced = [System.Collections.Generic.List[object]]::new()
+    $seen = [System.Collections.Generic.HashSet[string]]::new()
+    $unreadSync = [System.Collections.Generic.HashSet[string]]::new()
+    $unknownRole = [System.Collections.Generic.HashSet[string]]::new()
+    $holders = [System.Collections.Generic.HashSet[string]]::new()
+    $rolesHeld = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($r in $rows) {
+        $x = $r.Row
+        if ([string](Get-TPObjectField -Item $x -Key 'PrincipalType' -Default '') -match 'servicePrincipal') { continue }
+        $prin = [string](Get-TPObjectField -Item $x -Key 'PrincipalId' -Default '')
+        $rid = ([string](Get-TPObjectField -Item $x -Key 'RoleDefinitionId' -Default '')).ToLowerInvariant()
+        $sync = Get-TPObjectField -Item $x -Key 'OnPremisesSyncEnabled' -Default $null
+        if (-not $catalog.ContainsKey($rid)) {
+            # A role the catalog does not list cannot be told apart; it matters
+            # only when its holder is (or may be) synchronized.
+            if ($sync -ne $false) { [void]$unknownRole.Add($rid) }
+            continue
+        }
+        if ($rid -notin $cisRoleIds) { continue }
+        [void]$holders.Add($prin); [void]$rolesHeld.Add($catalog[$rid])
+        if ($sync -eq $true) {
+            if ($seen.Add($prin)) {
+                $synced.Add([ordered]@{
+                    DisplayName    = [string](Get-TPObjectField -Item $x -Key 'PrincipalUPN' -Default '')
+                    Role           = $catalog[$rid]
+                    Assignment     = $r.Source
+                    AssignmentType = 'OnPremSyncedPrivilegedRole'
+                })
+            }
+            continue
+        }
+        # $null is Graph's value for an account never synchronized, but it is also
+        # what an absent property reads as; only a row recording that the property
+        # was returned is cloud-only evidence. Results from before that record are
+        # not assessed.
+        if ((Get-TPObjectField -Item $x -Key 'OnPremisesSyncReturned' -Default $null) -ne $true) { [void]$unreadSync.Add($prin) }
+    }
+
+    $v = @(); $s = @(); $n = @()
+    $scope = "the $($cisRoleIds.Count) roles in this tenant's catalog whose name contains ""Administrator"", plus Global Reader"
+    $eligNote = if ($eligRead) { 'active and PIM-eligible assignments' } else { "active assignments (PIM-eligible assignments were not read: status $([string](Get-TPNestedProperty -Object $roles -Path 'Data.SectionStatus.RoleEligibilitySchedules' -Default 'unknown')))" }
+    if ($synced.Count -gt 0) {
+        $s += "$($synced.Count) account(s) holding one of $scope are synchronized from on-premises Active Directory, so an on-premises compromise reaches the tenant's administration. See AffectedObjects for the per-account list."
+    } elseif ($holders.Count -gt 0 -and $unreadSync.Count -lt $holders.Count) {
+        $v += "No account holding one of $scope is synchronized from on-premises ($eligNote; $($holders.Count) holder(s) of: $(@($rolesHeld | Sort-Object) -join ', '))."
+    } elseif ($holders.Count -eq 0) {
+        $v += "No user holds any of $scope ($eligNote)."
+    }
+    if ($unreadSync.Count -gt 0) {
+        $n += "whether $($unreadSync.Count) administrator role holder(s) are synchronized from on-premises, because the role data does not record that the account's onPremisesSyncEnabled property was returned (a results file from before that was recorded, or the property was not returned)."
+    }
+    if ($unknownRole.Count -gt 0) {
+        $n += "which role $($unknownRole.Count) role definition id(s) held by possibly synchronized accounts are, because the tenant role catalog does not list them."
+    }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
+        -Verified $v -Shortfalls $s -NotEstablished $n -AffectedObjects @($synced) -ShortfallState 'Gap' `
+        -CurrentValue "Synced administrator role holders: $($synced.Count)" `
+        -RequiredValue 'No account holding a role whose name contains "Administrator", or Global Reader, is synchronized from on-premises'
 }
 
 # ── AAD-10.3 Emergency Access Account Monitoring ─────────────────────────────

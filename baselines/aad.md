@@ -87,19 +87,20 @@ CA policy: Users = All, Apps = All cloud apps, Grant = Require MFA. Without Micr
 **License required:** M365 Business Premium or Entra ID P1
 
 **Description:**
-CA policy requires phishing-resistant MFA (Authentication Strength: FIDO2, CBA, or Windows Hello) for all privileged directory roles.
+A Conditional Access policy that is On requires the phishing-resistant MFA authentication strength (only FIDO2 security keys, Windows Hello for Business and certificate-based MFA) on all resources with no exclusion and no narrowing condition, and names every administrator role CIS 5.2.2.5 lists (Application, Authentication, Billing, Cloud Application, Conditional Access, Exchange, Global, Helpdesk, Password, Privileged Authentication, Privileged Role, Security, SharePoint and User Administrator, and Global Reader) as well as every privileged role in the tenant's own role catalog. A policy for All users protects administrators but does not on its own pass CIS 5.2.2.5's audit, which looks for the roles by name.
 
 **Business risk:**
 Standard MFA is bypassed by AiTM proxy phishing attacks. Attackers use Evilginx2 to steal session tokens even when MFA is completed.
 
 **Remediation:**
-CA policy targeting privileged roles with Authentication Strength = Phishing-resistant MFA. Must cover Global Administrator at minimum.
+Create a Conditional Access policy that includes, under Users > Directory roles, every administrator role CIS 5.2.2.5 lists and every other privileged role the tenant uses; targets All resources with no exclusions and no platform, location, client app, device filter, risk or authentication flow condition; and grants access only with Require authentication strength = Phishing-resistant MFA. Exclude emergency access accounts and record them as approved exceptions.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-2(1), IA-2(2), IA-2(6) |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.2.2.5 |
 | CIS Controls v8.1 | 6.5 |
 | CISA SCuBA | MS.AAD.3.6v1 |
 | CMMC 2.0 | IA.L2-3.5.3 |
@@ -1047,19 +1048,20 @@ CA policy: Condition = User risk = High, Grant = Require password change. Requir
 **License required:** Included (all plans)
 
 **Description:**
-All privileged role holders use separate cloud-only accounts, not their day-to-day synced accounts.
+No account holding a directory role whose name contains "Administrator", or Global Reader, is synchronized from on-premises Active Directory (onPremisesSyncEnabled), judged from the tenant's own role catalog over active and, where read, PIM-eligible assignments: administrators use separate cloud-only accounts.
 
 **Business risk:**
 Using the same account for email and admin work means email phishing can compromise admin credentials. Dedicated admin accounts separate the blast radius.
 
 **Remediation:**
-Create dedicated .admin or .onmicrosoft.com accounts for all privileged role holders. Remove privileged roles from on-premises synced accounts.
+Create dedicated cloud-only administrator accounts (for example on the .onmicrosoft.com domain) for every holder of a role whose name contains "Administrator", or Global Reader, move the role assignments to them, and remove those roles from on-premises synced accounts.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | AC-6(5) |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 1.1.1 |
 | CIS Controls v8.1 | 5.4 |
 | CISA SCuBA | MS.AAD.7.3v1 |
 | CMMC 2.0 | AC.L2-3.1.6 |
@@ -1622,19 +1624,20 @@ Entra ID > Enterprise applications > All applications > Permissions. For each ap
 **License required:** Included (Entra ID Free)
 
 **Description:**
-App registration client secrets and certificates are unexpired and issued with a bounded lifetime.
+App registration client secrets and certificates are unexpired and issued with a bounded lifetime, and the tenant's default application management policy is enabled and limits new client secrets (passwordLifetime) and certificates (asymmetricKeyLifetime) to 180 days or less for every application registration and every service principal, with no created-after date and no exempted actors.
 
 **Business risk:**
 A client secret is a standing bearer credential to everything its application can reach. No MFA applies to it, no Conditional Access evaluates it, and no sign-in risk is scored against it. A long-lived secret keeps working for everyone who has ever seen it — a departed administrator, a stale runbook, a CI variable, a chat message — until somebody rotates it, and nothing forces rotation. An expired credential is the other half of the same problem: the fix under outage pressure is a new secret with the longest lifetime available and no reminder set.
 
 **Remediation:**
-Entra admin center > App registrations > Certificates and secrets. Remove expired credentials rather than leaving them in place. Reissue anything with a lifetime beyond 180 days at a shorter term and record the rotation date. Prefer certificate credentials or workload identity federation over client secrets where the application supports them.
+Entra admin center > App registrations > Certificates and secrets. Remove expired credentials rather than leaving them in place. Reissue anything with a lifetime beyond 180 days at a shorter term and record the rotation date. Prefer certificate credentials or workload identity federation over client secrets where the application supports them. Enable the tenant default application management policy (Microsoft Graph /policies/defaultAppManagementPolicy) with passwordLifetime and asymmetricKeyLifetime restrictions of 180 days or less (P180D) under both applicationRestrictions and servicePrincipalRestrictions, and no restrictForAppsCreatedAfterDateTime.
 
 **Framework mappings:**
 
 | Framework | Reference |
 |---|---|
 | NIST SP 800-53 Rev 5 | IA-5, IA-5(1), AC-2 |
+| CIS Microsoft 365 Foundations Benchmark v7.0.0 | 5.1.5.4 |
 | CIS Controls v8.1 | 5.4, 6.2 |
 | CMMC 2.0 | IA.L2-3.5.10, AC.L1-3.1.1 |
 | MITRE ATT&CK | T1078.004, T1550.001, T1098.001 |
