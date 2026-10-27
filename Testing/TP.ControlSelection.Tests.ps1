@@ -529,6 +529,10 @@ function Disconnect-MicrosoftTeams { }
             It 'no publisher failed' {
                 $script:Sel.Output | Should -Not -Match 'publish failed' -Because $script:Sel.Output
             }
+            It '-AllFiles implies the onboarding report, which a partial run skips with a note, never writes' {
+                $script:Sel.Output | Should -Match 'Onboarding report not written: .*partial run'
+                @(Get-ChildItem -LiteralPath $script:SelOut -Filter '*-onboarding.*' -ErrorAction SilentlyContinue).Count | Should -Be 0
+            }
             It 'a republish of the partial results stays partial' {
                 $out2 = Join-Path $script:Tmp 'republish'
                 $r = & $script:Run "-FromResults '$($script:SelFile.FullName)' -NonInteractive -OutputPath '$out2'"

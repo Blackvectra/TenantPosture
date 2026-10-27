@@ -22,6 +22,9 @@ coming back to this after six months, start here.
 | Investigate one mailbox | `Invoke-TPEmailAssessment.ps1 -UserPrincipalName alice@client.com` |
 | Print device guidance (no scan) | `New-TPDeviceGuide.ps1` |
 | Compare two tenants (a prospect against a client) | `Compare-TPTenantBaseline.ps1 -ResultsA a.json -ResultsB b.json -OutputPath .\out` |
+| See every client at once (who is due, what regressed) | `New-TPFleetDashboard.ps1` |
+| Prove a fix to a client | `Invoke-TPAssessment.ps1 -ControlId EXO-1.6 -ProofAgainst .\output\<before>-results.json` |
+| Hand a new client "where you stand" + a 30/60/90 plan | Add `-OnboardingReport` |
 | Set up a new machine | `Install-TPPrerequisites.ps1` |
 | Actually change tenant settings | `Apply-TPBaseline.ps1` — the only one that writes |
 
@@ -55,6 +58,8 @@ Parameters worth knowing:
 | `-SSP` | Also emit the 800-171 Rev 2 System Security Plan (see below). |
 | `-SSPAnswers <psd1>` | The client's written answers for the 69 requirements no scan reaches. |
 | `-ImprovementPlan` | Also emit the NIST 800-53 improvement plan — what to do next, in order. |
+| `-OnboardingReport` | Also emit the new-client onboarding report (where you stand, a 30/60/90-day plan). Refused on a `-ControlId` run. |
+| `-ProofAgainst <json>` | After the run, write a proof-of-fix certificate against that earlier run of the same tenant. |
 | `-DeviceResults <folder>` | Fold in endpoint scan results (see below). |
 | `-AllFiles` | Every sidecar deliverable, not just the two-file default. Implies `-NISTMatrix`. |
 | `-Quick` | Critical + High controls only. Faster, noisier-free. |
@@ -283,6 +288,39 @@ control either run could not verify is listed as not comparable and never counts
 as a match. This is **not** the run-over-run comparison: to see one tenant change
 over time, use `-BaselineResults` on `Invoke-TPAssessment.ps1`.
 
+### `New-TPFleetDashboard.ps1` — connects to nothing
+
+Every client on one page, from the results files already in `output\`.
+Internal: it names clients; `-Anonymize` labels them Client A, B, ...
+
+```powershell
+.\New-TPFleetDashboard.ps1                      # output\fleet\fleet-dashboard-<time>.html/.md/.csv
+.\New-TPFleetDashboard.ps1 -Anonymize           # for a screenshot or a slide
+```
+
+**Needs:** saved runs in `output\` (either layout) and, for client names and the
+"never assessed" list, `Config\clients.json`. No sign-in.
+**Gives you:** per client the latest FULL run's recorded score and maturity, a
+trend over full runs, open Critical/High, baseline coverage, what regressed or was
+resolved since the previous full run, and Current / Aging / Overdue by the
+baseline's own freshness windows (8 and 35 days). A `-ControlId` re-check is shown
+beside the score, never in its place.
+
+### `New-TPRemediationProof.ps1` — connects to nothing
+
+A proof-of-fix certificate for the client, from two runs of the same tenant.
+The usual way is right after a re-check:
+
+```powershell
+.\Invoke-TPAssessment.ps1 -ControlId EXO-1.6,'AAD-1.*' -ProofAgainst .\output\contoso-20261001-090000-results.json
+.\New-TPRemediationProof.ps1 -BeforeResults before-results.json -AfterResults after-results.json
+```
+
+**Gives you:** `<tenant>-proof-<time>.html` (print it to PDF) and `.md`: each control's
+state before and after with a verdict, both run times, tool versions and both
+files' SHA-256. Not verifiable is never shown as fixed; two tenants, or an "after"
+that is older, are refused.
+
 ---
 
 ## Setup and write mode
@@ -313,7 +351,7 @@ Evaluators/      turn raw data into findings
 Publishers/      turn findings into documents
 Lib/             shared helpers — scoring, NIST rollups, escaping, file ACLs
 Device/          the endpoint script. PS 5.1. Does not run on your machine.
-Testing/         129 Pester suites. Run: ./tools/Invoke-TPTestGate.ps1
+Testing/         133 Pester suites. Run: ./tools/Invoke-TPTestGate.ps1
 docs/            this file, and the policy docs
 ```
 

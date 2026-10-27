@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- **[MSP] Fleet dashboard, proof of fix and onboarding report, in one shared look.** `Lib/Get-TPReportTheme.ps1`
+  is the stylesheet and HTML builders the three share: system fonts, cards, light and dark, a print stylesheet
+  (light on white, a page break per section), inline SVG sparklines and bars, the loaded profile's brand color as an
+  accent that is darkened or lightened until it meets WCAG AA contrast, status pills with an icon and a word, a
+  footer with the generation time (UTC) and the tool version, and a document shell whose policy forbids every
+  external load. The assessment report is not restyled. `New-TPFleetDashboard.ps1` (`Lib/Get-TPFleetModel.ps1`,
+  `Publishers/Publish-TPFleetDashboard.ps1`) reads every saved run under the output folder (both layouts, through
+  `Get-TPWebRunList`, `Resolve-TPWebRunPath` and the new trimmed reader `Read-TPRunRecord`; incident-response outputs
+  never), groups runs by tenant id, and writes an internal HTML/Markdown/CSV view: per client the latest FULL run's
+  recorded score and maturity (a `-ControlId` or `-Quick` re-check is shown beside it, never in its place), a trend
+  over full runs, open Critical/High, baseline tier and evidence coverage, regressions and resolutions since the
+  previous full run from `Get-TPBaselineRegressions` with tool-version and catalog differences stated, and Current /
+  Aging / Overdue from the baseline's Weekly and Monthly freshness windows; active clients with no run are listed as
+  never assessed; `-Anonymize` labels clients Client A, B, .... `New-TPRemediationProof.ps1` and
+  `Invoke-TPAssessment.ps1 -ProofAgainst` (`Lib/Get-TPRemediationProof.ps1`, `Publishers/Publish-TPRemediationProof.ps1`)
+  write a client-facing proof-of-fix certificate from two runs of one tenant (same TenantId, the after run newer):
+  per control the state and current value before and after and a verdict (Resolved, Improved, Not resolved,
+  Regressed, Not verifiable, No earlier verdict, Already met; an after run with no verdict is never Resolved), with
+  both run times, tool versions, both files' SHA-256 and the selection patterns, never the operator or the tenant
+  id. `-OnboardingReport` (implied by `-AllFiles`; `Lib/Get-TPOnboardingModel.ps1`,
+  `Publishers/Publish-TPOnboardingReport.ps1`) writes "Where you stand" with a 30/60/90-day plan from the
+  operational-impact effort classes and the license gate; its Days 1-30 reuse the improvement plan's own Do now
+  decision, now one function (`Get-TPLowFrictionArchetypes`, `Get-TPRemediationTrack`, `Test-TPFindingLicensed`),
+  an undocumented impact is "Plan after review", unlicensed items are "Needs a license decision", and a "Coming
+  Microsoft changes" section is rendered from `Config/microsoft-changes.json` when that file exists. A partial run
+  is refused. Four new suites: `TP.ReportTheme`, `TP.FleetDashboard`, `TP.RemediationProof`, `TP.OnboardingReport`.
+
 - **[Assessment] Copilot Studio agent security (PPL-4.1 to PPL-4.10, 253 controls).** A new collector,
   `Collectors/PowerPlatform/Invoke-TPCollectCopilotStudio.ps1` (raw key `CopilotStudio`), reads the Dataverse `bot`,
   `botcomponent` and `systemuser` tables of every Dataverse-backed Power Platform environment over the Web API, in

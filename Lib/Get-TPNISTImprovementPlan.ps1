@@ -70,6 +70,51 @@
 # Consumes: findings only. No raw data, no Graph, no EXO, no network.
 #
 
+# The archetypes documented as changing nothing a user will notice: the only
+# ones a "Do now" step (and the onboarding report's Days 1-30) may carry. One
+# definition, used by the improvement plan and the onboarding report.
+function Get-TPLowFrictionArchetypes {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param()
+    return @('none-visible', 'admin-review-workload', 'monitoring-integration')
+}
+
+# Whether the tenant is licensed for a finding's control, conservatively: a
+# requirement the helper cannot confirm met (including no SKU data) is not
+# licensed, so nothing unconfirmed is promised as a quick win.
+function Test-TPFindingLicensed {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [AllowNull()] [object] $Finding,
+        [AllowNull()] [object] $Definition,
+        [AllowNull()] [object] $LicenseProfile
+    )
+    $req = [string](Get-TPObjectField -Item $Definition -Key 'LicenseRequirement' -Default '')
+    if (-not $req) { return $true }
+    if (-not (Get-Command Test-TPLicenseRequirementMet -ErrorAction SilentlyContinue)) { return $false }
+    $cid = [string](Get-TPObjectField -Item $Finding -Key 'ControlId' -Default '')
+    try { return [bool](Test-TPLicenseRequirementMet -LicenseRequirement $req -LicenseProfile $LicenseProfile -ControlId $cid -Finding $Finding) } catch { return $false }
+}
+
+# The track a remediation step belongs to: 'Buy first' when not licensed,
+# 'Do now' only with a DOCUMENTED low-friction archetype, else 'Schedule'. A
+# control with no impact entry never lands in 'Do now': an undocumented impact
+# is not evidence of no impact.
+function Get-TPRemediationTrack {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)] [bool] $Licensed,
+        [AllowNull()] [object] $Impact
+    )
+    if (-not $Licensed) { return 'Buy first' }
+    $arch = [string](Get-TPObjectField -Item $Impact -Key 'Archetype' -Default '')
+    if ($arch -and $arch -in (Get-TPLowFrictionArchetypes)) { return 'Do now' }
+    return 'Schedule'
+}
+
 function Get-TPNISTImprovementPlan {
     [CmdletBinding()]
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
@@ -144,16 +189,7 @@ function Get-TPNISTImprovementPlan {
         # cannot prove the tenant is licensed for is treated as blocked rather
         # than promised as a quick win.
         $licReq = [string](Get-TPObjectField -Item $def -Key 'LicenseRequirement' -Default '')
-        $licensed = $true
-        if ($licReq) {
-            if (Get-Command Test-TPLicenseRequirementMet -ErrorAction SilentlyContinue) {
-                try {
-                    $licensed = [bool](Test-TPLicenseRequirementMet -LicenseRequirement $licReq -LicenseProfile $LicenseProfile -ControlId $cid -Finding $f)
-                } catch { $licensed = $false }
-            } else {
-                $licensed = $false
-            }
-        }
+        $licensed = Test-TPFindingLicensed -Finding $f -Definition $def -LicenseProfile $LicenseProfile
 
         $im = Get-TPControlOperationalImpact -ControlId $cid -Catalog $impact
 
@@ -203,13 +239,8 @@ function Get-TPNISTImprovementPlan {
     # undocumented impact is not evidence of no impact, and putting one in the
     # "nothing to plan around" track is exactly the mistake that gets a change
     # approved without anyone checking.
-    $silent = @('none-visible', 'admin-review-workload', 'monitoring-integration')
     foreach ($s in $steps) {
-        $arch = if ($s['Impact']) { [string]$s['Impact']['Archetype'] } else { '' }
-        $s['Track'] =
-            if (-not $s['Licensed'])          { 'Buy first' }
-            elseif ($arch -and $arch -in $silent) { 'Do now' }
-            else                              { 'Schedule' }
+        $s['Track'] = Get-TPRemediationTrack -Licensed ([bool]$s['Licensed']) -Impact $s['Impact']
         $s['Effort'] = if ($s['Impact']) { [string]$s['Impact']['Effort'] } else { 'Not documented' }
     }
 
