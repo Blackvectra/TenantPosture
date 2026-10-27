@@ -139,7 +139,7 @@ function Get-ConnectionInformation { @() }
             $script:Live.Output | Should -Not -Match 'publish failed' -Because $script:Live.Output
         }
         It 'wrote the HTML report, the Markdown summary, the playbook, the NIST matrix and the SSP' {
-            foreach ($pattern in '*-assessment.html', '*-assessment.md', '*-playbook.md', '*-executive.md', '*-nist-800-53-matrix.md', '*-ssp-800-171.md', '*-nist-improvement-plan.md') {
+            foreach ($pattern in '*-assessment.html', '*-assessment.md', '*-playbook.md', '*-executive.md', '*-nist-800-53-matrix.md', '*-ssp-800-171.md', '*-nist-improvement-plan.md', '*-bod-25-01.md') {
                 @(Get-ChildItem -LiteralPath $script:LiveOut -Filter $pattern -ErrorAction SilentlyContinue).Count | Should -BeGreaterThan 0 -Because "$pattern was not written"
             }
         }

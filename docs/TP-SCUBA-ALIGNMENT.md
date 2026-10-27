@@ -1,6 +1,8 @@
 # NRG and CISA ScubaGear: alignment of requirements
 
-Checked against **ScubaGear 2.0.0** and its official migration file (`PowerShell/ScubaGear/mappings/scuba-baseline-policy-migrations.csv`, SHA-256 `471085b4b3504fdd…`, 55 rows) on 2026-09-30. The data behind this page is `Config/scuba-alignment.json` (read by `Get-TPScubaAlignment`); a test keeps the two in step with `Config/controls.json`.
+Checked against the released **ScubaGear v2.0.0** (tag commit `6e5a1a4`, 2026-10-22; released 2026-10-27) and its official migration file (`PowerShell/ScubaGear/mappings/scuba-baseline-policy-migrations.csv`, SHA-256 `f53e082bd23db880…`, 56 rows) on 2026-10-27. The data behind this page is `Config/scuba-alignment.json` (read by `Get-TPScubaAlignment`); a test keeps the two in step with `Config/controls.json`.
+
+**Release review (2026-10-27).** The first check, on 2026-09-30, read the migration file at commit `df84e9d` (SHA-256 `471085b4b3504fdd…`, 55 rows). The release adds one row (`MS.SHAREPOINT.3.3v1` to `v2`: the rule now also applies when the external sharing slider is set to Existing guests), corrects several old-id descriptions, and corrects the range targets of `MS.DEFENDER.1.2v1` to `1.5v1` to `MS.SECURITYSUITE.1.1v1 - MS.SECURITYSUITE.1.4v1` (the earlier copy read `1.4v2` to `1.4v5`). No current id NRG cites changed, and the 109 current policy ids in the released baselines equal `Config/framework-baselines/scuba-ids-v2.0.0.txt`. The released text of every cited rule was compared with `df84e9d`: the changes are editorial (wording, punctuation, admin center navigation) except two. `MS.SECURITYSUITE.5.2v1` now reads "retained and searchable for a minimum of 3 months and retrievable for a minimum of 12 months" in place of the OMB M-21-31 minimum; the notes for EXO-4.1, PVW-1.2 and PVW-4.2 already judge that text. `MS.TEAMS.4.1v1`'s instructions now also ask that the accepted SMTP domains list stay empty; TMS-2.4 and ScubaGear's automated check both read `AllowEmailIntoChannel` only, so TMS-2.4 stays Equivalent with the note. Three entries changed in substance: SPO-2.7 (reviewed against the v2 text; Partial, stricter), PPL-1.1 (strength recorded as SHALL) and TMS-2.4 (note); the five entries that record a `MS.DEFENDER.1.2v1` or `1.3v1` migration now carry the corrected range.
 
 ## How to read this
 
@@ -48,13 +50,13 @@ The old rule id no longer exists and the migrated range does not describe what t
 | EXO-1.1 Mailbox Audit Logging Enabled | `MS.EXO.13.1v1` | SHALL | same | Mailbox auditing enabled; NRG also checks the audit bypass list. |
 | EXO-1.2 SMTP Client Authentication Disabled | `MS.EXO.5.1v1` | SHALL | same | SMTP AUTH disabled. |
 | EXO-4.3 Safe Attachments for SharePoint OneDrive Teams Enabled | `MS.SECURITYSUITE.1.4v1` | SHOULD | `MS.DEFENDER.1.1v1` (migrated) | Safe Attachments for SharePoint, OneDrive and Teams = attachments in those workloads scanned for malware. |
-| PPL-1.1 Power Platform Tenant Isolation Enabled | `MS.POWERPLATFORM.3.1v1` | - | same | Tenant isolation enabled. (The ScubaGear run reported this rule as "test results missing".) |
+| PPL-1.1 Power Platform Tenant Isolation Enabled | `MS.POWERPLATFORM.3.1v1` | SHALL | same | Tenant isolation enabled. The released v2.0.0 baseline marks the rule SHALL (last modified April 2026) and CISA lists it as a BOD 25-01 required configuration. (The 2026-09-30 ScubaGear run reported this rule as "test results missing".) |
 | PPL-1.3 Power Platform Environment Creation Restricted | `MS.POWERPLATFORM.1.1v1` | SHALL | same | Environment creation restricted to admins. |
 | SPO-1.1 External Sharing Restricted | `MS.SHAREPOINT.1.1v1` | SHALL | same | External sharing limited to existing guests or organization only. |
 | SPO-2.2 External Sharing Link Expiration Configured | `MS.SHAREPOINT.3.1v1` | SHALL | same | Anyone-link expiry of 30 days or less. Needs the SharePoint shell. |
 | TMS-1.1 External Federation Access Restricted | `MS.TEAMS.2.1v2` | SHALL | same | External access per-domain only. |
 | TMS-1.4 External Participants Cannot Take Screen Control | `MS.TEAMS.1.1v1` | SHOULD | same | External participants cannot request control. |
-| TMS-2.4 Teams Email Integration Disabled | `MS.TEAMS.4.1v1` | SHALL | same | Teams email integration disabled. |
+| TMS-2.4 Teams Email Integration Disabled | `MS.TEAMS.4.1v1` | SHALL | same | Teams email integration disabled (`AllowEmailIntoChannel = False`), the setting ScubaGear's automated check reads. The v2.0.0 steps also ask that the "Accept channel email from these SMTP domains" list stay empty; neither tool reads that list, which limits which domains may send to a channel and so matters only while email into channels is allowed. |
 | TMS-2.8 PSTN Users Cannot Bypass Lobby | `MS.TEAMS.1.5v1` | SHOULD | same | Dial-in users cannot bypass the lobby. |
 | TMS-4.2 Anonymous Users Cannot Start Meetings | `MS.TEAMS.1.2v2` | SHALL | same | Anonymous users cannot start meetings. |
 | TMS-4.3 Teams External Domain Federation Restricted to Allowlist | `MS.TEAMS.2.1v2` | SHALL | same | External federation restricted to allowed domains. |
@@ -104,7 +106,7 @@ The old rule id no longer exists and the migrated range does not describe what t
 | PVW-1.2 Audit Log Retention Minimum 90 Days | `MS.SECURITYSUITE.5.2v1` | SHALL | `MS.DEFENDER.6.3v1` (migrated) | SCuBA requires 3 months searchable and 12 months retrievable; NRG checks a 90-day minimum and (PVW-4.2) one year. |
 | PVW-4.2 Audit Log Retention Policy Extends to 1 Year or More | `MS.SECURITYSUITE.5.2v1` | SHALL | `MS.DEFENDER.6.3v1` (migrated) | Retention to one year overlaps "retrievable for 12 months" (5.2). |
 | SPO-1.2 Default Sharing Link Not Anonymous | `MS.SHAREPOINT.2.1v1` | SHALL | same | SCuBA requires the default link to be "Specific people"; NRG requires it not to be anonymous. |
-| SPO-2.7 Reauthentication Required for Sharing Links | `MS.SHAREPOINT.3.3v2` | SHALL | `MS.SHAREPOINT.3.3v1` (unknown) | Rule renumbered to v2 (verification-code reauthentication 30 days or less); NRG checks reauthentication for sharing links, review against the v2 text. |
+| SPO-2.7 Reauthentication Required for Sharing Links | `MS.SHAREPOINT.3.3v2` | SHALL | `MS.SHAREPOINT.3.3v1` (migrated) | Checked against the released v2 text (verification-code reauthentication 30 days or less; v2 also applies at Existing guests). SPO-2.7 reads `EmailAttestationRequired` / `EmailAttestationReAuthDays` (SharePoint shell) at every sharing level except "Only people in your organization", so the Existing guests case is judged. Stricter: Satisfied needs 15 days or fewer (CIS 7.2.10); every NRG pass meets v2, and 16 to 30 days is an NRG Partial that meets v2. Not assessed without the SharePoint shell. |
 | TMS-2.2 Unverified App Publisher Blocked | `MS.TEAMS.5.2v2` | SHOULD | same | SCuBA: only agency-approved third-party apps; NRG: unverified publishers blocked. |
 | TMS-2.7 External User Chat Restricted | `MS.TEAMS.2.3v2` | SHOULD | same | SCuBA: internal users should not initiate contact with unmanaged users; NRG: external user chat restricted. |
 | TMS-3.2 Auto-Admit Only Authenticated Organization Users | `MS.TEAMS.1.3v1` | SHOULD | same | SCuBA: anonymous and dial-in callers not admitted automatically; NRG: auto-admit only organization users. |
@@ -140,57 +142,57 @@ These are **not assessed by NRG** under a SCuBA reference. Some are Power BI and
 
 | Rule | Strength | Requirement |
 |---|---|---|
-| `MS.AAD.3.4v1` | SHALL | The Authentication Methods Manage Migration feature SHALL be set to Migration Complete. |
-| `MS.AAD.3.5v2` | SHALL | The authentication methods SMS, Voice Call, and Email One-Time Passcode (OTP) SHALL be disabled. |
-| `MS.AAD.3.8v1` | SHOULD | Managed Devices SHOULD be required to register MFA. |
+| `MS.AAD.3.4v1` | SHALL | The "Authentication methods manage migration" feature SHALL be set to "Migration complete." |
+| `MS.AAD.3.5v2` | SHALL | The authentication methods of short message service (SMS), voice call, and email one-time passcode (OTP) SHALL be disabled. |
+| `MS.AAD.3.8v1` | SHOULD | Managed devices SHOULD be required to register MFA. |
 | `MS.AAD.4.1v1` | SHALL | Security logs SHALL be sent to the agency's security operations center for monitoring. |
-| `MS.AAD.5.5v1` | SHOULD | Application Password Addition SHOULD be blocked. |
+| `MS.AAD.5.5v1` | SHOULD | Application password addition SHOULD be blocked. |
 | `MS.AAD.5.7v1` | SHOULD | Application certificate lifetime SHOULD be restricted to 365 days or less. |
 | `MS.AAD.6.1v1` | SHALL | User passwords SHALL NOT expire. |
-| `MS.AAD.7.2v1` | SHALL | Privileged users SHALL be provisioned with finer-grained roles instead of Global Administrator. |
+| `MS.AAD.7.2v1` | SHALL | Privileged users SHALL be provisioned with finer-grained roles instead of the Global Administrator role. |
 | `MS.AAD.7.4v1` | SHALL | Permanent active role assignments SHALL NOT be allowed for highly privileged roles. |
 | `MS.AAD.7.5v1` | SHALL | Provisioning users to highly privileged roles SHALL NOT occur outside of a PAM system. |
 | `MS.AAD.7.8v1` | SHALL | User activation of the Global Administrator role SHALL trigger an alert. |
 | `MS.AAD.7.9v1` | SHOULD | User activation of other highly privileged roles SHOULD trigger an alert. |
-| `MS.AAD.8.3v1` | SHOULD | Guest invites SHOULD only be allowed to specific external domains that have been authorized by the agency for legitimate business purposes. |
+| `MS.AAD.8.3v1` | SHOULD | Guest invites SHOULD only be allowed to be sent to specific external domains that have been authorized by the agency for legitimate business purposes. |
 | `MS.AAD.9.1v1` | SHALL | Risky AI agents SHALL be blocked. |
 | `MS.EXO.4.1v1` | SHALL | A DMARC policy SHALL be published for every second-level domain. |
-| `MS.EXO.4.3v1` | SHALL | The DMARC point of contact for aggregate reports SHALL include `reports@dmarc.cyber.dhs.gov`. |
+| `MS.EXO.4.3v1` | SHALL | The DMARC point of contact for aggregate reports SHALL include reports@dmarc.cyber.dhs.gov. |
 | `MS.EXO.4.4v1` | SHOULD | An agency point of contact SHOULD be included for aggregate and failure reports. |
 | `MS.EXO.6.1v1` | SHALL | Contact folders SHALL NOT be shared with all domains. |
 | `MS.EXO.6.2v1` | SHALL | Calendar details SHALL NOT be shared with all domains. |
 | `MS.EXO.7.1v1` | SHALL | External sender warnings SHALL be implemented. |
-| `MS.POWERBI.1.1v1` | SHOULD | The Publish to Web feature SHOULD be disabled unless the agency mission requires the capability. |
+| `MS.POWERBI.1.1v1` | SHOULD | The "Publish to Web" feature SHOULD be disabled unless the agency mission requires the capability. |
 | `MS.POWERBI.2.1v1` | SHOULD | Guest user access to the Power BI tenant SHOULD be disabled unless the agency mission requires the capability. |
-| `MS.POWERBI.3.1v1` | SHOULD | The Invite external users to your organization feature SHOULD be disabled unless agency mission requires the capability. |
+| `MS.POWERBI.3.1v1` | SHOULD | The "Invite external users to your organization" feature SHOULD be disabled unless agency mission requires the capability. |
 | `MS.POWERBI.4.1v1` | SHOULD | Service principals with access to APIs SHOULD be restricted to specific security groups. |
-| `MS.POWERBI.4.2v1` | SHOULD | Service principals creating and using profiles SHOULD be restricted to specific security groups. |
-| `MS.POWERBI.5.1v1` | SHOULD | ResourceKey-based authentication SHOULD be blocked unless a specific use case (e.g., streaming and/or PUSH datasets) merits its use. |
+| `MS.POWERBI.4.2v1` | SHOULD | Service principals' ability to create and use profiles SHOULD be restricted to specific security groups. |
+| `MS.POWERBI.5.1v1` | SHOULD | ResourceKey-based authentication SHOULD be blocked unless a specific use case (e.g., streaming and/or "push" datasets) merits its use. |
 | `MS.POWERBI.6.1v1` | SHOULD | Python and R interactions SHOULD be disabled. |
 | `MS.POWERBI.7.1v1` | SHOULD | Sensitivity labels SHOULD be enabled for Power BI and employed for sensitive data per enterprise data protection policies. |
-| `MS.POWERPLATFORM.1.2v1` | SHALL | The ability to create trial environments SHALL be restricted to admins. |
-| `MS.POWERPLATFORM.2.2v1` | SHOULD | Non-default environments SHOULD have at least one DLP policy affecting them. |
+| `MS.POWERPLATFORM.1.2v1` | SHALL | The ability to create trial environments SHALL be restricted to administrators. |
+| `MS.POWERPLATFORM.2.2v1` | SHOULD | Non-default environments SHOULD have at least one DLP policy. |
 | `MS.POWERPLATFORM.3.2v1` | SHOULD | An inbound/outbound connection allowlist SHOULD be configured. |
 | `MS.POWERPLATFORM.4.1v1` | SHALL | Content Security Policy (CSP) SHALL be enforced for model-driven and canvas Power Apps. |
-| `MS.POWERPLATFORM.6.1v1` | SHOULD | The Share with Everyone feature SHOULD be disabled. |
+| `MS.POWERPLATFORM.6.1v1` | SHOULD | The "Share with everyone" feature SHOULD be disabled. |
 | `MS.SECURITYSUITE.2.2v1` | SHOULD | Domain impersonation protection SHOULD be enabled for domains owned by the agency. |
 | `MS.SECURITYSUITE.2.3v1` | SHOULD | Domain impersonation protection SHOULD be added for key suppliers and partners. |
 | `MS.SECURITYSUITE.2.4v1` | SHOULD | User warnings, comparable to the user safety tips included with EOP, SHOULD be displayed. |
 | `MS.SECURITYSUITE.3.3v1` | SHOULD | The action for the DLP policy SHOULD be set to block sharing sensitive information with everyone. |
 | `MS.SECURITYSUITE.3.4v1` | SHOULD | Notifications to inform users and help educate them on the proper use of sensitive information SHOULD be enabled in the DLP policy. |
-| `MS.SECURITYSUITE.3.5v1` | SHOULD | The DLP policy SHOULD include an action to block access to sensitive information by restricted apps and unwanted Bluetooth applications. |
+| `MS.SECURITYSUITE.3.5v1` | SHOULD | The DLP policy SHOULD include an action to block access to sensitive information by restricted applications and unwanted Bluetooth applications. |
 | `MS.SECURITYSUITE.6.2v1` | SHALL | Allowed domains SHALL NOT be added to inbound anti-spam protection policies. |
 | `MS.SECURITYSUITE.7.2v1` | SHOULD | Direct download links SHOULD be scanned for malware. |
 | `MS.SECURITYSUITE.7.3v1` | SHOULD | User click tracking SHOULD be enabled. |
 | `MS.SECURITYSUITE.8.1v1` | SHOULD | IP allow lists SHOULD NOT be created. |
 | `MS.SECURITYSUITE.8.2v1` | SHOULD | Safe lists SHOULD NOT be enabled. |
-| `MS.SHAREPOINT.1.2v1` | SHALL | External sharing for OneDrive SHALL be limited to "Existing guests" or "Only people in your organization". |
+| `MS.SHAREPOINT.1.2v1` | SHALL | External sharing for OneDrive SHALL be limited to "Existing guests" or "Only people in your organization." |
 | `MS.SHAREPOINT.1.3v1` | SHALL | External sharing SHALL be restricted to approved external domains and/or users in approved security groups per interagency collaboration needs. |
 | `MS.SHAREPOINT.2.2v1` | SHALL | File and folder default sharing permissions SHALL be set to view only. |
 | `MS.SHAREPOINT.3.2v1` | SHALL | The allowable file and folder permissions for links SHALL be set to view only. |
-| `MS.TEAMS.1.4v1` | SHOULD | Internal users SHOULD be admitted automatically. |
+| `MS.TEAMS.1.4v1` | SHOULD | Internal users SHOULD be admitted to Microsoft Teams meetings automatically. |
 | `MS.TEAMS.1.6v1` | SHOULD | Meeting recording SHOULD be disabled. |
-| `MS.TEAMS.1.7v2` | SHOULD | Record an event SHOULD NOT be set to Always record. |
+| `MS.TEAMS.1.7v2` | SHOULD | "Record an event" SHOULD NOT be set to "Always record." |
 | `MS.TEAMS.2.2v2` | SHALL | Unmanaged users SHALL NOT be enabled to initiate contact with internal users. |
-| `MS.TEAMS.5.1v2` | SHOULD | Agencies SHOULD only allow installation of Microsoft apps approved by the agency. |
-| `MS.TEAMS.5.3v2` | SHOULD | Agencies SHOULD only allow installation of custom apps approved by the agency. |
+| `MS.TEAMS.5.1v2` | SHOULD | Agencies SHOULD only allow installation of Microsoft applications approved by the agency. |
+| `MS.TEAMS.5.3v2` | SHOULD | Agencies SHOULD only allow installation of custom applications approved by the agency. |

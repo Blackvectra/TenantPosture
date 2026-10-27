@@ -150,7 +150,8 @@ param(
     [string] $BaselineResults,
 
     # Independent comparison: a ScubaGear ScubaResults.csv. The report site places each
-    # mapped result beside the NRG control as a separate standard, never as a score.
+    # mapped result beside the NRG control as a separate standard, never as a score,
+    # and the -BOD2501 view shows it beside each required configuration.
     [ValidateScript({
         if ([string]::IsNullOrEmpty($_)) { return $true }
         if ($_ -match '\.\.[\\/]') { throw "Path traversal not allowed in ScubaResultsPath." }
@@ -205,7 +206,8 @@ param(
     # sprawl per run.
     # -AllFiles restores every sidecar deliverable as its own file (Markdown
     # summary, engineer playbook + executive summary, playbook HTML, standalone
-    # remediation .ps1, XLSX matrix, delta, NIST matrix, SSP, HIPAA readiness).
+    # remediation .ps1, XLSX matrix, delta, NIST matrix, SSP, HIPAA readiness,
+    # BOD 25-01 view).
     # Batch mode passes this for parity.
     # -JsonOnly emits only the JSON (unchanged).
     [switch] $AllFiles,
@@ -272,6 +274,14 @@ param(
     # walkthrough. Not a risk analysis and not a compliance determination; the
     # report says so on page one. Markdown + HTML. Implied by -AllFiles.
     [switch] $HIPAA,
+
+    # CISA BOD 25-01 required-configurations view: every Microsoft 365 policy
+    # CISA lists as required (Config/bod-25-01-required.json), what this
+    # assessment's checks found for it, what they do not check, and the
+    # independent ScubaGear result beside it when -ScubaResultsPath is given.
+    # A technical readiness view for government clients, not an attestation;
+    # the report says so on page one. Markdown + HTML. Implied by -AllFiles.
+    [switch] $BOD2501,
 
     # Explicit path to the SSP answers file. Without it, -SSP looks for
     # Config/ssp/<tenant-domain>.psd1 and renders the plan with every narrative
@@ -1750,6 +1760,32 @@ if (-not $JsonOnly) {
                 Write-Host "      $($hs['Total'] - $hs['EvidenceCollected']) of $($hs['Total']) HIPAA Security Rule items have no evidence from this run: $($hs['AttestationRequired']) have no mapped tenant check and need documents, interviews or a walkthrough; $($hs['Mapped'] - $hs['EvidenceCollected']) have mapped checks that produced none." -ForegroundColor Yellow
             }
         } catch { Write-Warning "HIPAA readiness publish failed: $($_.Exception.Message)" }
+    }
+
+    # BOD 25-01 required-configurations view. A view over the findings like the
+    # HIPAA view: it creates no finding and moves no score.
+    if (($BOD2501 -or $AllFiles) -and (Get-Command Publish-TPBod2501View -ErrorAction SilentlyContinue)) {
+        $bodPath = Join-Path $OutputPath "$baseName-bod-25-01.md"
+        try {
+            $bodArgs = @{ Findings = $findings }
+            if ($ScubaResultsPath) { $bodArgs.ScubaResultsPath = $ScubaResultsPath }
+            $bodView = Get-TPBod2501View @bodArgs
+            Publish-TPBod2501View -View $bodView -Metadata $reportMetadata -OutputPath $bodPath
+            if (Test-Path -LiteralPath $bodPath) {
+                Write-TPReportFile 'BOD 25-01 view (md)' $bodPath
+                Set-TPSensitiveFileAcl -Path $bodPath -ErrorAction SilentlyContinue
+                $bodHtml = [System.IO.Path]::ChangeExtension($bodPath, '.html')
+                if (Test-Path -LiteralPath $bodHtml) {
+                    Write-TPReportFile 'BOD 25-01 view (html)' $bodHtml
+                    Set-TPSensitiveFileAcl -Path $bodHtml -ErrorAction SilentlyContinue
+                }
+                $bs = $bodView['Summary']
+                $bn = Get-TPObjectField -Item $bs -Key 'ByStatus' -Default @{}
+                $bodCounts = (@($bn.Keys) | ForEach-Object { "$($bn[$_]) $_" }) -join '; '
+                Write-Host "      $($bs['Total']) BOD 25-01 required configurations: $bodCounts. A technical readiness view; ScubaGear's report is what CISA expects." -ForegroundColor Yellow
+                if ($bodView['IndependentError']) { Write-Warning "BOD 25-01 view: $($bodView['IndependentError'])" }
+            }
+        } catch { Write-Warning "BOD 25-01 view publish failed: $($_.Exception.Message)" }
     }
 
     # SSP questionnaire — the manual-evidence half of the SSP, as a document a

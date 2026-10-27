@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- **[Report] CISA BOD 25-01 required-configurations view (`-BOD2501`, implied by `-AllFiles`).** For government
+  clients: `Config/bod-25-01-required.json` encodes the 56 Microsoft 365 policies CISA's BOD 25-01 Required
+  Configurations page lists (retrieved 2026-10-27, by policy ID; the released ScubaGear v2.0.0 baselines mark the same
+  56 as BOD 25-01 requirements), each with its SHALL statement and CISA's dates. `Get-TPBod2501View` joins each policy
+  to the controls that cite it and their recorded ScubaGear relation: `Tool-verified: met`, `Tool-verified:
+  shortfall`, `Partly checked` (naming what the tool does not check), `Not assessed`, `Manual evidence required` or
+  `Product not assessed by this tool`. With `-ScubaResultsPath` ScubaGear's own result sits beside each policy and a
+  disagreement is flagged `Results differ — review`. `Publish-TPBod2501View` writes Markdown and a self-contained
+  HTML page whose first page says it is a technical readiness view, not an attestation, that the directive binds
+  FCEB agencies and that ScubaGear's report is what CISA expects. A view: no finding and no score changes. On a run
+  with every control satisfied, 16 policies read met, 18 partly checked and 22 need manual evidence.
+
+- **[Accuracy] ScubaGear alignment re-checked against the released v2.0.0 (2026-10-27).** `Config/scuba-alignment.json`
+  now records the v2.0.0 tag (commit `6e5a1a4`) and its migration file (SHA-256 `f53e082b…`, 56 rows: it adds
+  `MS.SHAREPOINT.3.3v1` to `v2` and corrects the range targets of `MS.DEFENDER.1.2v1` to `1.5v1`), with the
+  2026-09-30 check kept as `PreviousCheck`. The released text of every cited rule was compared with the earlier
+  commit: SPO-2.7 was reviewed against `MS.SHAREPOINT.3.3v2` (it judges the Existing guests case; Partial, stricter
+  at 15 days), PPL-1.1's strength is recorded as SHALL, and TMS-2.4's note records the new instruction to keep the
+  accepted SMTP domains list empty, which neither tool reads. No relation changed.
+
 - **[Assessment] Copilot Studio agent security (PPL-4.1 to PPL-4.10, 253 controls).** A new collector,
   `Collectors/PowerPlatform/Invoke-TPCollectCopilotStudio.ps1` (raw key `CopilotStudio`), reads the Dataverse `bot`,
   `botcomponent` and `systemuser` tables of every Dataverse-backed Power Platform environment over the Web API, in
