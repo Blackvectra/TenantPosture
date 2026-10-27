@@ -20,7 +20,8 @@ function Get-TPStandards {
         (DmarcReportingAddresses, CommonAttachmentFileTypes, PriorityUsers,
         RequiredConditionalAccessTemplates, and the two distribution-list
         standards DistributionListMaxMembers and
-        DistributionListMemberJoinRestriction). A missing or unreadable file yields
+        DistributionListMemberJoinRestriction, and CopilotStudioDormantDays for
+        PPL-4.10). A missing or unreadable file yields
         empty lists, which means "not approved", never "nothing required is met".
     #>
     [CmdletBinding()]
@@ -28,7 +29,7 @@ function Get-TPStandards {
     param([string] $Path)
 
     $std = [ordered]@{ DmarcReportingAddresses = @(); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @()
-                       DistributionListMaxMembers = @(); DistributionListMemberJoinRestriction = @() }
+                       DistributionListMaxMembers = @(); DistributionListMemberJoinRestriction = @(); CopilotStudioDormantDays = @() }
     # An explicit -Path is the whole truth for that call; only the shared default file is
     # completed by the active profile below.
     $usingDefaultFile = -not $Path

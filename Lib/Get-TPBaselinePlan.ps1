@@ -74,7 +74,7 @@ function Get-TPWorkloadSkipMap {
         [ordered]@{ Flag = 'SkipTeams';         Keys = @('Teams') }
         [ordered]@{ Flag = 'SkipSharePoint';    Keys = @('SharePoint') }
         [ordered]@{ Flag = 'SkipIntune';        Keys = @('Intune-EndpointSecurity', 'Intune-DeviceCompliance', 'Intune-AppProtection') }
-        [ordered]@{ Flag = 'SkipPowerPlatform'; Keys = @('PowerPlatform') }
+        [ordered]@{ Flag = 'SkipPowerPlatform'; Keys = @('PowerPlatform', 'CopilotStudio') }
         [ordered]@{ Flag = 'SkipDNS';           Keys = @('DNS-EmailRecords') }
     )
 }

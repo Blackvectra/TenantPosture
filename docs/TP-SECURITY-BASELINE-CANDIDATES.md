@@ -76,7 +76,7 @@ plus a `BaselineCompliance` summary (counts by observed state, constraint and di
 | Minimum | 116 | 73 | 43 |
 | Standard | 16 | 7 | 9 |
 | Hardened | 59 | 39 | 20 |
-| Assessment-only controls | 124 | | |
+| Assessment-only controls | 134 | | |
 
 All 160 v7.0.0 recommendations are represented; 119 rows are tool-checked controls and 72 are manual. Effectiveness is read for five rows, from the sign-in log (`AAD-SignInEvidence`, the last 30 days): AAD-1.2 and CIS-5.2.2.1 (no successful interactive sign-in that needed only one factor, for all users and for privileged-role holders), CIS-5.2.2.3, EXO-1.6 and SPO-1.3 (no successful sign-in through a legacy authentication client, tenant-wide, to Exchange Online and to SharePoint Online). Every other row's `EffectivenessCapability` is `NotCollected`.
 
@@ -279,6 +279,16 @@ One row per control in `controls.json`; the tier column is what the test compare
 | PPL-3.3 | Copilot Access Restricted to Licensed Users | Medium | M365 Copilot add-on license | — | **Assessment-only** |
 | PPL-3.4 | Copilot Studio Agent Publishing Governed | High | Power Platform + Copilot Studio license | — | **Assessment-only** |
 | PPL-3.5 | Copilot Interaction Audit Logging Active | High | Included (all plans) | 3.1.1 | **Minimum** |
+| PPL-4.1 | Copilot Studio Agents Not Open to Everyone or Any Tenant | High | Included (all plans) | — | **Assessment-only** |
+| PPL-4.2 | Copilot Studio Agents Require User Authentication | High | Included (all plans) | — | **Assessment-only** |
+| PPL-4.3 | Copilot Studio HTTP Requests Use HTTPS on Port 443 | Medium | Included (all plans) | — | **Assessment-only** |
+| PPL-4.4 | Copilot Studio Email Tools Do Not Let the AI Set Recipients or Content | High | Included (all plans) | — | **Assessment-only** |
+| PPL-4.5 | Copilot Studio Connector Tools Use End-User Credentials | Medium | Included (all plans) | — | **Assessment-only** |
+| PPL-4.6 | No Hard-Coded Credentials in Copilot Studio Topics | High | Included (all plans) | — | **Assessment-only** |
+| PPL-4.7 | Copilot Studio MCP Tool Integrations Reviewed | Medium | Included (all plans) | — | **Assessment-only** |
+| PPL-4.8 | Copilot Studio Generative Agents Have Custom Instructions | Medium | Included (all plans) | — | **Assessment-only** |
+| PPL-4.9 | Copilot Studio Agents Have an Active Owner | Medium | Included (all plans) | — | **Assessment-only** |
+| PPL-4.10 | Published Copilot Studio Agents Not Dormant | Low | Included (all plans) | — | **Assessment-only** |
 | AAD-12.1 | Users Without MFA — Named List | Critical | Included (all plans) | 5.2.3.4 | **Minimum** |
 | AAD-12.2 | Stale Guest Accounts — Named List | High | M365 Business Premium or Entra ID P1 | — | **Assessment-only** |
 | AAD-12.3 | Inactive Member Accounts (35 Days) — Named List | High | M365 Business Premium or Entra ID P1 | — | **Assessment-only** |

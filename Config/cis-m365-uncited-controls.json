@@ -127,6 +127,16 @@
     "TMS-3.4": "Closest is 3.2.2, but Satisfied needs only one Mode-Enable DLP policy whose Workload matches Teams; 3.2.2 also requires TeamsLocation to include All (and exceptions permitted), which the evaluator does not read, so a policy scoped to named teams passes the tool and fails R.",
     "TMS-4.1": "Judges NewMeetingRecordingExpirationDays; no v7 recommendation.",
     "TMS-4.4": "Judges events policy attendee access (webinars, town halls, legacy live events); no v7 recommendation.",
-    "AAD-6.4": "CIS Microsoft 365 Foundations v7.0.0 predates Microsoft Entra Agent ID and has no recommendation on agent identity blueprints; 5.1.2.2 audits allowedToCreateApps, a different setting that Microsoft documents does not restrict agent blueprints."
+    "AAD-6.4": "CIS Microsoft 365 Foundations v7.0.0 predates Microsoft Entra Agent ID and has no recommendation on agent identity blueprints; 5.1.2.2 audits allowedToCreateApps, a different setting that Microsoft documents does not restrict agent blueprints.",
+    "PPL-4.1": "Judges Copilot Studio agents read from Dataverse; CIS Microsoft 365 Foundations v7.0.0 has no Copilot Studio or Power Platform recommendation.",
+    "PPL-4.2": "Judges Copilot Studio agents read from Dataverse; CIS Microsoft 365 Foundations v7.0.0 has no Copilot Studio or Power Platform recommendation.",
+    "PPL-4.3": "Judges Copilot Studio agents read from Dataverse; CIS Microsoft 365 Foundations v7.0.0 has no Copilot Studio or Power Platform recommendation.",
+    "PPL-4.4": "Judges Copilot Studio agents read from Dataverse; CIS Microsoft 365 Foundations v7.0.0 has no Copilot Studio or Power Platform recommendation.",
+    "PPL-4.5": "Judges Copilot Studio agents read from Dataverse; CIS Microsoft 365 Foundations v7.0.0 has no Copilot Studio or Power Platform recommendation.",
+    "PPL-4.6": "Judges Copilot Studio agents read from Dataverse; CIS Microsoft 365 Foundations v7.0.0 has no Copilot Studio or Power Platform recommendation.",
+    "PPL-4.7": "Judges Copilot Studio agents read from Dataverse; CIS Microsoft 365 Foundations v7.0.0 has no Copilot Studio or Power Platform recommendation.",
+    "PPL-4.8": "Judges Copilot Studio agents read from Dataverse; CIS Microsoft 365 Foundations v7.0.0 has no Copilot Studio or Power Platform recommendation.",
+    "PPL-4.9": "Judges Copilot Studio agents read from Dataverse; CIS Microsoft 365 Foundations v7.0.0 has no Copilot Studio or Power Platform recommendation.",
+    "PPL-4.10": "Judges Copilot Studio agents read from Dataverse; CIS Microsoft 365 Foundations v7.0.0 has no Copilot Studio or Power Platform recommendation."
   }
 }

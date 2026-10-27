@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- **[Assessment] Copilot Studio agent security (PPL-4.1 to PPL-4.10, 253 controls).** A new collector,
+  `Collectors/PowerPlatform/Invoke-TPCollectCopilotStudio.ps1` (raw key `CopilotStudio`), reads the Dataverse `bot`,
+  `botcomponent` and `systemuser` tables of every Dataverse-backed Power Platform environment over the Web API, in
+  process: `Get-TPPowerPlatformToken -Audience` now signs in to one environment's Dataverse URL with the same public
+  client and tenant-pinned authority (one in-memory MSAL application per tenant, so later audiences are silent), and
+  `Invoke-TPDataverseApi` sends only GET to an https Dataverse host (commercial, GCC, GCC High, DoD, China), follows
+  `@odata.nextLink` only on the same host and refuses any other, and never follows a redirect. The environment list
+  is reused from the Power Platform collector, which now stores each environment's Dataverse `InstanceUrl`. Only
+  derived facts are stored (access control, authentication mode and trigger, HTTP node scheme and port, email tools
+  whose recipient, subject or body is not fixed, connector tools without end-user credentials, MCP hosts, credential
+  pattern types with the component id, owner object id, dates); topic YAML, instructions and matched secrets are
+  never stored. Each environment has its own `SectionStatus` and `SectionErrors` (a 403 names the Dataverse role to
+  assign; a cap reached is `Truncated`). The controls: agents not open to everyone or any tenant, user
+  authentication with sign-in required, HTTP requests over https on 443, email tools that do not let the AI choose
+  recipients or content, connector tools on end-user credentials, no hard-coded credentials (heuristic), MCP tools
+  listed for manual review, custom instructions on generative agents, an active owner (joined to `AAD-Users`, which
+  now publishes `SectionStatus.Users`), and dormant published agents, which is not assessed until the owner approves
+  `CopilotStudioDormantDays` in `Config/tp-standards.json` (shipped empty). `-SkipPowerPlatform` skips both
+  collectors. No new Graph scope.
+
 - **[Assessment] Control selection: `-ControlId` / `-ExcludeControlId` run only chosen controls.** Wildcard patterns over
   ControlId (`EXO-1.6`, `'AAD-*'`, `AAD-1.2,AAD-1.3,'SPO-5.*'`) on `Invoke-TPAssessment.ps1` and, passed through, on
   `Invoke-TPBatchAssessment.ps1`. `Lib/Resolve-TPControlSelection.ps1` derives what the run needs from the code: the

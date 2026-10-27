@@ -464,7 +464,17 @@
     "SPO-5.4": "sharing-restriction",
     "SPO-5.5": "sharing-restriction",
     "SPO-5.6": "sharing-restriction",
-    "SPO-5.7": "sharing-restriction"
+    "SPO-5.7": "sharing-restriction",
+    "PPL-4.1": "sharing-restriction",
+    "PPL-4.2": "auth-prompt",
+    "PPL-4.3": "power-platform-restriction",
+    "PPL-4.4": "power-platform-restriction",
+    "PPL-4.5": "auth-prompt",
+    "PPL-4.6": "power-platform-restriction",
+    "PPL-4.7": "inventory-only",
+    "PPL-4.8": "copilot-restriction",
+    "PPL-4.9": "account-hygiene",
+    "PPL-4.10": "inventory-only"
   },
   "deviceControls": {
     "DEV-1.1": "device-encryption",
@@ -737,6 +747,14 @@
       "Summary": "New sharing links default to view only.",
       "Users": "A user who wants a recipient to edit chooses Edit in the sharing dialog; existing links are unchanged.",
       "Reversible": "Yes."
+    },
+    "PPL-4.5": {
+      "Summary": "Users of the agent are asked to sign in to each connector with their own account the first time a tool runs, and get only what their own account allows.",
+      "Watchouts": "Autonomous or scheduled agents have no user to sign in, so a tool switched to end-user credentials fails on its next unattended run (Microsoft documents this). Find those agents before enforcing it for an environment."
+    },
+    "PPL-4.2": {
+      "Summary": "Users must sign in before the agent answers; an agent embedded on a public website stops answering anonymous visitors.",
+      "Watchouts": "An agent built for anonymous public use is a deliberate design: move it to an environment and data policy meant for public agents rather than leaving it unauthenticated beside internal ones."
     }
   }
 }

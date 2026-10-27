@@ -31,7 +31,7 @@ coming back to this after six months, start here.
 
 ### `Invoke-TPAssessment.ps1` — the main one
 
-One tenant, 243 controls, client-ready report. Everything else orbits this.
+One tenant, 253 controls, client-ready report. Everything else orbits this.
 
 ```powershell
 .\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com
@@ -313,7 +313,7 @@ Evaluators/      turn raw data into findings
 Publishers/      turn findings into documents
 Lib/             shared helpers — scoring, NIST rollups, escaping, file ACLs
 Device/          the endpoint script. PS 5.1. Does not run on your machine.
-Testing/         128 Pester suites. Run: ./tools/Invoke-TPTestGate.ps1
+Testing/         129 Pester suites. Run: ./tools/Invoke-TPTestGate.ps1
 docs/            this file, and the policy docs
 ```
 

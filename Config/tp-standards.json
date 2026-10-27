@@ -96,5 +96,9 @@
     "Profile": "Level 1",
     "Subset": "macro core",
     "ApprovedDate": "2026-10-26"
+  },
+  "CopilotStudioDormantDays": {
+    "_help": "PPL-4.10. A single whole number of days (1 to 3650): a published Copilot Studio agent whose record was not modified for longer is reported as dormant, for example [\"180\"]. Empty: no threshold is approved, so dormancy is not assessed. Maester v3.0.0 uses 180 days; that is Maester's value, not an approved NRG one.",
+    "Values": []
   }
 }

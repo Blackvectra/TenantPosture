@@ -1217,6 +1217,16 @@
         "Why": "Satisfied requires every assigned iOS/iPadOS and Android app protection policy to block jailbroken or rooted devices, set a minimum OS version, allow at most 5 PIN attempts, block access after at most 10080 minutes offline and wipe after at most 30 days offline.",
         "Unchecked": "Min OS version against Microsoft's N-1 guidance; disabled-account action; the Android rows not read (min patch version, Play Integrity, hardware-backed key, threat scan, device lock, Samsung Knox); the PIN-attempt and jailbreak actions (beta only); data-protection and access-requirement rows outside conditional launch."
       }
+    ],
+    "PPL-4.2": [
+      {
+        "Benchmark": "MS-LEARN-RECOMMENDED",
+        "ItemId": "Configure user authentication in Copilot Studio > No authentication, Caution",
+        "ItemTitle": "We recommend you apply authentication, especially if you are using your bot or agent within your organization or for specific users",
+        "Url": "https://learn.microsoft.com/microsoft-copilot-studio/configuration-end-user-authentication",
+        "Relation": "Stricter",
+        "Why": "Satisfied requires every agent to authenticate (Authenticate with Microsoft, or manual authentication), so no Satisfied tenant has an agent without the authentication Microsoft recommends; the control also fails manual authentication with Require users to sign in off, which the recommendation does not address."
+      }
     ]
   },
   "unmapped": {
@@ -1378,6 +1388,33 @@
     "AAD-6.4": {
       "Reason": "No configuration benchmark covers agent identity blueprints yet: CIS Microsoft 365 v7.0.0, ScubaGear 2.0.0, the DISA Entra ID STIG and the Zero Trust Assessment checks predate Microsoft Entra Agent ID. Microsoft documents the setting and how to turn it off but states no recommended value; the open-source Maester test MT.1225 checks the same property, but it is a test suite, not a benchmark.",
       "EarnBy": ""
+    },
+    "PPL-4.1": {
+      "Reason": "Microsoft Learn's automatic security scan describes an agent shared with no one as the secure default and warns when an agent is shared with everyone in the organization, but states no recommended access control value; ScubaGear 2.0.0 Power Platform baselines (MS.POWERPLATFORM.1.1-6.1) have no Copilot Studio agent item. Not cited."
+    },
+    "PPL-4.3": {
+      "Reason": "Microsoft Learn ('Configure data policies for agents') documents blocking HTTP requests as an option, not a recommended value, and no benchmark audits the scheme or port of a topic's HTTP request node. Not cited."
+    },
+    "PPL-4.4": {
+      "Reason": "No benchmark audits email tools on Copilot Studio agents; Learn documents that tool inputs default to 'Dynamically fill with AI' without recommending custom values for email recipients. Not cited."
+    },
+    "PPL-4.5": {
+      "Reason": "Microsoft Learn ('Control maker-provided credentials for authentication') describes the oversharing risk of maker credentials and the admin control that enforces end-user credentials, but presents it as an option (both are enabled by default), not a recommended value. Not cited."
+    },
+    "PPL-4.6": {
+      "Reason": "No configuration benchmark audits Copilot Studio topic definitions for embedded credentials; the check is a heuristic pattern search. Not cited."
+    },
+    "PPL-4.7": {
+      "Reason": "Manual review item with no verdict on found integrations; no benchmark recommends a value for MCP tool integrations. Not cited."
+    },
+    "PPL-4.8": {
+      "Reason": "Microsoft Learn gives best practices for writing instructions for generative orchestration but no recommendation that every agent carry them; no benchmark audits it. Not cited."
+    },
+    "PPL-4.9": {
+      "Reason": "No benchmark audits Copilot Studio agent ownership. Not cited."
+    },
+    "PPL-4.10": {
+      "Reason": "No benchmark sets a dormancy period for Copilot Studio agents; the 180 days Maester uses is that tool's own threshold and the NRG value is not approved. Not cited."
     }
   }
 }
