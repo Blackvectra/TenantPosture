@@ -1,0 +1,535 @@
+{
+  "framework": "CISA BOD 25-01 required configurations (Microsoft 365)",
+  "version": "2026-10-27",
+  "directive": {
+    "id": "BOD 25-01",
+    "title": "Implementing Secure Practices for Cloud Services",
+    "issued": "2024-12-17",
+    "url": "https://www.cisa.gov/news-events/directives/bod-25-01-implementing-secure-practices-cloud-services",
+    "appliesTo": "Production or operational cloud tenants used in federal information systems, for cloud products with a finalized SCuBA Secure Configuration Baseline.",
+    "requiredActions": [
+      "By February 21, 2025: identify every in-scope cloud tenant and report it to CISA; update the inventory annually.",
+      "By April 25, 2025: deploy all SCuBA assessment tools for in-scope tenants and begin continuous reporting to CISA (or submit the latest results quarterly in a CISA-approved format).",
+      "By June 20, 2025: implement all mandatory SCuBA policies in effect at issuance, as listed on the Required Configurations page.",
+      "Implement later updates to the mandatory policies within the timelines on the Required Configurations page.",
+      "Implement the mandatory baselines and continuous monitoring for a new cloud tenant before granting it an Authorization to Operate.",
+      "Identify and explain any deviation shown in the SCuBA tool output when reporting to CISA; the agency Authorizing Official may accept the risk of a deviation."
+    ],
+    "mandatoryVsRecommended": "The directive applies to the mandatory policies, which the SCuBA baselines mark SHALL; recommended policies (SHOULD) are left to agency discretion."
+  },
+  "source": [
+    "https://www.cisa.gov/resources-tools/services/bod-25-01-implementing-secure-practices-cloud-services-required-configurations",
+    "https://www.cisa.gov/news-events/directives/bod-25-01-implementing-secure-practices-cloud-services"
+  ],
+  "sourceRetrieved": "2026-10-27",
+  "sourceColumns": [
+    "Policy ID",
+    "Action",
+    "Date Added / Modified",
+    "Due Date"
+  ],
+  "sourceNote": "The Required Configurations page names no ScubaGear version and does not define its date columns; every Microsoft 365 row lists its due date as \"End of each fiscal quarter\". Each policy ID on the page links to the ScubaGear baseline on its main branch.",
+  "basis": "CISA list: the policy IDs below are the Microsoft 365 rows of the Required Configurations page as retrieved, taken by ID. They are not derived from the baselines' SHALL statements. Cross-check: the ScubaGear v2.0.0 baselines mark exactly these 56 policies with the \"BOD 25-01 Requirement\" indicator, and every one is a SHALL. The statements are the released v2.0.0 baseline text.",
+  "scubaGear": {
+    "version": "2.0.0",
+    "tag": "v2.0.0",
+    "tagCommit": "6e5a1a421b36c5a1fb3fd983b8c4bcd5b7a6c61d",
+    "repository": "https://github.com/cisagov/ScubaGear",
+    "note": "The version this catalog was checked against. CISA links each ID to the baseline on the ScubaGear main branch, so a later CISA change can add, remove or re-version a policy; re-check this file against the page when it changes."
+  },
+  "notEncoded": "The Required Configurations page also lists Google Workspace policies (GWS.*, assessed by CISA ScubaGoggles). This tool assesses Microsoft 365 only, so they are not encoded here.",
+  "products": [
+    {
+      "Key": "aad",
+      "Name": "Entra ID",
+      "CisaHeading": "Azure Active Directory / Entra ID",
+      "Baseline": "aad.md",
+      "AssessedByTool": true
+    },
+    {
+      "Key": "exo",
+      "Name": "Exchange Online",
+      "CisaHeading": "Exchange Online",
+      "Baseline": "exo.md",
+      "AssessedByTool": true
+    },
+    {
+      "Key": "powerplatform",
+      "Name": "Power Platform",
+      "CisaHeading": "Power Platform",
+      "Baseline": "powerplatform.md",
+      "AssessedByTool": true
+    },
+    {
+      "Key": "securitysuite",
+      "Name": "Security Suite",
+      "CisaHeading": "Security Suite",
+      "Baseline": "securitysuite.md",
+      "AssessedByTool": true
+    },
+    {
+      "Key": "sharepoint",
+      "Name": "SharePoint Online and OneDrive",
+      "CisaHeading": "SharePoint Online & OneDrive",
+      "Baseline": "sharepoint.md",
+      "AssessedByTool": true
+    },
+    {
+      "Key": "teams",
+      "Name": "Microsoft Teams",
+      "CisaHeading": "Microsoft Teams",
+      "Baseline": "teams.md",
+      "AssessedByTool": true
+    }
+  ],
+  "policies": [
+    {
+      "PolicyId": "MS.AAD.1.1v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "Legacy authentication SHALL be blocked.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.2.1v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "Users detected as high risk SHALL be blocked.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.2.3v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "Sign-ins detected as high-risk SHALL be blocked.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.3.1v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "Phishing-resistant MFA SHALL be enforced for all users.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.3.2v2",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "MFA SHALL be enforced for all users.",
+      "CisaDateAddedOrModified": "February 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.3.3v2",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "If Microsoft Authenticator is enabled, it SHALL be configured to show login context information.",
+      "CisaDateAddedOrModified": "March 2025",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.3.4v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "The \"Authentication methods manage migration\" feature SHALL be set to \"Migration complete.\"",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.3.5v2",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "The authentication methods of short message service (SMS), voice call, and email one-time passcode (OTP) SHALL be disabled.",
+      "CisaDateAddedOrModified": "February 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.3.6v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "Phishing-resistant MFA SHALL be required for highly privileged roles.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.5.1v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "Only administrators SHALL be allowed to register applications.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.5.2v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "User consent to applications SHALL be restricted.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.5.3v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "An administrative consent workflow SHALL be configured for applications.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.6.1v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "User passwords SHALL NOT expire.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.7.1v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "A minimum of two users and a maximum of eight users SHALL be provisioned with the Global Administrator role.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.7.2v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "Privileged users SHALL be provisioned with finer-grained roles instead of the Global Administrator role.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.7.3v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "Privileged users SHALL be provisioned cloud-only accounts separate from an on-premises directory or other federated identity providers.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.7.4v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "Permanent active role assignments SHALL NOT be allowed for highly privileged roles.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.7.5v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "Provisioning users to highly privileged roles SHALL NOT occur outside of a PAM system.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.7.6v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "Activation of the Global Administrator role SHALL require approval.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.7.7v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "Eligible and active highly privileged role assignments SHALL trigger an alert.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.7.8v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "User activation of the Global Administrator role SHALL trigger an alert.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.AAD.9.1v1",
+      "Product": "aad",
+      "Criticality": "SHALL",
+      "Statement": "Risky AI agents SHALL be blocked.",
+      "CisaDateAddedOrModified": "March 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.EXO.1.1v2",
+      "Product": "exo",
+      "Criticality": "SHALL",
+      "Statement": "Automatic forwarding to external domains SHALL be disabled.",
+      "CisaDateAddedOrModified": "March 2025",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.EXO.2.2v3",
+      "Product": "exo",
+      "Criticality": "SHALL",
+      "Statement": "An SPF policy SHALL be published for each domain that fails all non-approved senders.",
+      "CisaDateAddedOrModified": "October 2025",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.EXO.4.1v1",
+      "Product": "exo",
+      "Criticality": "SHALL",
+      "Statement": "A DMARC policy SHALL be published for every second-level domain.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.EXO.4.2v1",
+      "Product": "exo",
+      "Criticality": "SHALL",
+      "Statement": "The DMARC message rejection option SHALL be p=reject.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.EXO.4.3v1",
+      "Product": "exo",
+      "Criticality": "SHALL",
+      "Statement": "The DMARC point of contact for aggregate reports SHALL include reports@dmarc.cyber.dhs.gov.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.EXO.5.1v1",
+      "Product": "exo",
+      "Criticality": "SHALL",
+      "Statement": "SMTP AUTH SHALL be disabled.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.EXO.6.1v1",
+      "Product": "exo",
+      "Criticality": "SHALL",
+      "Statement": "Contact folders SHALL NOT be shared with all domains.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.EXO.6.2v1",
+      "Product": "exo",
+      "Criticality": "SHALL",
+      "Statement": "Calendar details SHALL NOT be shared with all domains.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.EXO.7.1v1",
+      "Product": "exo",
+      "Criticality": "SHALL",
+      "Statement": "External sender warnings SHALL be implemented.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.EXO.13.1v1",
+      "Product": "exo",
+      "Criticality": "SHALL",
+      "Statement": "Mailbox auditing SHALL be enabled.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.POWERPLATFORM.1.1v1",
+      "Product": "powerplatform",
+      "Criticality": "SHALL",
+      "Statement": "The ability to create production and sandbox environments SHALL be restricted to administrators.",
+      "CisaDateAddedOrModified": "April 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.POWERPLATFORM.1.2v1",
+      "Product": "powerplatform",
+      "Criticality": "SHALL",
+      "Statement": "The ability to create trial environments SHALL be restricted to administrators.",
+      "CisaDateAddedOrModified": "April 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.POWERPLATFORM.2.1v1",
+      "Product": "powerplatform",
+      "Criticality": "SHALL",
+      "Statement": "A DLP policy SHALL be created to restrict connector access in the default Power Platform environment.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.POWERPLATFORM.3.1v1",
+      "Product": "powerplatform",
+      "Criticality": "SHALL",
+      "Statement": "Power Platform tenant isolation SHALL be enabled.",
+      "CisaDateAddedOrModified": "April 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SECURITYSUITE.1.1v1",
+      "Product": "securitysuite",
+      "Criticality": "SHALL",
+      "Statement": "Emails with click-to-run file attachments SHALL be blocked including, at a minimum, .exe, .cmd, and .vbe files.",
+      "CisaDateAddedOrModified": "March 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SECURITYSUITE.1.2v1",
+      "Product": "securitysuite",
+      "Criticality": "SHALL",
+      "Statement": "Email scanning SHALL be capable of reviewing emails after delivery.",
+      "CisaDateAddedOrModified": "March 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SECURITYSUITE.1.3v1",
+      "Product": "securitysuite",
+      "Criticality": "SHALL",
+      "Statement": "Emails identified as containing malware SHALL be quarantined or dropped.",
+      "CisaDateAddedOrModified": "March 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SECURITYSUITE.3.1v1",
+      "Product": "securitysuite",
+      "Criticality": "SHALL",
+      "Statement": "A DLP policy SHALL be configured to protect PII and sensitive information, as defined by the agency, blocking at a minimum: credit card numbers, U.S. Individual Taxpayer Identification Numbers (ITIN), and U.S. Social Security numbers (SSN).",
+      "CisaDateAddedOrModified": "March 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SECURITYSUITE.4.1v1",
+      "Product": "securitysuite",
+      "Criticality": "SHALL",
+      "Statement": "At a minimum, the following alerts SHALL be enabled: a. Suspicious email sending patterns detected. b. Suspicious Connector Activity. c. Suspicious Email Forwarding Activity. d. Messages have been delayed. e. Tenant restricted from sending unprovisioned email. f. Tenant restricted from sending email. g. A potentially malicious URL click was detected.",
+      "CisaDateAddedOrModified": "March 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SECURITYSUITE.5.1v1",
+      "Product": "securitysuite",
+      "Criticality": "SHALL",
+      "Statement": "Unified audit logging SHALL be enabled.",
+      "CisaDateAddedOrModified": "March 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SECURITYSUITE.6.1v1",
+      "Product": "securitysuite",
+      "Criticality": "SHALL",
+      "Statement": "Emails detected as spam and phishing SHALL NOT be delivered to the user's inbox.",
+      "CisaDateAddedOrModified": "March 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SECURITYSUITE.6.2v1",
+      "Product": "securitysuite",
+      "Criticality": "SHALL",
+      "Statement": "Allowed domains SHALL NOT be added to inbound anti-spam protection policies.",
+      "CisaDateAddedOrModified": "March 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SHAREPOINT.1.1v1",
+      "Product": "sharepoint",
+      "Criticality": "SHALL",
+      "Statement": "External sharing for SharePoint SHALL be limited to \"Existing guests\" or \"Only people in your organization.\"",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SHAREPOINT.1.2v1",
+      "Product": "sharepoint",
+      "Criticality": "SHALL",
+      "Statement": "External sharing for OneDrive SHALL be limited to \"Existing guests\" or \"Only people in your organization.\"",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SHAREPOINT.1.3v1",
+      "Product": "sharepoint",
+      "Criticality": "SHALL",
+      "Statement": "External sharing SHALL be restricted to approved external domains and/or users in approved security groups per interagency collaboration needs.",
+      "CisaDateAddedOrModified": "September 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SHAREPOINT.2.1v1",
+      "Product": "sharepoint",
+      "Criticality": "SHALL",
+      "Statement": "File and folder default sharing scope SHALL be set to \"Specific people (only the people the user specifies).\"",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SHAREPOINT.2.2v1",
+      "Product": "sharepoint",
+      "Criticality": "SHALL",
+      "Statement": "File and folder default sharing permissions SHALL be set to view only.",
+      "CisaDateAddedOrModified": "June 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SHAREPOINT.3.1v1",
+      "Product": "sharepoint",
+      "Criticality": "SHALL",
+      "Statement": "Expiration days for \"Anyone\" links SHALL be set to 30 days or less.",
+      "CisaDateAddedOrModified": "March 2025",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SHAREPOINT.3.2v1",
+      "Product": "sharepoint",
+      "Criticality": "SHALL",
+      "Statement": "The allowable file and folder permissions for links SHALL be set to view only.",
+      "CisaDateAddedOrModified": "March 2025",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.SHAREPOINT.3.3v2",
+      "Product": "sharepoint",
+      "Criticality": "SHALL",
+      "Statement": "Reauthentication days for people who use a verification code SHALL be set to 30 days or less.",
+      "CisaDateAddedOrModified": "April 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.TEAMS.1.2v2",
+      "Product": "teams",
+      "Criticality": "SHALL",
+      "Statement": "Anonymous users SHALL NOT be enabled to start Microsoft Teams meetings.",
+      "CisaDateAddedOrModified": "August 2025",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.TEAMS.2.1v2",
+      "Product": "teams",
+      "Criticality": "SHALL",
+      "Statement": "External access for users SHALL only be enabled on a per-domain basis.",
+      "CisaDateAddedOrModified": "August 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.TEAMS.2.2v2",
+      "Product": "teams",
+      "Criticality": "SHALL",
+      "Statement": "Unmanaged users SHALL NOT be enabled to initiate contact with internal users.",
+      "CisaDateAddedOrModified": "August 2026",
+      "CisaDueDate": "End of each fiscal quarter"
+    },
+    {
+      "PolicyId": "MS.TEAMS.4.1v1",
+      "Product": "teams",
+      "Criticality": "SHALL",
+      "Statement": "Microsoft Teams email integration SHALL be disabled.",
+      "CisaDateAddedOrModified": "July 2023",
+      "CisaDueDate": "End of each fiscal quarter"
+    }
+  ]
+}

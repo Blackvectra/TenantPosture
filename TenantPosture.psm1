@@ -195,6 +195,7 @@ $script:ExportedFunctions = @(
     'Get-TPControlOperationalImpact', 'Publish-TPSSP', 'Group-TPSSPImpact', 'Get-TPSSPImpactLabel',
     'Get-TPSSPQuestionnaireItems', 'Publish-TPSSPQuestionnaire', 'Read-TPQuestionnaireFields',
     'Get-TPHipaaReadiness', 'Get-TPHipaaCatalog', 'Get-TPHipaaCitationsFromText', 'Publish-TPHipaaReadiness',
+    'Get-TPBod2501View', 'Get-TPBod2501Catalog', 'Publish-TPBod2501View',
     'ConvertTo-TPSSPClientSlug', 'ConvertTo-TPSSPAnswerPsd1', 'ConvertTo-TPSSPPsd1String',
     'Get-TPManualReviewItems', 'Get-TPManualReviewAnswers',
     'ConvertTo-TPManualReviewAnswerPsd1', 'Publish-TPManualReviewQuestionnaire',
