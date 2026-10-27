@@ -1,0 +1,162 @@
+{
+  "version": "1.0",
+  "sourceRetrieved": "2026-10-27",
+  "purpose": "Upcoming Microsoft 365, Entra, Exchange Online, Teams, SharePoint, Intune, Defender, Purview and Power Platform changes that a new client's tenant will meet in the next fourteen months, for the onboarding report section \"Coming Microsoft changes (2026-2027)\". It is reference data: it creates no finding, changes no finding and moves no score.",
+  "inclusionRule": "An entry is listed only when Microsoft states its effective or retirement date on an official Microsoft page (Microsoft Learn, an official Microsoft Tech Community product blog, or a Microsoft lifecycle page), the page was fetched and the date read in its text on sourceRetrieved, and the date falls on or after sourceRetrieved and no later than 2027-12-31. Where Microsoft has moved a date, the latest Microsoft statement is used. A date of the form YYYY-MM is a month Microsoft names without a day. DateQualifier: On = takes effect on that date; By = the deadline by which it takes effect or action is needed; Starting = a phased change that begins on that date; Expected = a date Microsoft itself qualifies. RelatedControls lists only controls whose evaluator judges the setting the change affects; an empty list means no control in this tool judges it.",
+  "changes": [
+    {
+      "Id": "intune-android-strong-integrity",
+      "Title": "Intune enforces Google's updated Play Integrity \"Strong Integrity\" verdict for Android 13 and later",
+      "Date": "2026-10-31",
+      "DateQualifier": "By",
+      "Summary": "Google's Strong Integrity verdict for Android 13 and later now requires hardware-backed signals and a security update in the past 12 months, and Intune enforces the new definition in app protection and compliance policies.",
+      "Impact": "Android devices without a recent security update can drop from Strong Integrity to Device Integrity, which can trigger conditional launch blocks or mark the device noncompliant and cut it off from resources protected by Conditional Access. Check the app protection status report for each device's last security patch and tell affected users to update.",
+      "RelatedControls": [],
+      "SourceUrl": "https://learn.microsoft.com/en-us/intune/whats-new/",
+      "SourceTitle": "What's new in Microsoft Intune"
+    },
+    {
+      "Id": "windows-11-23h2-enterprise-end-of-servicing",
+      "Title": "Windows 11 Enterprise and Education, version 23H2, reaches end of servicing",
+      "Date": "2026-11-10",
+      "DateQualifier": "On",
+      "Summary": "Windows 11 Enterprise, Education and IoT Enterprise version 23H2 stop receiving security and quality updates.",
+      "Impact": "Devices still on 23H2 after this date are unpatched. Move them to a supported version and raise the minimum operating system version in Intune compliance policies so an unserviced build is reported noncompliant.",
+      "RelatedControls": ["INT-4.3"],
+      "SourceUrl": "https://learn.microsoft.com/en-us/lifecycle/end-of-support/end-of-support-2026",
+      "SourceTitle": "Ending Support in 2026"
+    },
+    {
+      "Id": "power-platform-unmanaged-developer-environments",
+      "Title": "Unmanaged Power Platform developer environments are deprecated",
+      "Date": "2026-11-15",
+      "DateQualifier": "Starting",
+      "Summary": "From November 15, 2026 no new unmanaged developer environment can be created (signing up for the Power Apps Developer Plan no longer creates one); existing unmanaged developer environments are suspended starting December 15, 2026 and deleted starting January 15, 2027. Developer environments continue only as managed environments, one per user.",
+      "Impact": "Apps, flows, agents and data in an unmanaged developer environment become unavailable when it is suspended and are lost when it is deleted. Convert environments worth keeping to managed environments, or export their solutions, before December 15, 2026.",
+      "RelatedControls": [],
+      "SourceUrl": "https://learn.microsoft.com/en-us/power-platform/important-changes-coming",
+      "SourceTitle": "Important changes (deprecations) coming in Power Platform"
+    },
+    {
+      "Id": "exchange-smtp-auth-basic-default-off",
+      "Title": "Basic authentication for SMTP AUTH client submission disabled by default in Exchange Online",
+      "Date": "2026-12",
+      "DateQualifier": "By",
+      "Summary": "Microsoft states that at the end of December 2026 SMTP AUTH Basic authentication will be disabled by default for existing tenants and unavailable by default for tenants created after December 2026. Microsoft will announce the final removal date in the second half of 2027.",
+      "Impact": "Printers, scanners, line-of-business applications and scripts that send mail through smtp.office365.com with a username and password stop sending. Find them with the SMTP AUTH Clients report in the Exchange admin center, then move each to OAuth, High Volume Email, Azure Communication Services Email, or a connector-based relay.",
+      "RelatedControls": ["EXO-1.2", "EXO-1.6", "EXO-6.4", "EXO-7.4"],
+      "SourceUrl": "https://techcommunity.microsoft.com/blog/exchange/updated-exchange-online-smtp-auth-basic-authentication-deprecation-timeline/4489835",
+      "SourceTitle": "Updated Exchange Online SMTP AUTH Basic Authentication Deprecation Timeline"
+    },
+    {
+      "Id": "defender-cloud-apps-file-policies-retire",
+      "Title": "Defender for Cloud Apps file policies retire; data protection moves to Microsoft Purview",
+      "Date": "2027-01-06",
+      "DateQualifier": "On",
+      "Summary": "File policies in Microsoft Defender for Cloud Apps, including their DLP for SharePoint, OneDrive and connected third-party apps, are retired, along with the Instances location in Purview Data Loss Prevention. Microsoft Purview DLP and auto-labeling become the place for file-based data protection.",
+      "Impact": "File policies are no longer enforced after this date and do not migrate on their own. Recreate them as Purview DLP or auto-labeling policies (Microsoft provides a migration tool in the Defender portal) and test them in simulation before enforcing. App discovery, posture management and threat detection in Defender for Cloud Apps are not affected.",
+      "RelatedControls": [],
+      "SourceUrl": "https://learn.microsoft.com/en-us/defender-cloud-apps/migrate-file-policies-to-purview",
+      "SourceTitle": "Migrate file policies to Microsoft Purview"
+    },
+    {
+      "Id": "entra-sms-voice-retirement",
+      "Title": "Microsoft-provided SMS and voice authentication retired for most users",
+      "Date": "2027-02-01",
+      "DateQualifier": "On",
+      "Summary": "Microsoft Entra ID retires Microsoft-provided SMS and voice delivery for all users except Global Administrators and external users; internal guest users are included in this date. Users whose only MFA method is SMS or voice must register a passkey at sign-in before they can continue.",
+      "Impact": "Users still relying on SMS or voice are blocked at sign-in until they register a passkey, and there is no opt-out from this enforcement. Move users to passkeys, Windows Hello for Business or another phishing-resistant method beforehand, or configure a telephony provider through Microsoft Security Store if a business need for SMS or voice remains.",
+      "RelatedControls": ["AAD-17.3"],
+      "SourceUrl": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sms-voice-retirement",
+      "SourceTitle": "Passkeys by default and retirement of Microsoft-provided SMS and voice authentication"
+    },
+    {
+      "Id": "teams-live-events-support-end",
+      "Title": "Support ends for Teams live events scheduled before the retirement",
+      "Date": "2027-02-28",
+      "DateQualifier": "On",
+      "Summary": "Teams live events retired on June 30, 2026; events scheduled before that date are supported through February 28, 2027. Town halls and webinars are the replacement.",
+      "Impact": "Recurring or long-running live events scheduled before the retirement must be recreated as town halls or webinars before support ends, and the attendee access settings of the Teams events policy then decide who can join.",
+      "RelatedControls": ["TMS-4.4"],
+      "SourceUrl": "https://learn.microsoft.com/en-us/microsoftteams/teams-live-events/what-are-teams-live-events",
+      "SourceTitle": "What are Microsoft Teams live events"
+    },
+    {
+      "Id": "sharepoint-classic-publishing-custom-script",
+      "Title": "SharePoint Online disables classic publishing and enforces no custom script for new tenants",
+      "Date": "2027-03-01",
+      "DateQualifier": "Starting",
+      "Summary": "From March 1, 2027 no tenant can create classic publishing sites or activate the classic publishing feature. Tenants created on or after that date cannot create classic pages, and DenyAddAndCustomizePages is enforced as True so custom script cannot be added. The page and custom script restrictions reach all existing tenants on October 1, 2028.",
+      "Impact": "Inventory classic publishing sites, classic pages and custom script use now (Purview Audit classic page events, the Microsoft 365 Assessment Tool) and plan modernization; classic pages that are not modernized become read-only when the applicable phase reaches the tenant.",
+      "RelatedControls": ["SPO-2.4"],
+      "SourceUrl": "https://learn.microsoft.com/en-us/sharepoint/classic-user-created-page-deprecation",
+      "SourceTitle": "Upcoming changes to classic publishing sites, classic pages, and custom scripting in SharePoint Online"
+    },
+    {
+      "Id": "exchange-online-ews-shutdown",
+      "Title": "Exchange Web Services permanently disabled in Exchange Online",
+      "Date": "2027-04-01",
+      "DateQualifier": "On",
+      "Summary": "After the phased disablement that began in October 2026, Exchange Web Services (EWS) in Exchange Online is fully and permanently disabled on April 1, 2027, and tenant admins can no longer control the EWSEnabled setting. Microsoft states there will be no exceptions past April 2027.",
+      "Impact": "Every application, add-in, backup, migration, archiving or sync tool and hybrid integration that still calls EWS against Exchange Online stops working. Identify them with the EWS usage report and move each to Microsoft Graph, or replace it, before this date.",
+      "RelatedControls": [],
+      "SourceUrl": "https://techcommunity.microsoft.com/blog/exchange/exchange-online-ews-your-time-is-almost-up/4492361",
+      "SourceTitle": "Exchange Online EWS, Your Time is Almost Up"
+    },
+    {
+      "Id": "entra-connect-sync-application-authentication",
+      "Title": "Microsoft Entra Connect Sync must run 2.6.84.0 or later with application-based authentication",
+      "Date": "2027-04-07",
+      "DateQualifier": "By",
+      "Summary": "Legacy authentication for Microsoft Entra Connect Sync is being retired: servers must be on version 2.6.84.0 or later and configured for application-based authentication.",
+      "Impact": "If a Connect Sync server is not upgraded and configured by this date, all synchronization from Active Directory to Microsoft Entra ID fails until it is, so new users, password changes and disables stop reaching the cloud. Upgrade (or move to Microsoft Entra Cloud Sync) and confirm .NET Framework 4.7.2 and TLS 1.2 on the server.",
+      "RelatedControls": [],
+      "SourceUrl": "https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/harden-update-ad-fs-pingfederate",
+      "SourceTitle": "Hardening update to Microsoft Entra Connect Sync"
+    },
+    {
+      "Id": "entra-sms-voice-retirement-admins-external",
+      "Title": "Microsoft-provided SMS and voice authentication retired for Global Administrators and external users",
+      "Date": "2027-07-01",
+      "DateQualifier": "On",
+      "Summary": "The second stage of the SMS and voice retirement applies to Global Administrators and external users. Those whose only MFA method is SMS or voice must register a passkey at sign-in before they can continue.",
+      "Impact": "Global Administrator accounts, including any emergency access accounts that still use SMS or voice, and B2B external users are blocked at sign-in until they register a passkey; there is no opt-out. Move them to a phishing-resistant method before this date.",
+      "RelatedControls": ["AAD-17.3"],
+      "SourceUrl": "https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sms-voice-retirement",
+      "SourceTitle": "Passkeys by default and retirement of Microsoft-provided SMS and voice authentication"
+    },
+    {
+      "Id": "windows-10-esu-year-2-end",
+      "Title": "Windows 10 Extended Security Updates Year 2 ends",
+      "Date": "2027-10-12",
+      "DateQualifier": "On",
+      "Summary": "The second year of the paid Windows 10 Extended Security Updates program ends; Year 3, the last, runs to October 10, 2028.",
+      "Impact": "Windows 10 devices not enrolled in ESU Year 3 stop receiving security updates. Upgrade or replace them, or renew ESU, and make sure Intune compliance policies do not treat an unpatched Windows 10 build as compliant.",
+      "RelatedControls": ["INT-4.3"],
+      "SourceUrl": "https://learn.microsoft.com/en-us/lifecycle/faq/extended-security-updates",
+      "SourceTitle": "Lifecycle FAQ - Extended Security Updates"
+    },
+    {
+      "Id": "windows-11-24h2-enterprise-end-of-servicing",
+      "Title": "Windows 11 Enterprise and Education, version 24H2, reaches end of servicing",
+      "Date": "2027-10-12",
+      "DateQualifier": "On",
+      "Summary": "Windows 11 Enterprise, Education and IoT Enterprise version 24H2 stop receiving security and quality updates.",
+      "Impact": "Plan the move to a later version through Windows Update for Business or Autopatch, and raise the minimum operating system version in Intune compliance policies once it is complete.",
+      "RelatedControls": ["INT-4.3"],
+      "SourceUrl": "https://learn.microsoft.com/en-us/lifecycle/end-of-support/end-of-support-2027",
+      "SourceTitle": "Ending Support in 2027"
+    },
+    {
+      "Id": "dataverse-for-teams-decommissioned",
+      "Title": "Dataverse for Teams environments that were not upgraded are decommissioned",
+      "Date": "2027-10-30",
+      "DateQualifier": "On",
+      "Summary": "No new Dataverse for Teams environment can be created from November 15, 2026. Environments not upgraded to Dataverse are suspended on September 15, 2027 and decommissioned on October 30, 2027.",
+      "Impact": "Apps, flows, agents and data in a Dataverse for Teams environment are no longer available after decommissioning; the team's chats, channels and files are not affected. Upgrade the environments still in use (they then count against Dataverse capacity and need Power Platform licenses), or let unused ones lapse.",
+      "RelatedControls": [],
+      "SourceUrl": "https://learn.microsoft.com/en-us/power-platform/important-changes-coming",
+      "SourceTitle": "Important changes (deprecations) coming in Power Platform"
+    }
+  ]
+}
