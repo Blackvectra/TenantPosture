@@ -106,6 +106,10 @@ function New-TPWebResolution {
 # Resolve one servable file for a run, or say why not. Never throws.
 #   -Kind Report    <dir>\<Id>-assessment.html
 #   -Kind SitePage  <dir>\<Id>-report\<Page>   (.html or .csv only)
+#   -Kind Results   <dir>\<Id>-results.json     (the local MCP server, Mcp/;
+#                   never an incident-response file: an Id that would name a
+#                   -email-results.json or -signin-triage file, and the
+#                   IR-Triage folder, are refused)
 # where <dir> is the tenant folder, or the output folder for the flat segment.
 function Resolve-TPWebRunPath {
     [CmdletBinding()]
@@ -114,7 +118,7 @@ function Resolve-TPWebRunPath {
         [Parameter(Mandatory)] [string] $OutputRoot,
         [Parameter()] [AllowNull()] [AllowEmptyString()] [string] $Folder,
         [Parameter()] [AllowNull()] [AllowEmptyString()] [string] $Id,
-        [Parameter(Mandatory)] [ValidateSet('Report', 'SitePage')] [string] $Kind,
+        [Parameter(Mandatory)] [ValidateSet('Report', 'SitePage', 'Results')] [string] $Kind,
         [Parameter()] [AllowNull()] [AllowEmptyString()] [string] $Page
     )
 
@@ -136,6 +140,14 @@ function Resolve-TPWebRunPath {
             if ($Page -notmatch '\.(html|csv)\z')       { return (New-TPWebResolution -Status BadRequest) }
             $boundary = Join-Path $dir ($Id + '-report')
             $target   = Join-Path $boundary $Page
+        }
+        'Results' {
+            # Incident-response outputs hold sign-in addresses and geolocation
+            # and are never served: Email-IR writes <ts>-email-results.json,
+            # sign-in triage writes into an IR-Triage folder.
+            if ($Folder -ieq 'IR-Triage')                        { return (New-TPWebResolution -Status NotFound) }
+            if ($Id -imatch '-email\z' -or $Id -imatch '-signin-triage') { return (New-TPWebResolution -Status NotFound) }
+            $target = Join-Path $dir ($Id + '-results.json')
         }
     }
 
