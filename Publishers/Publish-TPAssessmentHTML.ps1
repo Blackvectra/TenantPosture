@@ -639,6 +639,15 @@ function Publish-TPAssessmentHTML {
 "@
     }
 
+    # ── Partial run (-ControlId) ────────────────────────────────────────────
+    # Above everything, because every number below it covers the selected
+    # controls only and a reader must not take it for the whole tenant.
+    $partialRunHtml = ''
+    $selNotice = Format-TPControlSelectionNotice -Selection (Get-TPObjectField -Item $Metadata -Key 'ControlSelection' -Default $null)
+    if ($selNotice) {
+        $partialRunHtml = "<div class='card partial-run' id='partial-run'><strong>$(hx $selNotice)</strong></div>"
+    }
+
     # ── Assessment scope and limitations ─────────────────────────────────────
     # Sits immediately under the score, because the score is meaningless
     # without it: a control that silently stopped producing a verdict is
@@ -653,7 +662,8 @@ function Publish-TPAssessmentHTML {
     if (Get-Command Get-TPAssessmentScope -ErrorAction SilentlyContinue) {
         try {
             $scope = Get-TPAssessmentScope -Findings $Findings -LicenseProfile $licProfile `
-                        -QuickScan:([bool](Get-TPObjectField -Item $Metadata -Key 'QuickScan' -Default $false))
+                        -QuickScan:([bool](Get-TPObjectField -Item $Metadata -Key 'QuickScan' -Default $false)) `
+                        -SelectedControls (Get-TPSelectedControlIds -Metadata $Metadata)
         } catch {
             Write-Verbose "Assessment scope section skipped: $($_.Exception.Message)"
             $scope = $null
@@ -666,6 +676,7 @@ function Publish-TPAssessmentHTML {
                 "<div class='scope-tile'><div class='scope-n'>$($scope.NoProgrammaticCheck.Count)</div><div class='scope-l'>Manual review required</div></div>"
                 "<div class='scope-tile'><div class='scope-n'>$($scope.LicenceBlocked.Count)</div><div class='scope-l'>License gated</div></div>"
                 "<div class='scope-tile'><div class='scope-n'>$(@(Get-TPObjectField -Item $scope -Key 'NotApplicableToTenant' -Default @()).Count)</div><div class='scope-l'>Not applicable here</div></div>"
+                $(if (@(Get-TPObjectField -Item $scope -Key 'NotSelected' -Default @()).Count -gt 0) { "<div class='scope-tile warn'><div class='scope-n warn'>$(@(Get-TPObjectField -Item $scope -Key 'NotSelected' -Default @()).Count)</div><div class='scope-l'>Not selected (partial run)</div></div>" })
             ) -join ''
 
             $limRows = ($scope.Limitations | ForEach-Object { "<li>$(hx $_)</li>" }) -join ''
@@ -678,6 +689,7 @@ function Publish-TPAssessmentHTML {
                 @{ Label = 'Controls that could not be assessed — data did not collect'; Items = $scope.CollectionIncomplete }
                 @{ Label = 'Controls verified in part — an NRG standard is not approved or configured'; Items = @(Get-TPObjectField -Item $scope -Key 'StandardNotApproved' -Default @()) }
                 @{ Label = 'Controls not evaluated — quick-scan mode'; Items = $scope.NotEvaluatedThisMode }
+                @{ Label = 'Controls not assessed — not selected for this run (-ControlId)'; Items = @(Get-TPObjectField -Item $scope -Key 'NotSelected' -Default @()) }
                 @{ Label = 'Controls not assessed — workload skipped by the operator (a -Skip flag)'; Items = @(Get-TPObjectField -Item $scope -Key 'SkippedByOperator' -Default @()) }
                 @{ Label = 'Controls that produced no result at all'; Items = $scope.NoResult }
                 @{ Label = 'Controls requiring manual review — no automated test, or no automated verdict'; Items = $scope.NoProgrammaticCheck }
@@ -723,7 +735,8 @@ function Publish-TPAssessmentHTML {
             if ($blTier -notin @('Minimum', 'Standard', 'Hardened')) { $blTier = 'Standard' }
             $bl = Get-TPBaselineCompliance -Findings $Findings -TargetTier $blTier -LicenseProfile $licProfile `
                     -TenantDomain ([string](Get-TPObjectField -Item $Metadata -Key 'TenantDomain' -Default '')) `
-                    -QuickScan:([bool](Get-TPObjectField -Item $Metadata -Key 'QuickScan' -Default $false))
+                    -QuickScan:([bool](Get-TPObjectField -Item $Metadata -Key 'QuickScan' -Default $false)) `
+                    -SelectedControls (Get-TPSelectedControlIds -Metadata $Metadata)
         } catch { Write-Verbose "NRG baseline section skipped: $($_.Exception.Message)"; $bl = $null }
         if ($bl -and $bl.Available) {
             $bs = $bl.Summary
@@ -1402,6 +1415,7 @@ th.nf-n{text-align:right}
 .lic-row{display:flex;align-items:center;justify-content:space-between;padding:9px 16px;background:#f8fafd;border-radius:7px;border:1px solid var(--bdr)}
 .lic-tier{font-size:.8rem;font-weight:600;color:var(--txt)}
 .lic-cnt{font-size:.72rem;font-weight:700;color:var(--warn)}
+.partial-run{border-left:6px solid #c2410c;background:#fff7ed;color:#7c2d12;padding:14px 18px;font-size:.9rem}
 .lic-badge{font-size:.77rem;font-weight:800;padding:4px 13px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:20px}
 
 /* Priority actions */
@@ -1565,6 +1579,7 @@ th.nf-n{text-align:right}
 
 <div class="cnt">
 
+$partialRunHtml
 <!-- OVERVIEW -->
 <div class="card" id="exec">
   <div class="card-hd"><div class="card-label">Executive Overview</div><div class="card-sub">$distinctControlsAssessed controls assessed &middot; $hdrScored scored &middot; $hdrNA not scored$devNote</div></div>

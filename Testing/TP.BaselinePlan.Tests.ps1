@@ -23,7 +23,7 @@ Describe 'NRG baseline plan — predictive, never a verdict' {
         Clear-TPState
         $script:Def = Get-TPBaselineDefinition -Force
         $script:Plan = Get-TPBaselinePlan -TargetTier Standard
-        $script:Buckets = @('Automatic', 'Manual', 'ThirdPartyHandled', 'OptionalCollectorRequired', 'SkippedByOperator', 'LicenseBlockedExpected', 'LicensingUnknown')
+        $script:Buckets = @('Automatic', 'Manual', 'ThirdPartyHandled', 'OptionalCollectorRequired', 'SkippedByOperator', 'NotSelected', 'LicenseBlockedExpected', 'LicensingUnknown')
     }
     AfterAll { Clear-TPState; Remove-Module 'TenantPosture' -Force -ErrorAction SilentlyContinue }
 

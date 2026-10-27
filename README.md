@@ -102,6 +102,11 @@ For automation pipelines and fast triage:
 # Quick scan — only Critical + High controls (faster, lower noise)
 .\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com -Quick
 
+# Partial run — re-check one fix, a workload, or a list (wildcards allowed).
+# Signs in only to what the selected controls read; the report says it is partial.
+.\Invoke-TPAssessment.ps1 -TenantDomain client.com -ControlId EXO-1.6
+.\Invoke-TPAssessment.ps1 -TenantDomain client.com -ControlId 'AAD-*' -ExcludeControlId 'AAD-17.*'
+
 # Compare against a prior baseline JSON — emits a delta report
 # (score delta, finding regressions, CA / role / OAuth / DMARC drift)
 .\Invoke-TPAssessment.ps1 -UserPrincipalName admin@client.com `
@@ -137,6 +142,8 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 | `-ThirdPartyEDR` | A non-Microsoft EDR such as `'Cortex XDR'`. The Defender endpoint checks report as covered by it (declared, not verified) and leave the score. |
 | `-ThirdPartyAwareness` | A non-Microsoft phishing simulation / security awareness platform such as `'KnowBe4'`. DEF-4.6 (Attack Simulation Training) reports as run on it (declared, not verified) and leaves the score instead of scoring as a gap or a license upgrade. |
 | `-Quick` | Critical and High controls only. |
+| `-ControlId` | A partial run: assess only the controls whose ID matches these wildcard patterns, e.g. `EXO-1.6` (re-check one fix), `'AAD-*'` (a workload) or `AAD-1.2,AAD-1.3,'SPO-5.*'`. Only those controls' evaluators run, only the collectors they read, and only the services those collectors need are signed in to (Graph always). A pattern that matches nothing stops the run (exit 4) before any sign-in, and so does a combination with `-Quick`, `-FromResults`, `-DeviceResults`, `-SSPQuestionnaire` or `-MonthlyReport`. Every report says the run was partial; the other controls read "not assessed: not selected", and the score and maturity tier cover the selected controls only. |
+| `-ExcludeControlId` | Leave these controls out, by the same wildcard rule; alone, everything else is assessed. |
 | `-OutputPath` | Output folder. Default `.\output`. Must be on a volume that can hold file permissions (NTFS or ReFS): the results JSON is written only where the signed-in user, SYSTEM and Administrators alone can read it, so a folder on an exFAT or FAT32 drive is refused before any sign-in, with the remedy. |
 | `-AllFiles` | Every deliverable as its own file (Markdown summary, playbooks, XLSX matrix, remediation script, NIST matrix, SSP, improvement plan). The default is the HTML report plus the results JSON. |
 | `-JsonOnly` | The results JSON only. |
@@ -184,6 +191,9 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 
 # A clients file kept outside the repository
 .\Invoke-TPBatchAssessment.ps1 -ClientsFile ~/tp-clients.json
+
+# The same partial run for every client (passed through to each assessment)
+.\Invoke-TPBatchAssessment.ps1 -ControlId 'EXO-1.6','DEF-*'
 ```
 
 A client record may set `Profile` (a name in `Config/profiles/`), `ThirdPartyEDR` and `ThirdPartyAwareness`, so clients of
@@ -371,7 +381,7 @@ Invoke-TPBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 Compare-TPTenantBaseline.ps1     ← Offline two-tenant baseline comparison (connects to nothing)
 Start-TPMcpServer.ps1            ← Local read-only MCP server over saved results (connects to nothing)
 TenantPosture.psm1               ← Module loader (recursive dot-source, path traversal check)
-TenantPosture.psd1               ← Module manifest (464 exports, dependency declarations)
+TenantPosture.psd1               ← Module manifest (471 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-TPFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -418,7 +428,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA (ScubaGear v2.0.0) + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          127 Pester suites — the FULL suite gates every PR
+Testing/                          128 Pester suites — the FULL suite gates every PR
   TP.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   TP.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   TP.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -673,7 +683,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **127 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **128 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite through the same gate CI uses. The gate parses every
@@ -731,7 +741,7 @@ Nine GitHub Actions workflows cover the repository. All run automatically on pus
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (127 suites) · PSScriptAnalyzer with SARIF upload · PowerShell security rules and InjectionHunter (any unreviewed finding fails) · CI modules installed by exact version and SHA-256 · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (128 suites) · PSScriptAnalyzer with SARIF upload · PowerShell security rules and InjectionHunter (any unreviewed finding fails) · CI modules installed by exact version and SHA-256 · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -762,4 +772,4 @@ You may use, modify and redistribute it under that license, including commercial
 
 ---
 
-*TenantPosture v4.14.3 · 243 posture controls + EMAIL/SIGNIN IR heuristics · 464 exported functions · full Pester suite (127 suites) gating CI*
+*TenantPosture v4.14.3 · 243 posture controls + EMAIL/SIGNIN IR heuristics · 471 exported functions · full Pester suite (128 suites) gating CI*

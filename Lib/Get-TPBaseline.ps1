@@ -344,9 +344,21 @@ function Get-TPBaselineCompliance {
         [AllowNull()] [hashtable] $Coverage,
         [AllowNull()] [object] $LicenseProfile,
         [datetime] $AsOf = (Get-Date),
-        [switch] $QuickScan
+        [switch] $QuickScan,
+        # The ControlIds a partial run selected (-ControlId); a required control
+        # outside them resolves NotVerified with reason code NotSelected. Not
+        # given: the run's selection from module state; $null: every control.
+        [AllowNull()] [string[]] $SelectedControls
     )
     Set-StrictMode -Version Latest
+
+    $selIds = if ($PSBoundParameters.ContainsKey('SelectedControls')) { $SelectedControls }
+              elseif (Get-Command Get-TPSelectedControlIds -ErrorAction SilentlyContinue) { Get-TPSelectedControlIds }
+              else { $null }
+    $selectedSet = $null
+    if ($null -ne $selIds -and @($selIds).Count -gt 0) {
+        $selectedSet = [System.Collections.Generic.HashSet[string]]::new([string[]]@($selIds), [System.StringComparer]::OrdinalIgnoreCase)
+    }
 
     $def = if ($null -ne $Definition) { $Definition } else { Get-TPBaselineDefinition }
     $required = @(Get-TPBaselineRequiredControls -TargetTier $TargetTier -Definition $def)
@@ -362,7 +374,7 @@ function Get-TPBaselineCompliance {
     # its buckets rather than re-deriving them.
     $scope = $null
     try {
-        $scope = Get-TPAssessmentScope -Findings $Findings -Coverage $cov -LicenseProfile $LicenseProfile -RawData $raw -QuickScan:$QuickScan
+        $scope = Get-TPAssessmentScope -Findings $Findings -Coverage $cov -LicenseProfile $LicenseProfile -RawData $raw -QuickScan:$QuickScan -SelectedControls $(if ($null -ne $selectedSet) { @($selIds) } else { $null })
     } catch { Write-Verbose "Scope classification unavailable for the baseline view: $($_.Exception.Message)" }
     $bucketOf = @{}
     if ($scope -and $scope.Available) {
@@ -455,6 +467,12 @@ function Get-TPBaselineCompliance {
         if (-not $ctrl.Automated) {
             $r.Reason = 'Not assessed by the tool: this requirement is verified manually and no collector reads its evidence yet.'
             $r.NotVerifiedCause = 'Manual control'
+        } elseif ($null -ne $selectedSet -and -not $selectedSet.Contains($cid)) {
+            # A partial run that did not select this control: not assessed, and
+            # its collectors were not run, so no collector, freshness or
+            # effectiveness signal applies to it.
+            $r.Reason = 'Not assessed: not selected for this run (-ControlId / -ExcludeControlId).'
+            $r.NotVerifiedCause = 'Not selected'
         } else {
             # ── Evidence timestamp and collector health from the raw data ──
             $evidenceTimes = [System.Collections.Generic.List[datetime]]::new()
@@ -578,7 +596,10 @@ function Get-TPBaselineCompliance {
         }
 
         # ── Effectiveness: only what the assessment can actually read ──
-        if ($ctrl.EffectivenessCapability -ne 'Collected' -or $null -eq $ctrl.EffectivenessEvidence) {
+        if ($r.NotVerifiedCause -eq 'Not selected') {
+            $r.EffectivenessState = 'Unknown'
+            $r.EffectivenessDetail = 'Not assessed: not selected for this run.'
+        } elseif ($ctrl.EffectivenessCapability -ne 'Collected' -or $null -eq $ctrl.EffectivenessEvidence) {
             $r.EffectivenessState = 'Unknown'
             $r.EffectivenessDetail = 'The effectiveness evidence is not collected by the assessment.'
         } else {
@@ -765,6 +786,9 @@ function Get-TPBaselineRegressions {
         Improvements           = @()
         ConfigurationRegressed = 0
         EvidenceLost           = 0
+        # Controls a partial run (-ControlId) did not select, in this run or the
+        # prior one: not compared, never a regression and never an improvement.
+        NotCompared            = @()
     }
     if ($null -eq $Current) { $result.Note = 'No current baseline compliance to compare.'; return $result }
     $result.CurrentBaselineVersion = [string](Get-TPObjectField -Item $Current -Key 'BaselineVersion' -Default '')
@@ -789,10 +813,22 @@ function Get-TPBaselineRegressions {
     $bad = @('Failed', 'NotVerified')
     $regs = [System.Collections.Generic.List[object]]::new()
     $imps = [System.Collections.Generic.List[object]]::new()
+    $notCompared = [System.Collections.Generic.List[object]]::new()
     foreach ($c in @(Get-TPObjectField -Item $Current -Key 'Controls' -Default @())) {
         $cid = [string](Get-TPObjectField -Item $c -Key 'ControlId' -Default '')
         if (-not $cid -or -not $priorById.ContainsKey($cid)) { continue }
         $p = $priorById[$cid]
+        $curCode = [string](Get-TPObjectField -Item $c -Key 'ReasonCode' -Default '')
+        $priCode = [string](Get-TPObjectField -Item $p -Key 'ReasonCode' -Default '')
+        if ($curCode -eq 'NotSelected' -or $priCode -eq 'NotSelected') {
+            $notCompared.Add([pscustomobject][ordered]@{
+                ControlId = $cid
+                Title     = [string](Get-TPObjectField -Item $c -Key 'Title' -Default '')
+                Basis     = $(if ($curCode -eq 'NotSelected' -and $priCode -eq 'NotSelected') { 'NotSelectedInEither' } elseif ($curCode -eq 'NotSelected') { 'NotSelectedThisRun' } else { 'NotSelectedPriorRun' })
+                Reason    = 'Not compared (not selected): a partial run did not assess this control, so no change can be read from it.'
+            })
+            continue
+        }
         $curTier = [string](Get-TPObjectField -Item $c -Key 'RequiredTier' -Default '')
         $priTier = [string](Get-TPObjectField -Item $p -Key 'RequiredTier' -Default '')
         if (-not $result.Comparable -and $curTier -ne $priTier) { continue }
@@ -822,10 +858,14 @@ function Get-TPBaselineRegressions {
     }
     $result.Regressions  = @($regs)
     $result.Improvements = @($imps)
+    $result.NotCompared  = @($notCompared)
     $result.ConfigurationRegressed = @($regs | Where-Object { $_.Kind -eq 'ConfigurationRegressed' }).Count
     $result.EvidenceLost           = @($regs | Where-Object { $_.Kind -eq 'EvidenceLost' }).Count
     if ($result.Comparable -and -not $result.Note) {
         $result.Note = "$($regs.Count) baseline regression(s) against the prior run (same baseline v$($result.CurrentBaselineVersion), tier $($result.CurrentTargetTier)): $($result.ConfigurationRegressed) configuration regressed, $($result.EvidenceLost) evidence lost (a collector or sign-in did not complete this run; the configuration may be unchanged)."
+    }
+    if ($notCompared.Count -gt 0) {
+        $result.Note = "$($result.Note) $($notCompared.Count) required control(s) were not compared (not selected): a partial run did not assess them in this run or the prior one.".Trim()
     }
     return $result
 }

@@ -137,6 +137,8 @@ function Get-TPBaselinePlan {
 
           Manual                    the baseline marks it Automated = false
           SkippedByOperator         one of its collectors is in -SkipCollectors
+          NotSelected               a partial run (-SelectedControls) does not
+                                    select it
           ThirdPartyHandled         -ThirdPartyEDR is declared and the control is
                                     a Defender endpoint check (reported
                                     NotApplicable, attested, not verified — unless
@@ -150,7 +152,7 @@ function Get-TPBaselinePlan {
                                     the tenant is connected — never guessed
           Automatic                 assessable from the collectors it names
 
-        ExpectedNotVerified counts Manual + SkippedByOperator +
+        ExpectedNotVerified counts Manual + SkippedByOperator + NotSelected +
         OptionalCollectorRequired: the rows the compliance view will report
         NotVerified if nothing changes. An approved exception is reported as a
         disposition and changes no expected state, exactly as in the view.
@@ -174,9 +176,17 @@ function Get-TPBaselinePlan {
         [AllowNull()] [AllowEmptyString()] [string] $LicenseSource = '',
         [AllowNull()] [object] $Definition = $null,
         [AllowNull()] [object] $Exceptions = $null,
-        [datetime] $AsOf = (Get-Date)
+        [datetime] $AsOf = (Get-Date),
+        # The ControlIds a partial run selects (-ControlId); every other
+        # automated required control is expected NotSelected. $null: all.
+        [AllowNull()] [AllowEmptyCollection()] [string[]] $SelectedControls = $null
     )
     Set-StrictMode -Version Latest
+
+    $selectedSet = $null
+    if ($null -ne $SelectedControls -and @($SelectedControls).Count -gt 0) {
+        $selectedSet = [System.Collections.Generic.HashSet[string]]::new([string[]]@($SelectedControls), [System.StringComparer]::OrdinalIgnoreCase)
+    }
 
     $def = if ($null -ne $Definition) { $Definition } else { Get-TPBaselineDefinition }
     $required = @(Get-TPBaselineRequiredControls -TargetTier $TargetTier -Definition $def)
@@ -230,6 +240,9 @@ function Get-TPBaselinePlan {
         } elseif ($skippedKeys.Count -gt 0) {
             $expected = 'SkippedByOperator'
             $reason = "Collector $($skippedKeys -join ', ') is skipped for this run: NotVerified, skipped by operator."
+        } elseif ($null -ne $selectedSet -and -not $selectedSet.Contains($cid)) {
+            $expected = 'NotSelected'
+            $reason = 'Not selected for this partial run (-ControlId / -ExcludeControlId): NotVerified, not assessed.'
         } elseif ($ThirdPartyEDR -and $cid -in $edrIds) {
             $expected = 'ThirdPartyHandled'
             $reason = "Third-party EDR declared ($ThirdPartyEDR): reported NotApplicable, attested and not verified, unless the Defender check passes on its own."
@@ -258,7 +271,7 @@ function Get-TPBaselinePlan {
             Tier                = [string]$c.Tier
             Owner               = [string](Get-TPObjectField -Item $c -Key 'Owner' -Default '')
             Expected            = $expected
-            ExpectedNotVerified = ($expected -in @('Manual', 'SkippedByOperator', 'OptionalCollectorRequired'))
+            ExpectedNotVerified = ($expected -in @('Manual', 'SkippedByOperator', 'NotSelected', 'OptionalCollectorRequired'))
             ReasonCode          = (ConvertTo-TPBaselineReasonCode -Expected $expected)
             Reason              = $reason
             Collectors          = @($services)
@@ -280,6 +293,7 @@ function Get-TPBaselinePlan {
         ThirdPartyHandled         = & $count 'ThirdPartyHandled'
         OptionalCollectorRequired = & $count 'OptionalCollectorRequired'
         SkippedByOperator         = & $count 'SkippedByOperator'
+        NotSelected               = & $count 'NotSelected'
         LicenseBlockedExpected    = & $count 'LicenseBlockedExpected'
         LicensingUnknown          = & $count 'LicensingUnknown'
         ExpectedNotVerified       = @($rows | Where-Object { $_.ExpectedNotVerified }).Count
@@ -439,6 +453,7 @@ function Format-TPBaselinePlanSummary {
     $lines.Add((& $fmt 'Manual' 'manual'))
     $lines.Add((& $fmt 'OptionalCollectorRequired' 'optional collector required'))
     $lines.Add((& $fmt 'SkippedByOperator' 'skipped by operator'))
+    if ([int](Get-TPObjectField -Item $s -Key 'NotSelected' -Default 0) -gt 0) { $lines.Add((& $fmt 'NotSelected' 'not selected (partial run)')) }
     $lines.Add((& $fmt 'LicenseBlockedExpected' 'license blocked (expected)'))
     $lines.Add((& $fmt 'LicensingUnknown' 'licensing unknown until connection'))
     $lines.Add('')

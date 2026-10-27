@@ -367,6 +367,28 @@ param(
     [ValidateRange(1024, 65535)]
     [int] $WebPort = 8765,
 
+    # ── Control selection (a partial run) ───────────────────────────────────
+    # Assess only the controls whose ControlId matches one of these wildcard
+    # patterns (-like, case-insensitive), e.g. -ControlId EXO-1.6 to re-check
+    # one fix, 'AAD-*' for a workload, or AAD-1.2,AAD-1.3,'SPO-5.*'. Only the
+    # evaluators of those controls run, only the collectors they read, and only
+    # the services those collectors need are signed in to (Graph always: the
+    # license profile and tenant metadata come from it). A pattern that matches
+    # nothing, or a selection left empty by -ExcludeControlId, stops the run
+    # (exit 4) before any sign-in. Every report says the run was partial; the
+    # controls not selected are "not assessed: not selected", never a pass.
+    # The pattern rule is Get-TPControlIdPatternRule (Lib/Resolve-TPControlSelection.ps1);
+    # a parameter attribute binds before any module loads, so this is a copy
+    # TP.ControlSelection.Tests.ps1 pins equal. Options = None: case-sensitive,
+    # so the Kelvin sign is not a letter.
+    [ValidatePattern('\A[A-Za-z0-9.*?-]{1,40}\z', Options = 'None')]
+    [string[]] $ControlId,
+
+    # Controls to leave out of the run, by the same wildcard rule. With no
+    # -ControlId, every control except these is assessed.
+    [ValidatePattern('\A[A-Za-z0-9.*?-]{1,40}\z', Options = 'None')]
+    [string[]] $ExcludeControlId,
+
     # ── Quick scan mode ──────────────────────────────────────────────────────
     # Only evaluate Critical + High controls. Skips Medium / Low / Informational
     # evaluators entirely. Designed for live demos and sanity checks; finishes
@@ -533,6 +555,52 @@ try {
 } catch {
     Write-Host "  [!] Module load failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
+}
+
+# ── Control selection (-ControlId / -ExcludeControlId) ───────────────────────
+# Resolved here, after the module loads and before anything signs in: a pattern
+# that matches nothing, an empty selection or a combination that would hide
+# results stops the run with exit 4 and nothing collected.
+$controlSelection = $null
+if ($ControlId -or $ExcludeControlId) {
+    $selConflicts = @(
+        @{ On = [bool]$Quick;                 Text = '-Quick drops evaluators by severity and -ControlId selects controls by ID; choose one.' }
+        @{ On = [bool]$FromResults;           Text = '-FromResults republishes what an earlier run assessed; selecting controls there would hide results that run produced. Re-run against the tenant with -ControlId instead.' }
+        @{ On = [bool]$Web;                   Text = '-Web starts the GUI, which launches its own runs; -ControlId applies to a command-line run.' }
+        @{ On = [bool]$RegisterApp;           Text = '-RegisterApp onboards a tenant and assesses nothing.' }
+        @{ On = [bool]$DistributionListsOnly; Text = '-DistributionListsOnly runs the distribution-list scan, which has its own DL-* checks.' }
+        @{ On = [bool]$DeviceResults;         Text = '-DeviceResults adds the DEV-* endpoint checks, which are not in Config/controls.json and cannot be selected; run the endpoint checks in a full assessment.' }
+        @{ On = [bool]$SSPQuestionnaire;      Text = '-SSPQuestionnaire would ask the client about requirements this partial run did not evidence only because their controls were not selected.' }
+        @{ On = [bool]$MonthlyReport;         Text = '-MonthlyReport is a whole-tenant client deliverable; a partial run cannot feed it.' }
+    )
+    $selRefused = @($selConflicts | Where-Object { $_.On })
+    if ($selRefused.Count -gt 0) {
+        foreach ($c in $selRefused) { Write-Host "  [!] -ControlId / -ExcludeControlId: $($c.Text)" -ForegroundColor Red }
+        Write-Host "      Nothing was run." -ForegroundColor Red
+        exit 4
+    }
+    try {
+        $controlSelection = Resolve-TPControlSelection -Include $ControlId -Exclude $ExcludeControlId -IncludeSharePointShell:$IncludeSharePointShell
+    } catch {
+        Write-Host "  [!] Control selection could not be resolved: $($_.Exception.Message) Nothing was run." -ForegroundColor Red
+        exit 4
+    }
+    if (-not $controlSelection.Valid) {
+        foreach ($e in @($controlSelection.Errors)) { Write-Host "  [!] $e" -ForegroundColor Red }
+        Write-Host "      Nothing was run." -ForegroundColor Red
+        exit 4
+    }
+    $selIds = @($controlSelection.SelectedControlIds)
+    $selList = if ($selIds.Count -le 20) { $selIds -join ', ' } else { "$((@($controlSelection.Workloads.Keys | ForEach-Object { "$_ $($controlSelection.Workloads[$_])" })) -join ', ')" }
+    Write-Host ""
+    Write-Host "[-] Partial run: $($controlSelection.SelectedCount) of $($controlSelection.TotalControls) controls selected: $selList" -ForegroundColor Yellow
+    $selSvc = @($controlSelection.Services.Keys | Where-Object { $controlSelection.Services[$_] })
+    Write-Host "      Evaluators: $(@($controlSelection.EvaluatorFunctions).Count); collectors: $(@($controlSelection.Collectors).Count); services: $($selSvc -join ', ')" -ForegroundColor DarkGray
+    if ($controlSelection.Fallback) {
+        foreach ($u in @($controlSelection.Undetermined)) { Write-Host "      [!] $($u.Function): $($u.Reason)" -ForegroundColor Yellow }
+        Write-Host "      The data a selected evaluator reads could not be determined from the code, so every collector runs (never under-collect)." -ForegroundColor Yellow
+    }
+    Write-Host "      The other $($controlSelection.TotalControls - $controlSelection.SelectedCount) control(s) are not assessed in this run; the reports say so." -ForegroundColor DarkGray
 }
 
 # -Web short-circuits the terminal flow: hand control to the local Pode-backed
@@ -866,6 +934,16 @@ if ($FromResults -and (Test-Path -LiteralPath $FromResults)) {
     if ($Quick) {
         Write-Warning "-Quick has no effect with -FromResults: findings are loaded from the baseline JSON, not re-evaluated. To produce a Quick scan, re-run against the live tenant."
     }
+    # A results file from a partial run (-ControlId) stays partial when it is
+    # republished: the selection it recorded goes back into module state, so the
+    # scope section, the baseline view and every report name the controls that
+    # were not selected instead of reporting them as producing no result.
+    $priorSelection = Get-TPObjectField -Item $reportMetadata -Key 'ControlSelection' -Default $null
+    if ($null -ne $priorSelection) {
+        Set-TPControlSelection -Selection $priorSelection
+        $selNote = Format-TPControlSelectionNotice -Selection $priorSelection
+        if ($selNote) { Write-Host "  [i] $selNote" -ForegroundColor Yellow }
+    }
 
     # Restore the collection-side state the baseline carries. Without this a
     # republish silently loses it: Get-TPCoverage returns empty, so the
@@ -959,9 +1037,10 @@ if (-not $skipCollection) {
             }
             $baselinePlan = Get-TPBaselinePlan -TenantDomain $TenantDomain -TargetTier $planTier -ThirdPartyEDR $ThirdPartyEDR `
                 -IncludeSharePointShell:($IncludeSharePointShell -and -not $SkipSharePoint) -SkipCollectors $planSkip `
-                -LicenseProfile $planLic -LicenseSource $planLicSrc
+                -LicenseProfile $planLic -LicenseSource $planLicSrc `
+                -SelectedControls $(if ($null -ne $controlSelection -and $controlSelection.Partial) { @($controlSelection.SelectedControlIds) } else { $null })
             $ps = $baselinePlan.Summary
-            Write-Host "[-] NRG baseline plan ($($ps.TargetTier)): $($ps.RequiredControls) required — expected $($ps.Automatic) automatic, $($ps.ThirdPartyHandled) third-party handled, $($ps.Manual) manual, $($ps.OptionalCollectorRequired) optional collector, $($ps.SkippedByOperator) skipped, $($ps.LicenseBlockedExpected) license blocked, $($ps.LicensingUnknown) licensing unknown until connection; potential not verified before run: $($ps.ExpectedNotVerified)" -ForegroundColor DarkGray
+            Write-Host "[-] NRG baseline plan ($($ps.TargetTier)): $($ps.RequiredControls) required — expected $($ps.Automatic) automatic, $($ps.ThirdPartyHandled) third-party handled, $($ps.Manual) manual, $($ps.OptionalCollectorRequired) optional collector, $($ps.SkippedByOperator) skipped, $(if ([int](Get-TPObjectField -Item $ps -Key 'NotSelected' -Default 0) -gt 0) { "$($ps.NotSelected) not selected, " })$($ps.LicenseBlockedExpected) license blocked, $($ps.LicensingUnknown) licensing unknown until connection; potential not verified before run: $($ps.ExpectedNotVerified)" -ForegroundColor DarkGray
             Write-Host ""
         } catch { Write-Warning "Baseline plan unavailable: $($_.Exception.Message)" }
     }
@@ -984,6 +1063,15 @@ if (-not $skipCollection) {
     # SharePoint tenant settings come from Graph; the Management Shell (a
     # child process in PowerShell 7) only when asked for.
     if (-not $IncludeSharePointShell -or $SkipSharePoint) { $connectParams['SkipSharePoint'] = $true }
+    # A partial run signs in only to what its selected controls read. These
+    # are not -Skip flags: nothing is recorded as skipped by the operator, the
+    # controls that would have needed the service were not selected.
+    if ($null -ne $controlSelection) {
+        if (-not $controlSelection.Services.Exchange) { $connectParams['SkipExchange'] = $true }
+        if (-not $controlSelection.Services.Purview)  { $connectParams['SkipPurview']  = $true }
+        if (-not $controlSelection.Services.Teams)    { $connectParams['SkipTeams']    = $true }
+        if (@($controlSelection.RawDataKeys) -notcontains 'SharePoint') { $connectParams['SkipSharePoint'] = $true }
+    }
 
     $rawConn = @(Connect-TPServices @connectParams)
     $conn = $rawConn | Where-Object { $_ -is [hashtable] } | Select-Object -Last 1
@@ -1061,10 +1149,24 @@ if (-not $skipCollection) {
     # array), never from the fact that it returned. Third-party warnings are
     # captured and printed under the line rather than breaking into it.
     $script:TPStepTally = [ordered]@{ Ok = 0; Issues = 0; Failed = 0; NotAvailable = 0 }
-    function Write-TPCollectorGroup { param([string] $Name) Write-Host "  $Name" -ForegroundColor Cyan }
+    # A partial run (-ControlId) runs only the collectors its selected controls
+    # read (Resolve-TPControlSelection); $null runs every collector.
+    $script:TPSelectedCollectors = if ($null -ne $controlSelection) {
+        [System.Collections.Generic.HashSet[string]]::new([string[]]@($controlSelection.Collectors), [System.StringComparer]::OrdinalIgnoreCase)
+    } else { $null }
+    function Test-TPCollectorWanted {
+        param([string[]] $Function)
+        if ($null -eq $script:TPSelectedCollectors) { return $true }
+        return (@($Function | Where-Object { $script:TPSelectedCollectors.Contains($_) }).Count -gt 0)
+    }
+    function Write-TPCollectorGroup {
+        param([string] $Name, [string[]] $Function = @())
+        if ($Function.Count -gt 0 -and -not (Test-TPCollectorWanted -Function $Function)) { return }
+        Write-Host "  $Name" -ForegroundColor Cyan
+    }
     function Invoke-TPCollectorStep {
         param([string] $Label, [string[]] $Function, [hashtable] $Params = @{})
-        $fns = @($Function | Where-Object { Get-Command $_ -ErrorAction SilentlyContinue })
+        $fns = @($Function | Where-Object { (Test-TPCollectorWanted -Function $_) -and (Get-Command $_ -ErrorAction SilentlyContinue) })
         if ($fns.Count -eq 0) { return }
         $covBefore = @{}
         foreach ($kv in (Get-TPCoverage).GetEnumerator()) { $covBefore[$kv.Key] = "$($kv.Value.Status)|$($kv.Value.Note)" }
@@ -1113,7 +1215,7 @@ if (-not $skipCollection) {
     }
 
     if ($conn.Graph) {
-        Write-TPCollectorGroup 'Identity (Entra ID)'
+        Write-TPCollectorGroup 'Identity (Entra ID)' -Function 'Invoke-TPCollectAADAuthPolicies', 'Invoke-TPCollectAADCAPolicies', 'Invoke-TPCollectAADUsers', 'Invoke-TPCollectAADRoles', 'Invoke-TPCollectAADPIM', 'Invoke-TPCollectAADIdentityGovernance', 'Invoke-TPCollectAADInventory', 'Invoke-TPCollectAADAppPermissions', 'Invoke-TPCollectAADDirectorySettings', 'Invoke-TPCollectAADSignInEvidence'
         Invoke-TPCollectorStep 'Auth and authorization policies'        'Invoke-TPCollectAADAuthPolicies'
         Invoke-TPCollectorStep 'Conditional Access policies'            'Invoke-TPCollectAADCAPolicies'
         Invoke-TPCollectorStep 'Users and MFA registration'             'Invoke-TPCollectAADUsers'
@@ -1125,16 +1227,16 @@ if (-not $skipCollection) {
         Invoke-TPCollectorStep 'Sign-in evidence (30 days)'             'Invoke-TPCollectAADSignInEvidence'
 
         if (-not $SkipSharePoint) {
-            Write-TPCollectorGroup 'SharePoint and OneDrive'
+            Write-TPCollectorGroup 'SharePoint and OneDrive' -Function 'Invoke-TPCollectSharePoint'
             Invoke-TPCollectorStep 'Tenant sharing settings'            'Invoke-TPCollectSharePoint'
         }
         if (-not $SkipIntune) {
-            Write-TPCollectorGroup 'Intune'
+            Write-TPCollectorGroup 'Intune' -Function 'Invoke-TPCollectIntuneEndpointSecurity', 'Invoke-TPCollectIntuneDeviceCompliance', 'Invoke-TPCollectIntuneAppProtection'
             Invoke-TPCollectorStep 'Endpoint security (LAPS, ASR, AV, EDR)' 'Invoke-TPCollectIntuneEndpointSecurity'
             Invoke-TPCollectorStep 'Compliance, enrollment, WHfB, updates'  'Invoke-TPCollectIntuneDeviceCompliance'
             Invoke-TPCollectorStep 'App protection and configuration'       'Invoke-TPCollectIntuneAppProtection'
         }
-        if (-not $SkipPowerPlatform) {
+        if (-not $SkipPowerPlatform -and (Test-TPCollectorWanted -Function 'Invoke-TPCollectPowerPlatform')) {
             Write-TPCollectorGroup 'Power Platform'
             if (-not ($AppId -and $TenantId -and $CertificateThumbprint)) {
                 Write-Host "      A browser sign-in may open (same account). Use -SkipPowerPlatform to skip." -ForegroundColor DarkGray
@@ -1144,7 +1246,7 @@ if (-not $skipCollection) {
     }
 
     if ($conn.EXO) {
-        Write-TPCollectorGroup 'Exchange Online and Defender'
+        Write-TPCollectorGroup 'Exchange Online and Defender' -Function 'Invoke-TPCollectEXOMailboxConfig', 'Invoke-TPCollectEXOConnectionFilter', 'Invoke-TPCollectEXOInventory', 'Invoke-TPCollectDefender'
         Invoke-TPCollectorStep 'Organization and transport settings'   'Invoke-TPCollectEXOMailboxConfig', 'Invoke-TPCollectEXOConnectionFilter'
         Invoke-TPCollectorStep 'Mailboxes: forwarding, audit, SMTP AUTH' 'Invoke-TPCollectEXOInventory'
         Invoke-TPCollectorStep 'Defender for Office 365 policies'       'Invoke-TPCollectDefender'
@@ -1156,24 +1258,24 @@ if (-not $skipCollection) {
     # connection failure must not take the DNS controls with it (it did on
     # the first live run: three Minimum controls lost to a session error).
     if (-not $SkipDNS -and ($conn.Graph -or $conn.EXO)) {
-        Write-TPCollectorGroup 'DNS'
+        Write-TPCollectorGroup 'DNS' -Function 'Invoke-TPCollectDNSEmailRecords'
         $dnsParams = if ($DnsDomains) { @{ Domains = $DnsDomains } } else { @{} }
         Invoke-TPCollectorStep 'SPF, DKIM, DMARC, MTA-STS, DNSSEC, CAA' 'Invoke-TPCollectDNSEmailRecords' -Params $dnsParams
     }
 
     if ($conn.Teams -and -not $SkipTeams) {
-        Write-TPCollectorGroup 'Teams'
+        Write-TPCollectorGroup 'Teams' -Function 'Invoke-TPCollectTeams'
         Invoke-TPCollectorStep 'Meetings, external access, messaging'   'Invoke-TPCollectTeams'
     }
 
     if ($conn.IPPSSession -and -not $SkipPurview) {
-        Write-TPCollectorGroup 'Purview'
+        Write-TPCollectorGroup 'Purview' -Function 'Invoke-TPCollectPurview'
         Invoke-TPCollectorStep 'Audit, DLP, retention, labels'          'Invoke-TPCollectPurview'
     }
 
     # Copilot collector runs after Purview so it can reuse label/DLP/audit raw data
     if ($conn.Graph) {
-        Write-TPCollectorGroup 'Microsoft 365 Copilot'
+        Write-TPCollectorGroup 'Microsoft 365 Copilot' -Function 'Invoke-TPCollectM365Copilot'
         Invoke-TPCollectorStep 'Licensing, labels, DLP, Copilot Studio' 'Invoke-TPCollectM365Copilot'
     }
 
@@ -1241,6 +1343,13 @@ if (-not $skipCollection) {
         Write-Host "  [i] Quick mode: $($evaluators.Count) of $beforeCount evaluators (workloads with Critical+High only; lower-severity findings inside those workloads still surface)" -ForegroundColor Yellow
     }
 
+    # A partial run (-ControlId) runs only the evaluators of the selected controls.
+    if ($null -ne $controlSelection) {
+        $beforeCount = $evaluators.Count
+        $evaluators  = @($evaluators | Where-Object { $_ -in @($controlSelection.EvaluatorFunctions) })
+        Write-Host "  [i] Partial run: $($evaluators.Count) of $beforeCount evaluators (the evaluators of the $($controlSelection.SelectedCount) selected control(s))" -ForegroundColor Yellow
+    }
+
     foreach ($ev in $evaluators) {
         Invoke-TPEvaluatorSafe -EvaluatorFunction $ev
     }
@@ -1268,6 +1377,18 @@ if (-not $skipCollection) {
         Write-Host "  [i] $licGated control(s) need a license this tenant does not hold — listed as upgrade opportunities, not scored" -ForegroundColor DarkGray
     }
 
+    # An evaluator can own several controls (Test-TPControlDefender owns six).
+    # Findings for controls the operator did not select are dropped here, after
+    # every verdict-changing step, and recorded in the metadata: never scored,
+    # never shown as a verdict.
+    $selectionDropped = @()
+    if ($null -ne $controlSelection) {
+        $selectionDropped = @(Select-TPSelectedFindings -SelectedControlIds @($controlSelection.SelectedControlIds))
+        if ($selectionDropped.Count -gt 0) {
+            Write-Host "  [i] $($selectionDropped.Count) control(s) evaluated alongside the selection by a shared evaluator were not selected; their findings are dropped, not scored: $($selectionDropped -join ', ')" -ForegroundColor DarkGray
+        }
+    }
+
     $findings = Get-TPFindings
     Write-Host "  [+] $($findings.Count) findings evaluated" -ForegroundColor Green
 
@@ -1292,6 +1413,12 @@ if (-not $skipCollection) {
         ThirdPartyEDR  = [string]$ThirdPartyEDR
         ThirdPartyAwareness = [string]$ThirdPartyAwareness
     }
+    # The selection is part of the record: a partial run's results file says it
+    # is partial, and a republish of it stays partial.
+    if ($null -ne $controlSelection) {
+        $reportMetadata['ControlSelection'] = ConvertTo-TPControlSelectionRecord -Selection $controlSelection -DroppedFindings $selectionDropped
+        Set-TPControlSelection -Selection $reportMetadata['ControlSelection']
+    }
 }
 
 # ── Maturity tier (roadmap F1) ──────────────────────────────────────────────
@@ -1302,7 +1429,7 @@ if (-not $skipCollection) {
 # Delta) can render the same classification. Failure is logged + surfaced
 # via the summary banner so a missing badge doesn't slip past the operator.
 try {
-    $reportMetadata['Maturity'] = Get-TPMaturityTier -Findings $findings
+    $reportMetadata['Maturity'] = Get-TPMaturityTier -Findings $findings -Selection (Get-TPObjectField -Item $reportMetadata -Key 'ControlSelection' -Default $null)
 } catch {
     Write-Warning "Maturity-tier classification failed: $($_.Exception.Message)"
     $reportMetadata['MaturityError'] = $_.Exception.Message
@@ -1325,7 +1452,8 @@ if (Get-Command Get-TPBaselineCompliance -ErrorAction SilentlyContinue) {
     try {
         $baselineCompliance = Get-TPBaselineCompliance -Findings $findings -TargetTier $BaselineTier `
             -TenantDomain ([string](Get-TPObjectField -Item $reportMetadata -Key 'TenantDomain' -Default '')) `
-            -QuickScan:([bool](Get-TPObjectField -Item $reportMetadata -Key 'QuickScan' -Default $false))
+            -QuickScan:([bool](Get-TPObjectField -Item $reportMetadata -Key 'QuickScan' -Default $false)) `
+            -SelectedControls (Get-TPSelectedControlIds -Metadata $reportMetadata)
         $reportMetadata['BaselineVersion'] = $baselineCompliance.BaselineVersion
         $reportMetadata['TargetTier']      = $baselineCompliance.TargetTier
         # Regressions against the prior run, only under a comparable baseline
@@ -1829,6 +1957,8 @@ if ($findings.Count -gt $distinctControls) { $notes += "$($findings.Count) findi
 $perInstance = if ($notes.Count -gt 0) { " ($($notes -join '; '))" } else { '' }
 Write-Host "  Total          $footerCount scored$perInstance"                  -ForegroundColor White
 Write-Host "  Output         $OutputPath"                                      -ForegroundColor White
+$selNotice = Format-TPControlSelectionNotice -Selection (Get-TPObjectField -Item $reportMetadata -Key 'ControlSelection' -Default $null)
+if ($selNotice) { Write-Host "  $selNotice" -ForegroundColor Yellow }
 if ($reportMetadata.Contains('Maturity') -and $reportMetadata['Maturity']) {
     $m = $reportMetadata['Maturity']
     Write-Host "  Maturity       $($m.Label) (tier $($m.Tier)/5, score $($m.Score)/100)" -ForegroundColor Cyan

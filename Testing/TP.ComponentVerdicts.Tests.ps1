@@ -400,7 +400,7 @@ Describe 'Baseline controls judge every component of the expected state' {
         It 'the buckets still sum to the unscored count with no control in two of them' {
             & $script:MfUnapproved
             $scope = Get-TPAssessmentScope -Findings @(Get-TPFindings) -Coverage @{} -RawData @{}
-            $ids = @(foreach ($b in 'LicenceBlocked', 'CollectionIncomplete', 'StandardNotApproved', 'NoProgrammaticCheck', 'ThirdPartyAttested', 'NotApplicableToTenant', 'NotEvaluatedThisMode', 'SkippedByOperator', 'NoResult', 'Errors') { $scope.$b | ForEach-Object ControlId })
+            $ids = @(foreach ($b in 'LicenceBlocked', 'CollectionIncomplete', 'StandardNotApproved', 'NoProgrammaticCheck', 'ThirdPartyAttested', 'NotApplicableToTenant', 'NotEvaluatedThisMode', 'NotSelected', 'SkippedByOperator', 'NoResult', 'Errors') { $scope.$b | ForEach-Object ControlId })
             @($ids | Select-Object -Unique).Count | Should -Be $ids.Count
         }
         It 'a collector that failed is still named as the cause, not the missing standard' {

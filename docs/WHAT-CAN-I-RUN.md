@@ -58,6 +58,8 @@ Parameters worth knowing:
 | `-DeviceResults <folder>` | Fold in endpoint scan results (see below). |
 | `-AllFiles` | Every sidecar deliverable, not just the two-file default. Implies `-NISTMatrix`. |
 | `-Quick` | Critical + High controls only. Faster, noisier-free. |
+| `-ControlId <pattern[]>` | A partial run: only the matching controls (`EXO-1.6`, `'AAD-*'`, `AAD-1.2,'SPO-5.*'`), their collectors and the services they need. The report says it is partial; the rest read "not selected". |
+| `-ExcludeControlId <pattern[]>` | Leave matching controls out of the run. |
 | `-BaselineResults <json>` | Compare against a prior run, emit a drift report. |
 | `-IncludePurview` | Purview is **skipped by default** (EOM WAM crash). Opt in. |
 | `-FailOnCritical / -FailOnHigh / -FailOnScoreBelow` | Non-zero exit for CI or Task Scheduler. |
@@ -311,7 +313,7 @@ Evaluators/      turn raw data into findings
 Publishers/      turn findings into documents
 Lib/             shared helpers — scoring, NIST rollups, escaping, file ACLs
 Device/          the endpoint script. PS 5.1. Does not run on your machine.
-Testing/         127 Pester suites. Run: ./tools/Invoke-TPTestGate.ps1
+Testing/         128 Pester suites. Run: ./tools/Invoke-TPTestGate.ps1
 docs/            this file, and the policy docs
 ```
 

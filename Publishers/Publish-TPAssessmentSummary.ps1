@@ -93,6 +93,13 @@ function Publish-TPAssessmentSummary {
 
     $null = $sb.AppendLine("# M365 Security Assessment Report")
     $null = $sb.AppendLine()
+    # A partial run (-ControlId) says so before anything else: every figure in
+    # this summary covers the selected controls only.
+    $selNotice = Format-TPControlSelectionNotice -Selection (Get-TPObjectField -Item $Metadata -Key 'ControlSelection' -Default $null)
+    if ($selNotice) {
+        $null = $sb.AppendLine("> **$(EscMd $selNotice)**")
+        $null = $sb.AppendLine()
+    }
     $null = $sb.AppendLine("**Prepared by:** $company")
     $null = $sb.AppendLine("**Tenant:** $tenant")
     $null = $sb.AppendLine("**License Tier:** $tierLabelMd")
@@ -184,7 +191,8 @@ function Publish-TPAssessmentSummary {
         } else { $null }
         try {
             $scope = Get-TPAssessmentScope -Findings $Findings -LicenseProfile $mdLicProfile `
-                        -QuickScan:([bool](Get-TPObjectField -Item $Metadata -Key 'QuickScan' -Default $false))
+                        -QuickScan:([bool](Get-TPObjectField -Item $Metadata -Key 'QuickScan' -Default $false)) `
+                        -SelectedControls (Get-TPSelectedControlIds -Metadata $Metadata)
         } catch {
             Write-Verbose "Assessment scope section skipped: $($_.Exception.Message)"
         }
@@ -199,6 +207,7 @@ function Publish-TPAssessmentSummary {
             $null = $sb.AppendLine("| Could not be assessed — data did not collect | $($scope.CollectionIncomplete.Count) |")
             $null = $sb.AppendLine("| Verified in part — an NRG standard is not approved or configured | $(@(Get-TPObjectField -Item $scope -Key 'StandardNotApproved' -Default @()).Count) |")
             $null = $sb.AppendLine("| Not evaluated — quick-scan mode | $($scope.NotEvaluatedThisMode.Count) |")
+            $null = $sb.AppendLine("| Not assessed — not selected for this run (-ControlId) | $(@(Get-TPObjectField -Item $scope -Key 'NotSelected' -Default @()).Count) |")
             $null = $sb.AppendLine("| Not assessed — workload skipped by the operator | $(@(Get-TPObjectField -Item $scope -Key 'SkippedByOperator' -Default @()).Count) |")
             $null = $sb.AppendLine("| Produced no result at all | $($scope.NoResult.Count) |")
             $null = $sb.AppendLine("| Manual review required (no automated test, or no automated verdict) | $($scope.NoProgrammaticCheck.Count) |")
@@ -211,6 +220,15 @@ function Publish-TPAssessmentSummary {
                 $null = $sb.AppendLine("- $(EscMd $l)")
             }
             $null = $sb.AppendLine()
+            $notSel = @(Get-TPObjectField -Item $scope -Key 'NotSelected' -Default @())
+            if ($notSel.Count -gt 0) {
+                # IDs only: a partial run leaves most of the catalog unselected, and a
+                # table row per control would bury the controls that were assessed.
+                $null = $sb.AppendLine("### Not assessed — not selected for this run ($($notSel.Count))")
+                $null = $sb.AppendLine()
+                $null = $sb.AppendLine("$(EscMd ((@($notSel | ForEach-Object { $_.ControlId })) -join ', '))")
+                $null = $sb.AppendLine()
+            }
 
             foreach ($grp in @(
                 @{ Label = 'Could not be assessed — data did not collect'; Items = $scope.CollectionIncomplete }
@@ -255,7 +273,8 @@ function Publish-TPAssessmentSummary {
             if ($blTier -notin @('Minimum', 'Standard', 'Hardened')) { $blTier = 'Standard' }
             $bl = Get-TPBaselineCompliance -Findings $Findings -TargetTier $blTier -LicenseProfile $mdLicProfile `
                     -TenantDomain ([string](Get-TPObjectField -Item $Metadata -Key 'TenantDomain' -Default '')) `
-                    -QuickScan:([bool](Get-TPObjectField -Item $Metadata -Key 'QuickScan' -Default $false))
+                    -QuickScan:([bool](Get-TPObjectField -Item $Metadata -Key 'QuickScan' -Default $false)) `
+                    -SelectedControls (Get-TPSelectedControlIds -Metadata $Metadata)
         } catch { Write-Verbose "NRG baseline section skipped: $($_.Exception.Message)" }
         if ($bl -and $bl.Available) {
             $bs = $bl.Summary

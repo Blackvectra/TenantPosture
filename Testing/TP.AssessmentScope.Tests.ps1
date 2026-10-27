@@ -75,13 +75,13 @@ Describe 'Get-TPAssessmentScope — what the assessment did not cover' {
             $sum = $s.LicenceBlocked.Count + $s.CollectionIncomplete.Count +
                    $s.NoProgrammaticCheck.Count + $s.ThirdPartyAttested.Count +
                    $s.NotEvaluatedThisMode.Count + $s.NoResult.Count + $s.NotApplicableToTenant.Count +
-                   $s.SkippedByOperator.Count
+                   $s.SkippedByOperator.Count + $s.NotSelected.Count
             $sum | Should -Be $s.UnscoredControls -Because 'a control that is unscored and in no bucket is invisible, which is the whole failure mode'
 
             # And no control appears in two buckets.
             $all = @($s.LicenceBlocked) + @($s.CollectionIncomplete) + @($s.NoProgrammaticCheck) +
                    @($s.ThirdPartyAttested) + @($s.NotEvaluatedThisMode) + @($s.NoResult) + @($s.NotApplicableToTenant) +
-                   @($s.SkippedByOperator)
+                   @($s.SkippedByOperator) + @($s.NotSelected)
             @($s.ThirdPartyAttested | ForEach-Object { $_.ControlId }) | Should -Contain $ids[8]
             @($all | ForEach-Object { $_.ControlId } | Group-Object | Where-Object Count -gt 1) | Should -BeNullOrEmpty
         }

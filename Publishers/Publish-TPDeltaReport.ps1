@@ -42,8 +42,20 @@ function Get-TPRawDataDrift {
         NewAdminAssignments   = @()
         NewOAuthApps          = @()
         DMARCRegressions      = @()
+        NotCompared           = @()
     }
     if ($drift.BaselineMissing -or $drift.CurrentMissing) { return $drift }
+
+    # A section is compared only when BOTH runs collected it successfully. A
+    # collector that did not run this time (a partial run, a -Skip flag, a
+    # failure) read as an empty list made every prior CA policy "removed".
+    $hasBag = {
+        param([object] $root, [string] $key)
+        $bag = Get-TPObjectField -Item $root -Key $key
+        return ($null -ne $bag -and [bool](Get-TPObjectField -Item $bag -Key 'Success' -Default $false))
+    }
+    $both = { param([string] $key) (& $hasBag $Baseline $key) -and (& $hasBag $Current $key) }
+    $drift.NotCompared = @(foreach ($k in 'AAD-CAPolicies', 'AAD-DirectoryRoles', 'AAD-Inventory', 'DNS-EmailRecords') { if (-not (& $both $k)) { $k } })
 
     # Defensive extractor — drift only fires when both runs collected the
     # data. A missing collector or schema rename is treated as "no drift,"
@@ -67,9 +79,9 @@ function Get-TPRawDataDrift {
     }
 
     # ── Conditional Access drift ─────────────────────────────────────────
-    $bCA = & $getBag $Baseline 'AAD-CAPolicies' 'CAPolicies'
-    $cCA = & $getBag $Current  'AAD-CAPolicies' 'CAPolicies'
-    if ($bCA.Count -gt 0 -or $cCA.Count -gt 0) {
+    $bCA = @(& $getBag $Baseline 'AAD-CAPolicies' 'CAPolicies')
+    $cCA = @(& $getBag $Current  'AAD-CAPolicies' 'CAPolicies')
+    if ((& $both 'AAD-CAPolicies') -and ($bCA.Count -gt 0 -or $cCA.Count -gt 0)) {
         $bMap = @{}; foreach ($p in $bCA) { if ($p.Id) { $bMap[[string]$p.Id] = $p } }
         $cMap = @{}; foreach ($p in $cCA) { if ($p.Id) { $cMap[[string]$p.Id] = $p } }
         foreach ($id in $cMap.Keys) {
@@ -106,9 +118,9 @@ function Get-TPRawDataDrift {
         'Exchange Administrator', 'SharePoint Administrator',
         'Security Administrator', 'User Administrator', 'Authentication Administrator'
     )
-    $bRoles = & $getBag $Baseline 'AAD-DirectoryRoles' 'RoleAssignments'
-    $cRoles = & $getBag $Current  'AAD-DirectoryRoles' 'RoleAssignments'
-    if ($bRoles.Count -gt 0 -or $cRoles.Count -gt 0) {
+    $bRoles = @(& $getBag $Baseline 'AAD-DirectoryRoles' 'RoleAssignments')
+    $cRoles = @(& $getBag $Current  'AAD-DirectoryRoles' 'RoleAssignments')
+    if ((& $both 'AAD-DirectoryRoles') -and ($bRoles.Count -gt 0 -or $cRoles.Count -gt 0)) {
         $assignKey = { param($r) "$([string]$r.PrincipalId)|$([string]$r.RoleDefinitionId)" }
         $bSet = @{}; foreach ($r in $bRoles) { $bSet[(& $assignKey $r)] = $true }
         foreach ($r in $cRoles) {
@@ -127,13 +139,13 @@ function Get-TPRawDataDrift {
     }
 
     # ── New OAuth app registrations ──────────────────────────────────────
-    $bOAuth = & $getBag $Baseline 'AAD-Inventory' 'OAuthApps'
-    $cOAuth = & $getBag $Current  'AAD-Inventory' 'OAuthApps'
+    $bOAuth = @(& $getBag $Baseline 'AAD-Inventory' 'OAuthApps')
+    $cOAuth = @(& $getBag $Current  'AAD-Inventory' 'OAuthApps')
     if ($bOAuth.Count -eq 0 -and $cOAuth.Count -eq 0) {
-        $bOAuth = & $getBag $Baseline 'AAD-Inventory' 'ServicePrincipals'
-        $cOAuth = & $getBag $Current  'AAD-Inventory' 'ServicePrincipals'
+        $bOAuth = @(& $getBag $Baseline 'AAD-Inventory' 'ServicePrincipals')
+        $cOAuth = @(& $getBag $Current  'AAD-Inventory' 'ServicePrincipals')
     }
-    if ($bOAuth.Count -gt 0 -or $cOAuth.Count -gt 0) {
+    if ((& $both 'AAD-Inventory') -and ($bOAuth.Count -gt 0 -or $cOAuth.Count -gt 0)) {
         $bSet = @{}; foreach ($a in $bOAuth) { if ($a.AppId) { $bSet[[string]$a.AppId] = $true } }
         foreach ($a in $cOAuth) {
             if ($a.AppId -and -not $bSet.ContainsKey([string]$a.AppId)) {
@@ -160,7 +172,7 @@ function Get-TPRawDataDrift {
     # would have one caller — over-extraction.
     $bDns = & $getBag $Baseline 'DNS-EmailRecords' 'Domains'
     $cDns = & $getBag $Current  'DNS-EmailRecords' 'Domains'
-    if ($bDns -and $cDns) {
+    if ((& $both 'DNS-EmailRecords') -and $bDns -and $cDns) {
         $rank = @{ 'reject' = 2; 'quarantine' = 1; 'none' = 0 }
         $bKeys = if ($bDns -is [System.Collections.IDictionary]) { $bDns.Keys } else { $bDns.PSObject.Properties.Name }
         foreach ($dom in $bKeys) {
@@ -251,6 +263,29 @@ function Publish-TPDeltaReport {
         throw "Baseline tenant ID '$baseTenantId' does not match current tenant ID '$currTenantId'. Refusing to generate delta report — wrong baseline?"
     }
 
+    # ── Partial runs (-ControlId): compare only what both runs assessed ─────
+    # A control one of the runs did not select has no verdict in that run. It
+    # is listed as not compared (not selected), never as a new gap, a
+    # resolution or a regression, and the scores are computed over the
+    # controls both runs selected so neither number covers more than the other.
+    $currSel = Get-TPSelectedControlIds -Metadata $Metadata
+    $baseSel = $null
+    $baseSelRec = Get-TPObjectField -Item (Get-TPObjectField -Item $baselineRaw -Key 'Metadata' -Default $null) -Key 'ControlSelection' -Default $null
+    if ($null -ne $baseSelRec -and [bool](Get-TPObjectField -Item $baseSelRec -Key 'Partial' -Default $true)) {
+        $ids = @(Get-TPObjectField -Item $baseSelRec -Key 'SelectedControlIds' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
+        if ($ids.Count -gt 0) { $baseSel = $ids }
+    }
+    $partialCompare = ($null -ne $currSel -or $null -ne $baseSel)
+    $currSet = if ($null -ne $currSel) { [System.Collections.Generic.HashSet[string]]::new([string[]]@($currSel), [System.StringComparer]::OrdinalIgnoreCase) } else { $null }
+    $baseSet = if ($null -ne $baseSel) { [System.Collections.Generic.HashSet[string]]::new([string[]]@($baseSel), [System.StringComparer]::OrdinalIgnoreCase) } else { $null }
+    $comparable = { param([string] $cid) ($null -eq $currSet -or $currSet.Contains($cid)) -and ($null -eq $baseSet -or $baseSet.Contains($cid)) }
+    $notComparedIds = @(@(@($baseFindings) + @($CurrentFindings)) | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'ControlId' -Default '') } |
+        Where-Object { $_ -and -not (& $comparable $_) } | Sort-Object -Unique)
+    if ($partialCompare) {
+        $baseFindings    = @($baseFindings    | Where-Object { & $comparable ([string](Get-TPObjectField -Item $_ -Key 'ControlId' -Default '')) })
+        $CurrentFindings = @($CurrentFindings | Where-Object { & $comparable ([string](Get-TPObjectField -Item $_ -Key 'ControlId' -Default '')) })
+    }
+
     # ── Categorize findings by ControlId change ─────────────────────────────
     $base = @{}
     foreach ($f in $baseFindings)    { $base[[string]$f.ControlId] = $f }
@@ -310,6 +345,10 @@ function Publish-TPDeltaReport {
     $null = $sb.AppendLine()
     $null = $sb.AppendLine("---")
     $null = $sb.AppendLine()
+    if ($partialCompare) {
+        $null = $sb.AppendLine("> **Partial run comparison.** $(if ($null -ne $currSel) { "This run assessed $(@($currSel).Count) selected control(s). " })$(if ($null -ne $baseSel) { "The baseline run assessed $(@($baseSel).Count) selected control(s). " })Only controls both runs assessed are compared, and both scores below cover those controls only. $($notComparedIds.Count) control(s) are not compared (not selected); they are not new gaps, resolutions or regressions.")
+        $null = $sb.AppendLine()
+    }
     $null = $sb.AppendLine("## Score Change")
     $null = $sb.AppendLine()
     $null = $sb.AppendLine("| | Baseline | Current | Change |")
@@ -338,6 +377,12 @@ function Publish-TPDeltaReport {
     Write-Section '&#x1F7E1; Unchanged Gaps'    $unchangedGaps '🟡' 'No unchanged gaps.'
     Write-Section '&#x1F7E2; Resolved'          $resolved      '🟢' 'No gaps resolved this period.'
     Write-Section '&#x1F535; Partially Improved' $improved     '🔵' 'No partial improvements.'
+    if ($notComparedIds.Count -gt 0) {
+        $null = $sb.AppendLine("## Not compared (not selected) ($($notComparedIds.Count))")
+        $null = $sb.AppendLine()
+        $null = $sb.AppendLine("*A partial run did not assess these controls in this run or the baseline run: $(EscMdStrict ($notComparedIds -join ', ')).*")
+        $null = $sb.AppendLine()
+    }
 
     # ── Configuration Drift (Phase 3) ────────────────────────────────────
     $baseRaw = $null
@@ -358,8 +403,12 @@ function Publish-TPDeltaReport {
         $null = $sb.AppendLine("*Current run did not capture raw configuration data — drift detection unavailable.*")
         $null = $sb.AppendLine()
     } else {
+        if (@($drift.NotCompared).Count -gt 0) {
+            $null = $sb.AppendLine("*Not compared: $(EscMdStrict (@($drift.NotCompared) -join ', ')) was not collected successfully in both runs, so no change is read from it (a partial run, a skipped workload or a failed collector). An empty section below for these means not compared, not unchanged.*")
+            $null = $sb.AppendLine()
+        }
         # CA policies
-        $caAny = $drift.CAPoliciesAdded.Count + $drift.CAPoliciesRemoved.Count + $drift.CAPoliciesStateChange.Count
+        $caAny =$drift.CAPoliciesAdded.Count + $drift.CAPoliciesRemoved.Count + $drift.CAPoliciesStateChange.Count
         $null = $sb.AppendLine("### Conditional Access Policies ($caAny change$(if($caAny -ne 1){'s'}))")
         $null = $sb.AppendLine()
         if ($caAny -eq 0) {

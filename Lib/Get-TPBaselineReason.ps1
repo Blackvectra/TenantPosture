@@ -12,6 +12,7 @@
     The codes form one deterministic precedence (first match wins):
       ManualVerificationRequired  a human must verify; no collector reads it
       SkippedByOperator           the operator excluded the workload or evaluator
+      NotSelected                 a partial run (-ControlId) did not select it
       ThirdPartyHandled           a declared non-Microsoft product covers it;
                                   attested, not verified
       OptionalCollectorRequired   an opt-in collector was needed and not enabled
@@ -48,6 +49,7 @@ function Get-TPBaselineReasonCodes {
     foreach ($e in @(
         @('ManualVerificationRequired', 'Both', 'A human must verify this; no collector reads its evidence, or the evaluator asks for manual verification.'),
         @('SkippedByOperator',          'Both', 'The operator excluded this workload or evaluator for the run (a -Skip flag or a quick scan).'),
+        @('NotSelected',                'Both', 'A partial run (-ControlId / -ExcludeControlId) did not select this control, so it was not assessed. Neither a pass nor a failure.'),
         @('ThirdPartyHandled',          'Both', 'A declared non-Microsoft product provides this capability. Attested by the assessor, not verified by the assessment, not scored.'),
         @('OptionalCollectorRequired',  'Both', 'An opt-in collector is needed to read this evidence and was not enabled.'),
         @('LicenseBlocked',             'Both', 'The tenant demonstrably does not hold the license the control requires; it cannot be configured, so it is not scored.'),
@@ -100,6 +102,7 @@ function ConvertTo-TPBaselineReasonCode {
     switch ($Expected) {
         'Manual'                    { return 'ManualVerificationRequired' }
         'SkippedByOperator'         { return 'SkippedByOperator' }
+        'NotSelected'               { return 'NotSelected' }
         'ThirdPartyHandled'         { return 'ThirdPartyHandled' }
         'OptionalCollectorRequired' { return 'OptionalCollectorRequired' }
         'LicenseBlockedExpected'    { return 'LicenseBlocked' }
@@ -160,6 +163,9 @@ function Resolve-TPBaselineReason {
         }
         if ($cause -eq 'Skipped by operator') {
             return & $out 'SkippedByOperator' 'The workload was skipped for this run by the operator (a -Skip flag).'
+        }
+        if ($cause -eq 'Not selected') {
+            return & $out 'NotSelected' 'Not assessed: not selected for this run (-ControlId / -ExcludeControlId).'
         }
         if ($cause -eq 'Quick scan') {
             return & $out 'SkippedByOperator' 'The evaluator was omitted by the quick scan (-Quick).'
@@ -230,7 +236,7 @@ function Get-TPBaselineCoverage {
         ThirdPartyHandled (attested by the assessor, usable, not verified).
         Unknown = every code that means the evidence was not obtained
         (CollectorUnavailable, EvidenceStale, EvidenceNotRead,
-        ManualVerificationRequired, SkippedByOperator,
+        ManualVerificationRequired, SkippedByOperator, NotSelected,
         OptionalCollectorRequired, EvaluationError). LicenseBlocked is in the
         denominator and reported separately: the tool knows why it cannot
         verify the control, and that is not evidence the requirement is met.
@@ -254,7 +260,7 @@ function Get-TPBaselineCoverage {
     $rows = @($Rows | Where-Object { $null -ne $_ })
     $code = { param($r) [string](Get-TPObjectField -Item $r -Key 'ReasonCode' -Default '') }
     $knownCodes   = @('Satisfied', 'ControlFailed', 'ThirdPartyHandled')
-    $unknownCodes = @('CollectorUnavailable', 'EvidenceStale', 'StandardNotApproved', 'EvidenceNotRead', 'ManualVerificationRequired', 'SkippedByOperator', 'OptionalCollectorRequired', 'EvaluationError', 'LicensingUnknown')
+    $unknownCodes = @('CollectorUnavailable', 'EvidenceStale', 'StandardNotApproved', 'EvidenceNotRead', 'ManualVerificationRequired', 'SkippedByOperator', 'NotSelected', 'OptionalCollectorRequired', 'EvaluationError', 'LicensingUnknown')
     $na  = @($rows | Where-Object { (& $code $_) -eq 'NotApplicable' })
     $lb  = @($rows | Where-Object { (& $code $_) -eq 'LicenseBlocked' })
     $kn  = @($rows | Where-Object { (& $code $_) -in $knownCodes })
