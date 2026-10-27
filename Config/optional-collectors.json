@@ -7,7 +7,7 @@
       "RawDataKey": "SharePoint",
       "Note": "Get-SPOTenant runs through Windows PowerShell compatibility, a child process an ASR rule may block; that is why it is opt-in.",
       "Controls": {
-        "SPO-1.2": "only when Anyone links are enabled tenant-wide (the default link type is read from the shell); with Anyone links off it is assessed from Graph",
+        "SPO-1.2": "",
         "SPO-1.4": "only when external sharing is enabled (guest expiration is read from the shell)",
         "SPO-1.5": "",
         "SPO-2.2": "",

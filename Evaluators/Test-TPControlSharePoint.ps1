@@ -90,30 +90,38 @@ function Test-TPControlSharePoint {
     $shell = Get-TPObjectField -Item $raw.Data -Key 'TenantSettingsSPO' -Default $null
     $noShell = 'Requires the SharePoint Online Management Shell (Get-SPOTenant); not connected. Not exposed by Graph. Re-run with -IncludeSharePointShell to read it.'
 
-    # SPO-1.2 — Default sharing link not "Anyone" (Set-SPOTenant -DefaultSharingLinkType)
+    # SPO-1.2 — Default sharing link restricted (Set-SPOTenant -DefaultSharingLinkType).
+    # CIS Microsoft 365 Foundations v7.0.0 7.2.7 audits DefaultSharingLinkType
+    # itself and passes only Direct (specific people) or Internal (people in
+    # the organization), whatever the sharing capability. Anyone links being
+    # off tenant-wide used to pass this control without the value being read;
+    # it no longer does: the setting is judged, and a value not read is not
+    # assessed. AnonymousAccess and None fail the audit and are a Gap.
     $c = Get-TPControlById -ControlId 'SPO-1.2'
     if ($c) {
         $cit = Get-TPFrameworkCitations -ControlId 'SPO-1.2'
         $linkType = [string](Get-TPObjectField -Item $shell -Key 'DefaultSharingLinkType' -Default '')
-        if ($cap -in @('disabled','existingExternalUserSharingOnly','externalUserSharingOnly')) {
-            # "Anyone" links are off tenant-wide, so no default can be Anyone.
-            Add-TPFinding -ControlId 'SPO-1.2' -State 'Satisfied' -Category 'SharePoint' -Title $c.Title -Severity 'Informational' `
-                -Detail "Anyone links are disabled tenant-wide (sharing capability '$cap'), so the default sharing link cannot be Anyone." `
-                -CurrentValue "SharingCapability = $cap" -FrameworkIds $cit
-        } elseif ($cap -ne 'externalUserAndGuestSharing') {
+        $anyoneOff = $cap -in @('disabled','existingExternalUserSharingOnly','externalUserSharingOnly')
+        if (-not $linkType) {
+            $why = if ($anyoneOff) { "Anyone links are disabled tenant-wide (sharing capability '$cap'), but that is not the default link type, which was not read." }
+                   else { 'The default sharing link type was not read.' }
             Add-TPFinding -ControlId 'SPO-1.2' -State 'NotApplicable' -Category 'SharePoint' -Title $c.Title -FrameworkIds $cit `
-                -Detail "External sharing setting was not read (value: '$cap'); not assessed."
-        } elseif (-not $linkType) {
-            Add-TPFinding -ControlId 'SPO-1.2' -State 'NotApplicable' -Category 'SharePoint' -Title $c.Title -FrameworkIds $cit `
-                -Detail "Anyone links are enabled tenant-wide; the default link type was not read. $noShell"
-        } elseif ($linkType -eq 'AnonymousAccess') {
-            Add-TPFinding -ControlId 'SPO-1.2' -State 'Gap' -Category 'SharePoint' -Title $c.Title -Severity $c.Severity `
-                -Detail 'The default sharing link is "Anyone with the link": every share a user makes without changing the option creates an unauthenticated link.' `
-                -CurrentValue 'DefaultSharingLinkType = AnonymousAccess' -RequiredValue 'DefaultSharingLinkType = Internal or Direct' `
-                -Remediation $c.Remediation -FrameworkIds $cit
+                -Detail "$why $noShell"
         } elseif ($linkType -in @('Internal','Direct')) {
             Add-TPFinding -ControlId 'SPO-1.2' -State 'Satisfied' -Category 'SharePoint' -Title $c.Title -Severity 'Informational' `
                 -CurrentValue "DefaultSharingLinkType = $linkType" -FrameworkIds $cit
+        } elseif ($linkType -in @('AnonymousAccess','None')) {
+            $effect = if ($linkType -eq 'AnonymousAccess' -and -not $anyoneOff) {
+                'The default sharing link is "Anyone with the link": every share a user makes without changing the option creates an unauthenticated link.'
+            } elseif ($linkType -eq 'AnonymousAccess') {
+                "The default sharing link is set to ""Anyone with the link"". Anyone links are disabled tenant-wide today (sharing capability '$cap'), but the default is not restricted to specific people or the organization and becomes an unauthenticated link the moment Anyone links are enabled."
+            } else {
+                'No default sharing link type is set (None), so the default link is not restricted to specific people or the organization.'
+            }
+            Add-TPFinding -ControlId 'SPO-1.2' -State 'Gap' -Category 'SharePoint' -Title $c.Title -Severity $c.Severity `
+                -Detail $effect `
+                -CurrentValue "DefaultSharingLinkType = $linkType" -RequiredValue 'DefaultSharingLinkType = Direct (specific people) or Internal (people in the organization)' `
+                -Remediation $c.Remediation -FrameworkIds $cit
         } else {
             Add-TPFinding -ControlId 'SPO-1.2' -State 'NotApplicable' -Category 'SharePoint' -Title $c.Title -FrameworkIds $cit `
                 -Detail "Default sharing link type '$linkType' is not a recognized value; not assessed."

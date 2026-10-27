@@ -897,7 +897,7 @@
     {
       "ControlId": "SPO-1.2",
       "Title": "Default Sharing Link Not Anonymous",
-      "Description": "Default sharing link type is Internal or Specific people — not Anyone.",
+      "Description": "The tenant default sharing link type (Get-SPOTenant DefaultSharingLinkType) is Direct (specific people) or Internal (people in the organization). Read from the SharePoint Online Management Shell; Anyone links being disabled tenant-wide does not by itself satisfy it, and a value not read is not assessed.",
       "BusinessRisk": "Defaulting to anonymous links means users create them accidentally, without understanding the exposure.",
       "Severity": "Medium",
       "Workload": "SPO",
@@ -905,12 +905,12 @@
       "Automated": true,
       "CollectorDependency": "SharePoint",
       "EvaluatorFunction": "Test-TPControlSharePoint",
-      "Remediation": "Set-SPOTenant -DefaultSharingLinkType Internal",
+      "Remediation": "Set-SPOTenant -DefaultSharingLinkType Direct (specific people), or Internal (people in the organization)",
       "References": {
         "CISControls": [
           "3.3"
         ],
-        "CIS": "",
+        "CIS": "7.2.7",
         "SCuBA": "MS.SHAREPOINT.2.1v1",
         "NIST": "AC-3",
         "CMMC": "AC.L2-3.1.3",
@@ -4400,7 +4400,7 @@
     {
       "ControlId": "INT-3.1",
       "Title": "Device Enrollment Restrictions Configured",
-      "Description": "Intune enrollment restrictions limit which platforms, ownership types, and OS versions can enroll.",
+      "Description": "The default (priority 0, All users and all devices) Intune device platform restriction blocks personally owned devices, or blocks the platform, on Windows, iOS/iPadOS, macOS, Android Enterprise (work profile) and Android device administrator. A minimum OS version or a block in a custom restriction does not meet it; a platform whose restriction was not read is not assessed.",
       "BusinessRisk": "Without enrollment restrictions, any device — including unmanaged personal or obsolete devices — can enroll and receive corporate app access.",
       "Severity": "Medium",
       "Workload": "INT",
@@ -4408,12 +4408,12 @@
       "Automated": true,
       "CollectorDependency": "Intune-DeviceCompliance",
       "EvaluatorFunction": "Test-TPControlIntuneEnrollmentRestrictions",
-      "Remediation": "Intune > Devices > Enrollment > Enrollment restrictions > Create policy restricting to managed platforms and minimum OS versions.",
+      "Remediation": "Intune > Devices > Enrollment > Device platform restriction: edit the default All users and all devices restriction for each of Windows, iOS/iPadOS, macOS and Android (Android Enterprise work profile and device administrator) and set Personally owned devices to Block, or set the platform to Block where it is not used. Enroll corporate devices through Autopilot, Automated Device Enrollment or corporate identifiers first.",
       "References": {
         "CISControls": [
           "4.1"
         ],
-        "CIS": "",
+        "CIS": "4.2",
         "SCuBA": "",
         "NIST": "CM-7, AC-3",
         "CMMC": "CM.L2-3.4.1",
@@ -4882,7 +4882,7 @@
     {
       "ControlId": "DEF-4.2",
       "Title": "DLP Policy Uses Sensitive Information Types",
-      "Description": "At least one DLP policy uses sensitive information types (SSN, credit card, health data) for automatic content detection.",
+      "Description": "At least one enabled DLP rule matches sensitive information types (SSN, credit card, health data) inside a DLP policy that is enforced (Mode Enable) and covers Exchange, SharePoint, OneDrive or Teams. A rule in a test-mode policy, or in a policy covering only other locations such as devices, is not counted; a policy whose locations were not recorded is not assessed.",
       "BusinessRisk": "DLP without SITs cannot automatically identify regulated or sensitive content. Policy enforcement is entirely manual and depends on users correctly classifying their own files.",
       "Severity": "High",
       "Workload": "DEF",
@@ -4890,13 +4890,13 @@
       "Automated": true,
       "CollectorDependency": "Purview",
       "EvaluatorFunction": "Test-TPControlDefenderDLPSITs",
-      "Remediation": "Purview > DLP > Edit policy > Add condition > Content contains > Sensitive info types.",
+      "Remediation": "Purview > Data loss prevention > Policies: in a policy that covers Exchange, SharePoint, OneDrive or Teams, add a rule condition Content contains > Sensitive info types, then turn the policy on (Mode Enable, not simulation).",
       "LicenseRequirement": "M365 Business Premium or E3+",
       "References": {
         "CISControls": [
           "3.13"
         ],
-        "CIS": "",
+        "CIS": "3.2.1",
         "SCuBA": "MS.SECURITYSUITE.3.1v1",
         "NIST": "SC-28",
         "CMMC": "MP.L2-3.8.1",

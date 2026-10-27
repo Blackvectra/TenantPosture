@@ -954,37 +954,59 @@ function Test-TPControlIntuneWindowsUpdate {
 }
 
 # ── INT-3.1 Device Enrollment Restrictions Configured ────────────────────────
+# Judged as CIS Microsoft 365 Foundations v7.0.0 4.2 audits it: the priority-0
+# default device platform restriction ("All users and all devices") must block
+# personally owned devices, or block the platform, on each of Windows,
+# iOS/iPadOS, macOS, Android Enterprise (work profile) and Android device
+# administrator. A block in a custom restriction, a minimum OS version, or the
+# Windows Mobile block Intune ships in every tenant does not meet it. The row is
+# read from Graph beta (v1.0 does not return the Android Enterprise work profile
+# restriction); a platform whose restriction was not returned is not assessed,
+# and a results file without the beta read is not assessed.
 function Test-TPControlIntuneEnrollmentRestrictions {
     [CmdletBinding()] param()
     $cid = 'INT-3.1'; $ctrl = Get-TPControlById -ControlId $cid; if (-not $ctrl) { return }
     $cit = Get-TPFrameworkCitations -ControlId $cid
     $int = Get-TPRawData -Key 'Intune-DeviceCompliance'
-    if (-not $int -or -not $int.Success -or -not (Test-TPSectionCollected $int 'EnrollmentRestrictions')) {
+    if (-not $int -or -not $int.Success) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'Enrollment restrictions were not collected; not assessed.'; return
     }
-    # Every tenant has the default restrictions ("All users and all devices",
-    # priority 0), which allow every platform and personal devices. Their
-    # presence is not a restriction; a block inside one — default or custom —
-    # is. Results collected before the per-platform blocks were read carry no
-    # Restrictions field and are not assessed.
-    $rows = @(Get-TPObjectField -Item $int.Data -Key 'EnrollmentRestrictions' -Default @() | Where-Object { $null -ne $_ })
-    $platformRows = @($rows | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'Type' -Default '') -match 'PlatformRestriction' })
-    if (@($platformRows | Where-Object { $null -eq (Get-TPObjectField -Item $_ -Key 'Restrictions' -Default $null) }).Count -gt 0 -or $platformRows.Count -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail 'The platform restriction settings were not collected; not assessed.'; return
+    $def = Get-TPObjectField -Item $int.Data -Key 'DefaultPlatformRestriction' -Default $null
+    $sec = [string](Get-TPNestedProperty -Object $int -Path 'Data.SectionStatus.DefaultPlatformRestriction' -Default '')
+    if ($null -eq $def -or ($sec -and $sec -ne 'Collected')) {
+        $why = if ($sec -eq 'Failed') { 'the Graph beta read of the device enrollment configurations failed (see Exceptions)' }
+               else { 'it was not collected (results from before the default restriction was read from Graph beta)' }
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "The default device platform restriction was not read: $why; not assessed."
+        return
     }
-    # Windows Mobile is retired and Intune blocks it in the default
-    # configuration of every tenant, so that block restricts nothing anyone
-    # enrolls. A live tenant passed on "windowsMobile: platform blocked" alone.
-    $blocks = @($platformRows | ForEach-Object { @(Get-TPObjectField -Item $_ -Key 'Restrictions' -Default @()) } | Where-Object {
-        $_ -and [string]$_.Platform -ne 'windowsMobile' -and ($_.PlatformBlocked -or $_.PersonalBlocked -or $_.OsMinimumVersion) })
-    if ($blocks.Count -gt 0) {
-        $what = @($blocks | ForEach-Object { "$($_.Platform): $(@(if ($_.PlatformBlocked) { 'platform blocked' }; if ($_.PersonalBlocked) { 'personal devices blocked' }; if ($_.OsMinimumVersion) { "min OS $($_.OsMinimumVersion)" }) -join ', ')" })
-        Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit -Detail "Enrollment is restricted: $($what -join '; ')."
-    } else {
-        Add-TPFinding -ControlId $cid -State 'Gap' -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity -FrameworkIds $cit `
-            -Detail 'Enrollment restrictions are at their defaults: every platform may enroll, personal devices included, with no minimum OS version. Any user can enroll any device and have it treated as managed.' `
-            -CurrentValue 'Default restrictions only (nothing blocked)' -RequiredValue 'Block personal enrollment and unused platforms, set minimum OS versions' -Remediation $ctrl.Remediation
+    if ((Get-TPObjectField -Item $def -Key 'Found' -Default $false) -ne $true) {
+        $n = Get-TPObjectField -Item $def -Key 'Count' -Default 0
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
+            -Detail "The device enrollment configurations were read, but $(if ("$n" -eq '0') { 'no' } else { "$n" }) priority-0 default platform restriction (id ending _DefaultPlatformRestrictions) was found, so the default restriction could not be judged; not assessed."
+        return
     }
+    $platforms = Get-TPObjectField -Item $def -Key 'Platforms' -Default $null
+    $verified = @(); $short = @(); $notEst = @(); $affected = @()
+    foreach ($name in @('Windows', 'iOS/iPadOS', 'macOS', 'Android Enterprise (work profile)', 'Android device administrator')) {
+        $p = Get-TPObjectField -Item $platforms -Key $name -Default $null
+        $returned = (Get-TPObjectField -Item $p -Key 'Returned' -Default $false) -eq $true
+        $pb = Get-TPObjectField -Item $p -Key 'PlatformBlocked' -Default $null
+        $pd = Get-TPObjectField -Item $p -Key 'PersonalBlocked' -Default $null
+        if (-not $returned) { $notEst += "$name (the default restriction returned no row for it)"; continue }
+        if ($pb -eq $true) { $verified += "${name}: platform blocked"; continue }
+        if ($pd -eq $true) { $verified += "${name}: personally owned devices blocked"; continue }
+        if ($pb -eq $false -and $pd -eq $false) {
+            $short += "${name}: personally owned devices may enroll"
+            $affected += [ordered]@{ Platform = $name; PlatformBlocked = $false; PersonalDeviceEnrollmentBlocked = $false }
+            continue
+        }
+        $notEst += "$name (platformBlocked or personalDeviceEnrollmentBlocked was not returned)"
+    }
+    Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $notEst `
+        -CurrentValue "Default platform restriction: $(@($verified + $short) -join '; ')" `
+        -RequiredValue 'Default (priority 0) platform restriction blocks personally owned devices, or the platform, on Windows, iOS/iPadOS, macOS, Android Enterprise (work profile) and Android device administrator' `
+        -AffectedObjects $affected
 }
 
 # ── INT-3.2 Mobile App Configuration Policies Deployed ───────────────────────
