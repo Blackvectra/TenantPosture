@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "source": "https://learn.microsoft.com/powershell/scripting/install/powershell-support-lifecycle",
+  "sourceTitle": "PowerShell Support Lifecycle",
+  "sourceRetrieved": "2026-10-27",
+  "purpose": "End-of-support dates for PowerShell 7 releases, copied from Microsoft's PowerShell Support Lifecycle page. Get-TPPowerShellSupportStatus reads this file to warn an operator running a release that is out of support or about to be. Update the file when Microsoft publishes a new release line.",
+  "warnDays": 90,
+  "warnDaysNote": "The tool's own lead time for the warning, not a Microsoft figure: an operator sees it a quarter before the date.",
+  "releases": [
+    { "Line": "7.0", "Lts": true,  "EndOfSupport": "2022-12-03" },
+    { "Line": "7.1", "Lts": false, "EndOfSupport": "2022-05-08" },
+    { "Line": "7.2", "Lts": true,  "EndOfSupport": "2024-11-08" },
+    { "Line": "7.3", "Lts": false, "EndOfSupport": "2024-05-08" },
+    { "Line": "7.4", "Lts": true,  "EndOfSupport": "2026-11-10" },
+    { "Line": "7.5", "Lts": false, "EndOfSupport": "2026-11-10" },
+    { "Line": "7.6", "Lts": true,  "EndOfSupport": "2028-11-14" }
+  ]
+}

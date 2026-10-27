@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **[Tooling] Warn when the PowerShell running the tool is out of support or about to be.**
+  `Get-TPPowerShellSupportStatus` reads `Config/powershell-lifecycle.json` (dates from Microsoft's PowerShell Support
+  Lifecycle page: 7.4 LTS and 7.5 end on 2026-11-10, 7.6 LTS runs to 2028-11-14) and the entry point, the
+  distribution-list scan, the installer and `Get-TPModuleHealth` print a warning within 90 days of the date, after it,
+  or on a preview build. A warning only; the run is never refused. Move to 7.6 (Exchange module 3.10.0 or later).
+- **[Docs] AAD-6.4 no longer states a November 2026 rollout date** for the agent blueprint setting: no official
+  Microsoft page gives one, only third-party summaries of a message-center post.
 - **[Report] CISA BOD 25-01 required-configurations view (`-BOD2501`, implied by `-AllFiles`).** For government
   clients: `Config/bod-25-01-required.json` encodes the 56 Microsoft 365 policies CISA's BOD 25-01 Required
   Configurations page lists (retrieved 2026-10-27, by policy ID; the released ScubaGear v2.0.0 baselines mark the same
@@ -87,7 +94,7 @@
   lifetime limits must cover service principals, SPO-1.2 needs the SharePoint shell, and Intune's default enrollment
   restriction (which allows personal devices) is now Partial or a Gap. No new Graph scope.
 - **[Controls] AAD-6.4: users cannot create agent identity blueprints (209 controls).** Microsoft Entra Agent ID lets any
-  user create agent identity blueprints by default from November 2026, and the app-registration restriction (AAD-6.1)
+  user create agent identity blueprints by default as the setting rolls out, and the app-registration restriction (AAD-6.1)
   does not cover them. AAD-6.4 reads `allowedToCreateAgentIdentityBlueprints` from the beta authorization policy: False
   passes, True is a Gap, and a tenant that does not return the setting yet is not assessed. No new Graph scope.
 - **[Controls] INT-2.6 judges Office macro hardening (208 controls).** The assigned Intune Settings Catalog Office policies

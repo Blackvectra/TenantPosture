@@ -1535,7 +1535,7 @@ function Test-TPControlAADAgentBlueprintCreation {
     $allowed = Get-TPNestedProperty -Object $auth -Path 'Data.AgentBlueprintCreation' -Default $null
     if ($null -eq $allowed) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
-            -Detail 'The tenant did not return defaultUserRolePermissions.allowedToCreateAgentIdentityBlueprints (Microsoft Graph beta authorization policy). Microsoft is rolling the setting out from November 2026, on by default; until the tenant returns it, check Entra ID > Users > User settings > Users can create agent blueprints by hand. Not assessed.'
+            -Detail 'The tenant did not return defaultUserRolePermissions.allowedToCreateAgentIdentityBlueprints (Microsoft Graph beta authorization policy). Microsoft is rolling the setting out (no rollout date is published on an official Microsoft page), on by default; until the tenant returns it, check Entra ID > Users > User settings > Users can create agent blueprints by hand. Not assessed.'
     } elseif ($allowed -eq $false) {
         Add-TPFinding -ControlId $cid -State 'Satisfied' -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' -FrameworkIds $cit `
             -Detail 'Users cannot create agent identity blueprints: only administrators and holders of the Agent ID Developer or Agent ID Administrator role can.' -CurrentValue 'allowedToCreateAgentIdentityBlueprints = False'

@@ -722,6 +722,9 @@ if ($TenantDomain -and -not ($AppId -and $TenantId -and $CertificateThumbprint))
 # collector, evaluator and publisher the full run uses. It is READ-ONLY (Get-* cmdlets only) and says in
 # its output that every other area was not assessed.
 if ($DistributionListsOnly) {
+    # PowerShell's own support lifecycle (Get-TPPowerShellSupportStatus): a warning, never a stop.
+    $psSupport = Get-TPPowerShellSupportStatus
+    if ($psSupport.Level -eq 'Warning') { Write-Host "  [!] $($psSupport.Text)" -ForegroundColor Yellow }
     $exoFloor = Get-TPExoModuleFloor
     $exoModule = Get-Module -ListAvailable -Name ExchangeOnlineManagement -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
     # One wording for the PowerShell floor, the Store build and the module's version range (Get-TPExoPreflightNotes), shared with
@@ -817,6 +820,10 @@ try {
 # follow the PowerShell in use (Get-TPExoModuleFloor: 3.10.0+ on 7.6, 3.7.2
 # to 3.9.x on 7.4/7.5) so the preflight, the installer and Get-TPModuleHealth
 # agree; a version outside that range fails inside the module at connect time.
+# PowerShell's own support lifecycle (Get-TPPowerShellSupportStatus, dates from
+# Config/powershell-lifecycle.json): a warning, never a stop.
+$psSupport = Get-TPPowerShellSupportStatus
+if ($psSupport.Level -eq 'Warning') { Write-Host "  [!] $($psSupport.Text)" -ForegroundColor Yellow }
 $exoFloor = Get-TPExoModuleFloor
 # Floor and Store-build notes only (no installed version): the module range is checked per module below.
 foreach ($n in @(Get-TPExoPreflightNotes -Floor $exoFloor -InstalledVersion $null)) { Write-Host "  [!] $($n.Text)" -ForegroundColor $(if ($n.Level -eq 'Error') { 'Red' } else { 'Yellow' }) }

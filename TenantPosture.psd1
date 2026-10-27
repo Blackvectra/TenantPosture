@@ -198,6 +198,7 @@
         'Get-TPModuleInstallScope',
         'Get-TPExoModuleFloor',
         'Get-TPExoPreflightNotes',
+        'Get-TPPowerShellSupportStatus',
         'Get-TPConnectErrorText',
         'Get-TPExoConnectHint',
         'Get-TPCloudFileHint',
