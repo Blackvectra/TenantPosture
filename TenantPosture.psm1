@@ -232,6 +232,8 @@ $script:ExportedFunctions = @(
     'Get-TPBaselineReasonCodes', 'Resolve-TPBaselineReason', 'ConvertTo-TPBaselineReasonCode', 'Get-TPReasonSentence', 'Get-TPBaselineCoverage',
     'Get-TPBaselineExceptionPath', 'Get-TPBaselineException', 'New-TPBaselineException', 'Set-TPBaselineException', 'Remove-TPBaselineException',
     'Get-TPBaselineTenantComparison', 'Publish-TPBaselineTenantComparison',
+    # ── MSP deliverables: shared theme, fleet dashboard, proof of fix, onboarding report ──
+    'Get-TPReportTheme', 'Read-TPRunRecord', 'Get-TPRunRecordTime', 'Get-TPFleetModel', 'Publish-TPFleetDashboard', 'Get-TPRemediationProof', 'Publish-TPRemediationProof', 'Get-TPOnboardingModel', 'Publish-TPOnboardingReport',
     'Get-TPModuleHealth',
     'Repair-TPModuleHealth',
     'Get-TPModuleInstallScope', 'Get-TPExoModuleFloor', 'Get-TPExoPreflightNotes', 'Get-TPPowerShellSupportStatus', 'Get-TPCloudFileHint', 'Get-TPMsalConflictHint', 'Get-TPGapSummary', 'Format-TPGapSummary', 'Get-TPControlViewMap', 'Get-TPEvidenceLimitMap', 'Get-TPEvidenceLimitNote', 'Get-TPEvidenceLimitMd', 'Test-TPSafeModuleVersionPath', 'Get-TPConnectErrorText', 'Get-TPExoConnectHint',

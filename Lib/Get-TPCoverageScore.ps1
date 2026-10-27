@@ -156,6 +156,31 @@ function Get-TPStateSeverityRank {
     return @{ 'Gap' = 5; 'Error' = 4; 'Partial' = 3; 'NotApplicable' = 2; 'Satisfied' = 1 }
 }
 
+# The worst finding per ControlId, by the same order (Gap > Error > Partial >
+# NotApplicable > Satisfied), with NO control-link grouping: the offline MSP
+# deliverables (fleet dashboard, proof of fix, onboarding report) name each
+# control by its own ID. Returns an ordered dictionary ControlId -> finding,
+# in ControlId order. Findings without a ControlId are skipped.
+function Get-TPControlWorstFindings {
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param([AllowNull()] [AllowEmptyCollection()] [object[]] $Findings)
+    $rank = Get-TPStateSeverityRank
+    $worst = @{}
+    foreach ($f in @($Findings)) {
+        if ($null -eq $f) { continue }
+        $cid = [string](Get-TPObjectField -Item $f -Key 'ControlId' -Default '')
+        if (-not $cid) { continue }
+        if (-not $worst.ContainsKey($cid)) { $worst[$cid] = $f; continue }
+        $new = [string](Get-TPObjectField -Item $f -Key 'State' -Default '')
+        $old = [string](Get-TPObjectField -Item $worst[$cid] -Key 'State' -Default '')
+        if (($rank[$new] ?? 0) -gt ($rank[$old] ?? 0)) { $worst[$cid] = $f }
+    }
+    $out = [ordered]@{}
+    foreach ($k in @($worst.Keys | Sort-Object)) { $out[$k] = $worst[$k] }
+    return $out
+}
+
 function Get-TPScoringFindings {
     [CmdletBinding()]
     param([AllowNull()] [AllowEmptyCollection()] [object[]] $Findings)

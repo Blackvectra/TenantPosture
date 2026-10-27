@@ -332,6 +332,29 @@ param(
     # them. Implied by -AllFiles.
     [switch] $ImprovementPlan,
 
+    # The new-client onboarding report: an executive one-pager, what is working,
+    # what needs attention, a 30/60/90-day plan built from the operational-impact
+    # effort classes and the license gate, and the coming Microsoft changes when
+    # Config/microsoft-changes.json exists. HTML + Markdown. Covers the whole
+    # tenant, so it is refused on a partial (-ControlId) run. Implied by -AllFiles
+    # (and then skipped, with a note, on a partial or quick run).
+    [switch] $OnboardingReport,
+
+    # Proof of fix: after this run, compare it with an earlier results file of the
+    # SAME tenant and write a remediation certificate (<tenant>-proof-<time>.html
+    # and .md) listing, for each control this run covered, the state before and
+    # after and whether it was resolved. The natural pairing is a -ControlId
+    # re-check after fixing. The file is checked before anything signs in; a
+    # different tenant or an older run is refused. See New-TPRemediationProof.ps1
+    # to build one from two saved files.
+    [ValidateScript({
+        if ([string]::IsNullOrEmpty($_)) { return $true }
+        if ($_ -match '\.\.[\\/]') { throw "Path traversal not allowed in ProofAgainst." }
+        if (-not (Test-Path -LiteralPath $_ -PathType Leaf)) { throw "ProofAgainst file not found: $_" }
+        return $true
+    })]
+    [string] $ProofAgainst,
+
     # The distribution-list scan. Signs in to Exchange Online ONLY (no Graph, Purview, Teams or
     # SharePoint), lists every distribution list with its members, settings and who can reach it
     # (including the tenant-wide filtering bypasses that let mail past spam filtering), compares
@@ -582,6 +605,7 @@ if ($ControlId -or $ExcludeControlId) {
         @{ On = [bool]$DeviceResults;         Text = '-DeviceResults adds the DEV-* endpoint checks, which are not in Config/controls.json and cannot be selected; run the endpoint checks in a full assessment.' }
         @{ On = [bool]$SSPQuestionnaire;      Text = '-SSPQuestionnaire would ask the client about requirements this partial run did not evidence only because their controls were not selected.' }
         @{ On = [bool]$MonthlyReport;         Text = '-MonthlyReport is a whole-tenant client deliverable; a partial run cannot feed it.' }
+        @{ On = [bool]$OnboardingReport;      Text = '-OnboardingReport is a first look at the whole tenant; a partial run cannot feed it. Run it on a full assessment.' }
     )
     $selRefused = @($selConflicts | Where-Object { $_.On })
     if ($selRefused.Count -gt 0) {
@@ -611,6 +635,28 @@ if ($ControlId -or $ExcludeControlId) {
         Write-Host "      The data a selected evaluator reads could not be determined from the code, so every collector runs (never under-collect)." -ForegroundColor Yellow
     }
     Write-Host "      The other $($controlSelection.TotalControls - $controlSelection.SelectedCount) control(s) are not assessed in this run; the reports say so." -ForegroundColor DarkGray
+}
+
+# ── Proof of fix (-ProofAgainst): the earlier results file is read and checked
+# here, before anything signs in, so a file that cannot serve as the "before"
+# run stops the run (exit 4) instead of being found unusable after collection.
+$proofBefore = $null
+if ($ProofAgainst) {
+    try {
+        $proofBefore = Read-TPRunRecord -Path $ProofAgainst -Hash
+    } catch {
+        Write-Host "  [!] -ProofAgainst could not be read: $($_.Exception.Message) Nothing was run." -ForegroundColor Red
+        exit 4
+    }
+    $pbMeta = Get-TPObjectField -Item $proofBefore -Key 'Metadata' -Default $null
+    $pbWhy = ''
+    if ($proofBefore.IsIncidentResponse) { $pbWhy = 'it is an incident-response output, not an assessment run' }
+    elseif (-not [string](Get-TPObjectField -Item $pbMeta -Key 'TenantId' -Default '')) { $pbWhy = 'it records no TenantId, so it cannot be shown to be this tenant' }
+    elseif ($null -eq (Get-TPRunRecordTime -Record $proofBefore)) { $pbWhy = 'it records no readable assessment time' }
+    if ($pbWhy) {
+        Write-Host "  [!] -ProofAgainst cannot be used: $pbWhy. Nothing was run." -ForegroundColor Red
+        exit 4
+    }
 }
 
 # -Web short-circuits the terminal flow: hand control to the local Pode-backed
@@ -1562,6 +1608,23 @@ Set-TPSensitiveFileContent -Path $jsonPath -Content $jsonPayload
 Write-TPReportFile 'JSON' $jsonPath
 Write-Host "      Holds sensitive tenant inventory (CA policies, admin assignments, OAuth apps); access restricted to you and administrators." -ForegroundColor Yellow
 
+# Proof of fix: this run against the -ProofAgainst file, read back from the
+# results file just written so the certificate's hash is of the file on disk.
+if ($null -ne $proofBefore) {
+    try {
+        $proofAfter = Read-TPRunRecord -Path $jsonPath -Hash
+        $proof = Get-TPRemediationProof -Before $proofBefore -After $proofAfter
+        if ($proof.Available) {
+            $proofFiles = Publish-TPRemediationProof -Proof $proof -OutputPath $OutputPath
+            Write-TPReportFile 'Proof of fix (html)' $proofFiles.Html
+            Write-TPReportFile 'Proof of fix (md)' $proofFiles.Markdown
+            Write-Host "      $($proof.Headline)." -ForegroundColor Cyan
+        } else {
+            Write-Host "  [!] Proof of fix not written: $($proof.Note)" -ForegroundColor Yellow
+        }
+    } catch { Write-Warning "Proof of fix publish failed: $($_.Exception.Message)" }
+}
+
 if (-not $JsonOnly) {
     # ── Audit-finding fix (HIGH #2): every secondary report file gets the same
     #    ACL hardening as the JSON baseline. They all contain the same tenant
@@ -1879,6 +1942,25 @@ if (-not $JsonOnly) {
                 Write-Warning 'No NIST-cited findings to plan against — improvement plan skipped.'
             }
         } catch { Write-Warning "Improvement plan publish failed: $($_.Exception.Message)" }
+    }
+
+    # New-client onboarding report. Its own switch, implied by -AllFiles; it covers
+    # the whole tenant, so a partial or quick run is skipped with a note (an
+    # explicit -OnboardingReport with -ControlId already stopped the run).
+    if (($OnboardingReport -or $AllFiles) -and (Get-Command Publish-TPOnboardingReport -ErrorAction SilentlyContinue)) {
+        try {
+            $obLicense = try { Get-TPTenantLicenseProfile } catch { $null }
+            $obModel = Get-TPOnboardingModel -Findings $findings -Metadata $reportMetadata -LicenseProfile $obLicense
+            if ($obModel.Available) {
+                $obFiles = Publish-TPOnboardingReport -Model $obModel -OutputPath (Join-Path $OutputPath "$baseName-onboarding.html")
+                Write-TPReportFile 'Onboarding report (html)' $obFiles.Html
+                Write-TPReportFile 'Onboarding report (md)' $obFiles.Markdown
+            } elseif ($OnboardingReport) {
+                Write-Host "  [!] Onboarding report not written: $($obModel.Note)" -ForegroundColor Yellow
+            } else {
+                Write-Host "  [i] Onboarding report not written: $($obModel.Note)" -ForegroundColor DarkGray
+            }
+        } catch { Write-Warning "Onboarding report publish failed: $($_.Exception.Message)" }
     }
 
     # Multi-page report site (landing page, one page per workload, ActionPlan.csv):
