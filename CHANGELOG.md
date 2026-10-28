@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **[Assessment] App protection checks in the Intune checklist.** 14 more rows by Maester test id (MT.1238-1251)
+  for iOS and Android app protection policies: a strong app PIN, organization data kept inside managed apps,
+  encryption, minimum OS and app versions, offline access limits, the device threat level, and for Android screen
+  capture and Play Integrity attestation, each with what to set when it is not met. The app protection collector now
+  reads the iOS and Android policies with their settings and assignments (GET only, no new scope). The client
+  security review includes them.
+
 - **[Client] Security configuration review as a PDF.** `-SecurityReview` (with `-Pdf` for the PDF and `-ClientName`;
   `-AllFiles` writes the HTML) and the offline `New-TPSecurityReview.ps1 -ResultsPath` turn the Conditional Access and
   Intune checklists into a client-facing report: recommended next steps (most important first, each with what to

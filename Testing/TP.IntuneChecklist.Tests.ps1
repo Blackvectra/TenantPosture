@@ -62,7 +62,7 @@ Describe 'The Intune checklist catalog' {
         ($ids | Sort-Object -Unique).Count | Should -Be $ids.Count
         foreach ($c in $script:Catalog.checks) {
             $c.Id | Should -Match '\AMT\.\d{4}\z'
-            $c.Area | Should -BeIn @('Tenant', 'iOS', 'Android', 'macOS', 'ASR', 'LAPS', 'Antivirus')
+            $c.Area | Should -BeIn @('Tenant', 'iOS', 'Android', 'macOS', 'iOS app protection', 'Android app protection', 'ASR', 'LAPS', 'Antivirus')
             $c.SourceUrl | Should -Match '\Ahttps://learn\.microsoft\.com/'
             $c.Recommended | Should -Not -BeNullOrEmpty
             if ($c.Area -eq 'Antivirus') {
@@ -70,7 +70,7 @@ Describe 'The Intune checklist catalog' {
                 $c.Rule.Check | Should -BeIn @('Bool', 'Enum', 'Range', 'Min', 'Level')
             }
         }
-        foreach ($want in 'MT.1053', 'MT.1054', 'MT.1105', 'MT.1177', 'MT.1178', 'MT.1214', 'MT.1228', 'MT.1229', 'MT.1232', 'MT.1237', 'MT.1148', 'MT.1171') { $ids | Should -Contain $want }
+        foreach ($want in 'MT.1238', 'MT.1243', 'MT.1244', 'MT.1251', 'MT.1053', 'MT.1054', 'MT.1105', 'MT.1177', 'MT.1178', 'MT.1214', 'MT.1228', 'MT.1229', 'MT.1232', 'MT.1237', 'MT.1148', 'MT.1171') { $ids | Should -Contain $want }
     }
     It 'names the three standard protection ASR rules' {
         @($script:Catalog.asrStandardRules).Count | Should -Be 3
@@ -186,6 +186,65 @@ Describe 'ASR, LAPS and antivirus rows' {
     It 'with no endpoint security data the ASR, LAPS and antivirus rows are not assessed' {
         $view = Get-TPIntuneChecklist -RawData (& $script:Raw @()) -Now $script:Now
         foreach ($r in @($view.Rows | Where-Object { $_.Area -in @('ASR', 'LAPS', 'Antivirus') })) { $r.Status | Should -Be 'NotAssessed' }
+    }
+}
+
+Describe 'App protection rows' {
+    BeforeAll {
+        $script:Ap = {
+            param([object[]] $Detail, [string] $Ios = 'Collected', [string] $Android = 'Collected')
+            $r = & $script:Raw @()
+            $r['Intune-AppProtection'] = @{ Success = $true; Data = @{ AppProtectionDetail = @($Detail); SectionStatus = @{ IosAppProtection = $Ios; AndroidAppProtection = $Android } } }
+            $r
+        }
+        $script:ApPol = { param([string] $Platform, [hashtable] $Settings, [int] $Included = 1, [bool] $Flag = $false, [string] $Name = 'APP')
+            @{ DisplayName = $Name; Platform = $Platform; InclusionAssignmentCount = $Included; IsAssignedFlag = $Flag; Settings = $Settings } }
+        $script:StrongPin = @{ pinRequired = $true; simplePinBlocked = $true; minimumPinLength = 6; maximumPinRetries = 5 }
+    }
+    It 'PIN passes on an assigned policy with Maester''s values and fails a weaker one' {
+        (& $script:Check (& $script:Ap @((& $script:ApPol 'iOS' $script:StrongPin))) 'MT.1238').Status | Should -Be 'Pass'
+        $weak = $script:StrongPin.Clone(); $weak.maximumPinRetries = 10
+        (& $script:Check (& $script:Ap @((& $script:ApPol 'iOS' $weak))) 'MT.1238').Status | Should -Be 'Fail'
+    }
+    It 'isAssigned alone counts as assigned (Maester''s union); neither signal is unassigned' {
+        (& $script:Check (& $script:Ap @((& $script:ApPol 'Android' $script:StrongPin 0 $true))) 'MT.1244').Status | Should -Be 'Pass'
+        $row = & $script:Check (& $script:Ap @((& $script:ApPol 'Android' $script:StrongPin 0 $false))) 'MT.1244'
+        $row.Status | Should -Be 'Fail'
+        $row.Detail | Should -Match 'not assigned'
+    }
+    It 'data transfer, encryption, screen capture and attestation read the documented values' {
+        $p = & $script:ApPol 'Android' @{ allowedOutboundDataTransferDestinations = 'managedApps'; allowedOutboundClipboardSharingLevel = 'managedAppsWithPasteIn'; saveAsBlocked = $true; dataBackupBlocked = $true
+            encryptAppData = $true; disableAppEncryptionIfDeviceEncryptionIsEnabled = $true; screenCaptureBlocked = $true
+            requiredAndroidSafetyNetDeviceAttestationType = 'basicIntegrity'; appActionIfAndroidSafetyNetDeviceAttestationFailed = 'warn' }
+        $raw = & $script:Ap @($p)
+        (& $script:Check $raw 'MT.1245').Status | Should -Be 'Pass'
+        (& $script:Check $raw 'MT.1246').Status | Should -Be 'Fail'
+        (& $script:Check $raw 'MT.1250').Status | Should -Be 'Pass'
+        (& $script:Check $raw 'MT.1251').Status | Should -Be 'Fail'
+        $ios = & $script:ApPol 'iOS' @{ appDataEncryptionType = 'useDeviceSettings' }
+        (& $script:Check (& $script:Ap @($ios)) 'MT.1240').Status | Should -Be 'Fail'
+    }
+    It 'offline limits parse ISO 8601 durations, never compare them as text' {
+        $ok = & $script:ApPol 'iOS' @{ periodOfflineBeforeAccessCheck = 'PT12H'; periodOfflineBeforeWipeIsEnforced = 'P90D' }
+        (& $script:Check (& $script:Ap @($ok)) 'MT.1242').Status | Should -Be 'Pass'
+        $long = & $script:ApPol 'iOS' @{ periodOfflineBeforeAccessCheck = 'P1D'; periodOfflineBeforeWipeIsEnforced = 'P90D' }
+        (& $script:Check (& $script:Ap @($long)) 'MT.1242').Status | Should -Be 'Fail'
+    }
+    It 'no policy for the platform is not met; a failed or absent read is not assessed' {
+        (& $script:Check (& $script:Ap @()) 'MT.1238').Status | Should -Be 'Fail'
+        (& $script:Check (& $script:Ap @() 'Failed') 'MT.1238').Status | Should -Be 'NotAssessed'
+        $old = & $script:Raw @()
+        $old['Intune-AppProtection'] = @{ Success = $true; Data = @{ AppProtectionPolicies = @(); SectionStatus = @{ AppProtectionPolicies = 'Collected' } } }
+        (& $script:Check $old 'MT.1244').Status | Should -Be 'NotAssessed'
+    }
+    It 'the collector keeps only returned settings and counts inclusion assignments' {
+        & $script:Mod {
+            $p = @{ pinRequired = $true; displayName = 'x'; assignments = @(@{ target = @{ '@odata.type' = '#microsoft.graph.groupAssignmentTarget' } }, @{ target = @{ '@odata.type' = '#microsoft.graph.exclusionGroupAssignmentTarget' } }) }
+            $s = Get-TPAppProtectionSettingSnapshot -Policy $p
+            $s.Keys | Should -Contain 'pinRequired'
+            $s.Keys | Should -Not -Contain 'screenCaptureBlocked'
+            Get-TPAppProtectionInclusionCount -Policy $p | Should -Be 1
+        }
     }
 }
 

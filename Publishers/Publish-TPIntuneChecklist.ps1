@@ -64,6 +64,8 @@ function Publish-TPIntuneChecklist {
         iOS       = @{ Title = 'iOS and iPadOS compliance'; Id = 'ios' }
         Android   = @{ Title = 'Android compliance'; Id = 'android' }
         macOS     = @{ Title = 'macOS compliance'; Id = 'macos' }
+        'iOS app protection'     = @{ Title = 'iOS app protection'; Id = 'ios-app-protection' }
+        'Android app protection' = @{ Title = 'Android app protection'; Id = 'android-app-protection' }
         ASR       = @{ Title = 'Attack surface reduction'; Id = 'asr' }
         LAPS      = @{ Title = 'Windows LAPS'; Id = 'laps' }
         Antivirus = @{ Title = 'Microsoft Defender Antivirus'; Id = 'antivirus' }
