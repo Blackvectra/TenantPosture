@@ -207,6 +207,8 @@
         'Publish-TPChangeImpact',
         'Get-TPCAChecklist',
         'Publish-TPCAChecklist',
+        'Get-TPIntuneChecklist',
+        'Publish-TPIntuneChecklist',
         'Get-TPHipaaClientReport',
         'Publish-TPHipaaClientReport',
         'ConvertTo-TPPdf',

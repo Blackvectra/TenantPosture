@@ -1,0 +1,541 @@
+{
+  "_comment": "The Intune and endpoint checklist (Lib/Get-TPIntuneChecklist.ps1). Checks follow Maester's tests by id; the rules are the tool's port, with the differences named in the Lib file. Antivirus values are Maester's (some are operational preferences, not security requirements). Recommended is what to set in the Intune admin center; the tool changes nothing.",
+  "version": "1.0",
+  "maesterReference": "maester365/maester main, retrieved 2026-10-28",
+  "sourceRetrieved": "2026-10-28",
+  "asrStandardRules": [
+    {
+      "Key": "blockcredentialstealingfromwindowslocalsecurityauthoritysubsystem",
+      "Name": "Block credential stealing from the Windows local security authority subsystem (lsass.exe)"
+    },
+    {
+      "Key": "blockabuseofexploitedvulnerablesigneddrivers",
+      "Name": "Block abuse of exploited vulnerable signed drivers"
+    },
+    {
+      "Key": "blockpersistencethroughwmieventsubscription",
+      "Name": "Block persistence through WMI event subscription"
+    }
+  ],
+  "checks": [
+    {
+      "Id": "MT.1054",
+      "Area": "Tenant",
+      "Title": "Devices with no compliance policy are marked not compliant",
+      "Why": "By default Intune marks a device that no compliance policy reaches as Compliant, so a Conditional Access policy requiring a compliant device lets it in.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/device-compliance-get-started",
+      "Recommended": "Intune admin center: Devices, Compliance, Compliance settings: \"Mark devices with no compliance policy assigned as\" = Not compliant.",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1053",
+      "Area": "Tenant",
+      "Title": "A device clean-up rule is configured",
+      "Why": "Devices that stopped checking in stay in the inventory and in compliance reports for ever.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/remote-actions/devices-wipe",
+      "Recommended": "Intune admin center: Devices, Device clean-up rules: hide devices that have not checked in for 90 days (or your own period).",
+      "Severity": "Low"
+    },
+    {
+      "Id": "MT.1105",
+      "Area": "Tenant",
+      "Title": "The MDM authority is Intune",
+      "Why": "A tenant whose MDM authority is not Intune cannot manage devices through Intune.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/fundamentals/mdm-authority-set",
+      "Recommended": "Set the MDM authority to Intune (Intune admin center, Tenant administration).",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1228",
+      "Area": "iOS",
+      "Title": "An iOS compliance policy blocks jailbroken devices",
+      "Why": "A jailbroken iPhone or iPad has iOS security turned off and is still reported compliant.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/compliance-policy-create-ios",
+      "Recommended": "iOS/iPadOS compliance policy, Device Health: Jailbroken devices = Block.",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1229",
+      "Area": "iOS",
+      "Title": "An iOS compliance policy requires a strong passcode",
+      "Why": "Whoever holds the device reaches corporate mail and the Authenticator app on it.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/compliance-policy-create-ios",
+      "Recommended": "iOS/iPadOS compliance policy, System Security: Require a password; Simple passwords = Block; Minimum password length = 6 or more; Maximum minutes after screen lock = 15 or less.",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1230",
+      "Area": "iOS",
+      "Title": "An iOS compliance policy sets a minimum OS version",
+      "Why": "A device several versions behind keeps every vulnerability those versions fixed and stays compliant.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/compliance-policy-create-ios",
+      "Recommended": "iOS/iPadOS compliance policy, Device Properties: Minimum OS version = the oldest release you support.",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1231",
+      "Area": "iOS",
+      "Title": "An iOS compliance policy requires a Defender risk level",
+      "Why": "Ties device access to Microsoft Defender for Endpoint's view of the device.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/compliance-policy-create-ios",
+      "Recommended": "iOS/iPadOS compliance policy, Microsoft Defender for Endpoint: Require the device to be at or under the machine risk score = Clear, Low or Medium (needs the Defender connector).",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1232",
+      "Area": "Android",
+      "Title": "An Android compliance policy blocks rooted devices",
+      "Why": "A rooted device has Android security turned off and is still reported compliant.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/compliance-policy-create-android-for-work",
+      "Recommended": "Android Enterprise compliance policy, Device Health: Rooted devices = Block.",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1233",
+      "Area": "Android",
+      "Title": "An Android compliance policy requires a strong password",
+      "Why": "Whoever holds the device reaches corporate data on it.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/compliance-policy-create-android-for-work",
+      "Recommended": "Android Enterprise compliance policy, System Security: Require a password; Minimum password length = 6 or more; Maximum minutes of inactivity = 15 or less.",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1234",
+      "Area": "Android",
+      "Title": "An Android compliance policy requires a recent security patch level",
+      "Why": "An unpatched Android device keeps known vulnerabilities and stays compliant.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/compliance-policy-create-android-for-work",
+      "Recommended": "Android Enterprise compliance policy, Device Properties: Minimum security patch level = a date within the last year (review it every quarter).",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1235",
+      "Area": "Android",
+      "Title": "An Android compliance policy requires device threat protection",
+      "Why": "Lets a mobile threat defense product (such as Defender for Endpoint) mark a compromised device non-compliant.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/compliance-policy-create-android-for-work",
+      "Recommended": "Android Enterprise compliance policy, Device Health: Require the device to be at or under the Device Threat Level = Secured, Low or Medium (needs a threat defense connector).",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1236",
+      "Area": "Android",
+      "Title": "An Android compliance policy blocks USB debugging",
+      "Why": "USB debugging lets a computer read and change the device.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/compliance-policy-create-android",
+      "Recommended": "Android compliance policy, System Security: Block USB debugging on device.",
+      "Severity": "Low"
+    },
+    {
+      "Id": "MT.1237",
+      "Area": "Android",
+      "Title": "An Android compliance policy blocks devices managed with device administrator",
+      "Why": "Device administrator management is deprecated by Google and Microsoft and gives Intune little control.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/compliance-policy-create-android",
+      "Recommended": "Android compliance policy: Block devices managed with device administrator, and move devices to Android Enterprise.",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1214",
+      "Area": "macOS",
+      "Title": "A macOS compliance policy requires System Integrity Protection",
+      "Why": "With SIP off, malware can change protected system files.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/compliance-policy-create-mac-os",
+      "Recommended": "macOS compliance policy, Device Health: Require system integrity protection.",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1215",
+      "Area": "macOS",
+      "Title": "A macOS compliance policy restricts app download locations (Gatekeeper)",
+      "Why": "Gatekeeper off lets an app from anywhere run without a check.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/compliance-policy-create-mac-os",
+      "Recommended": "macOS compliance policy, System Security: Gatekeeper, allow apps downloaded from = Mac App Store and identified developers (or Mac App Store).",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1216",
+      "Area": "macOS",
+      "Title": "A macOS compliance policy requires a Defender risk level",
+      "Why": "Ties device access to Microsoft Defender for Endpoint's view of the Mac.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/compliance-policy-create-mac-os",
+      "Recommended": "macOS compliance policy, Microsoft Defender for Endpoint: Require the device to be at or under the machine risk score.",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1178",
+      "Area": "ASR",
+      "Title": "The standard protection ASR rules are on",
+      "Why": "Microsoft's three standard protection rules (credential theft from LSASS, vulnerable signed drivers, WMI persistence) block common attack techniques with almost no business impact.",
+      "SourceUrl": "https://learn.microsoft.com/defender-endpoint/attack-surface-reduction-rules-reference",
+      "Recommended": "Endpoint security, Attack surface reduction rules: set \"Block credential stealing from LSASS\", \"Block abuse of exploited vulnerable signed drivers\" and \"Block persistence through WMI event subscription\" to Block, and assign it to every Windows device.",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1177",
+      "Area": "LAPS",
+      "Title": "Windows LAPS backs up to Entra ID with a strong password",
+      "Why": "The local administrator password should be unique per device, strong, kept in Entra ID and rotated after use.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/protect/windows-laps-policy",
+      "Recommended": "Endpoint security, Account protection, Local admin password solution: Backup Directory = Microsoft Entra ID; Password Complexity = large + small + numbers + special; Password Length = 14 or more; Post-authentication actions = reset the password (and log off or reboot).",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1148",
+      "Area": "Antivirus",
+      "Title": "Archive scanning is on",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Allow Archive Scanning = Allowed.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_allowarchivescanning",
+        "Check": "Bool",
+        "Expected": "_1"
+      }
+    },
+    {
+      "Id": "MT.1149",
+      "Area": "Antivirus",
+      "Title": "Behavior monitoring is on",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Allow Behavior Monitoring = Allowed.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_allowbehaviormonitoring",
+        "Check": "Bool",
+        "Expected": "_1"
+      }
+    },
+    {
+      "Id": "MT.1150",
+      "Area": "Antivirus",
+      "Title": "Cloud protection is on",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Allow Cloud Protection = Allowed.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_allowcloudprotection",
+        "Check": "Bool",
+        "Expected": "_1"
+      }
+    },
+    {
+      "Id": "MT.1151",
+      "Area": "Antivirus",
+      "Title": "Email scanning is on",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Allow Email Scanning = Allowed.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_allowemailscanning",
+        "Check": "Bool",
+        "Expected": "_1"
+      }
+    },
+    {
+      "Id": "MT.1152",
+      "Area": "Antivirus",
+      "Title": "Script scanning is on",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Allow Script Scanning = Allowed.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_allowscriptscanning",
+        "Check": "Bool",
+        "Expected": "_1"
+      }
+    },
+    {
+      "Id": "MT.1153",
+      "Area": "Antivirus",
+      "Title": "Real-time monitoring is on",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Allow Realtime Monitoring = Allowed.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_allowrealtimemonitoring",
+        "Check": "Bool",
+        "Expected": "_1"
+      }
+    },
+    {
+      "Id": "MT.1154",
+      "Area": "Antivirus",
+      "Title": "Full scans include removable drives",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Allow Full Scan Removable Drive Scanning = Allowed.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_allowfullscanremovabledrivescanning",
+        "Check": "Bool",
+        "Expected": "_1"
+      }
+    },
+    {
+      "Id": "MT.1155",
+      "Area": "Antivirus",
+      "Title": "Full scans skip mapped network drives (Maester: performance)",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Allow Full Scan On Mapped Network Drives = Not allowed.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_allowfullscanonmappednetworkdrives",
+        "Check": "Bool",
+        "Expected": "_0"
+      }
+    },
+    {
+      "Id": "MT.1156",
+      "Area": "Antivirus",
+      "Title": "Network files are scanned",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Allow scanning of network files = Allowed.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_allowscanningnetworkfiles",
+        "Check": "Bool",
+        "Expected": "_1"
+      }
+    },
+    {
+      "Id": "MT.1157",
+      "Area": "Antivirus",
+      "Title": "Average CPU load during a scan is 20 to 30 percent",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Avg CPU Load Factor = 20 to 30.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_avgcpuloadfactor",
+        "Check": "Range",
+        "Expected": [
+          20,
+          30
+        ]
+      }
+    },
+    {
+      "Id": "MT.1158",
+      "Area": "Antivirus",
+      "Title": "A scan is scheduled",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Schedule Scan Day = Every day (or a set day).",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_schedulescanday",
+        "Check": "Enum",
+        "Expected": [
+          "_0",
+          "_1",
+          "_2",
+          "_3",
+          "_4",
+          "_5",
+          "_6",
+          "_7"
+        ]
+      }
+    },
+    {
+      "Id": "MT.1160",
+      "Area": "Antivirus",
+      "Title": "Signatures are checked before a scan",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Check For Signatures Before Running Scan = Enabled.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_checkforsignaturesbeforerunningscan",
+        "Check": "Bool",
+        "Expected": "_1"
+      }
+    },
+    {
+      "Id": "MT.1161",
+      "Area": "Antivirus",
+      "Title": "Cloud block level is High or higher",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Cloud Block Level = High, High Plus or Zero Tolerance.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_cloudblocklevel",
+        "Check": "Level",
+        "Expected": {
+          "_0": 0,
+          "_2": 2,
+          "_4": 4,
+          "_6": 6
+        }
+      }
+    },
+    {
+      "Id": "MT.1162",
+      "Area": "Antivirus",
+      "Title": "Cloud extended timeout is 30 to 50 seconds",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Cloud Extended Timeout = 30 to 50.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_cloudextendedtimeout",
+        "Check": "Range",
+        "Expected": [
+          30,
+          50
+        ]
+      }
+    },
+    {
+      "Id": "MT.1163",
+      "Area": "Antivirus",
+      "Title": "Signatures update every 1 to 4 hours",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Signature Update Interval = 1 to 4.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_signatureupdateinterval",
+        "Check": "Range",
+        "Expected": [
+          1,
+          4
+        ]
+      }
+    },
+    {
+      "Id": "MT.1164",
+      "Area": "Antivirus",
+      "Title": "Potentially unwanted app protection is on",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: PUA Protection = On (or Audit).",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_puaprotection",
+        "Check": "Enum",
+        "Expected": [
+          "_1",
+          "_2"
+        ]
+      }
+    },
+    {
+      "Id": "MT.1165",
+      "Area": "Antivirus",
+      "Title": "Network protection is on",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Enable Network Protection = Enabled (block mode), or audit.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_enablenetworkprotection",
+        "Check": "Enum",
+        "Expected": [
+          "_1",
+          "_2"
+        ]
+      }
+    },
+    {
+      "Id": "MT.1166",
+      "Area": "Antivirus",
+      "Title": "Local administrators cannot add their own exclusions",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Disable Local Admin Merge = Enabled.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_defender_configuration_disablelocaladminmerge",
+        "Check": "Bool",
+        "Expected": "_1"
+      }
+    },
+    {
+      "Id": "MT.1167",
+      "Area": "Antivirus",
+      "Title": "Real-time scanning watches incoming files (all files or incoming)",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Real Time Scan Direction = Monitor all files.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_realtimescandirection",
+        "Check": "Enum",
+        "Expected": [
+          "_0",
+          "_1"
+        ]
+      }
+    },
+    {
+      "Id": "MT.1168",
+      "Area": "Antivirus",
+      "Title": "Cleaned malware is kept for at least 30 days",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Days To Retain Cleaned Malware = 30 or more.",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_daystoretaincleanedmalware",
+        "Check": "Min",
+        "Expected": 30
+      }
+    },
+    {
+      "Id": "MT.1169",
+      "Area": "Antivirus",
+      "Title": "Catch-up full scans are off",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Disable Catchup Full Scan = Disabled catch-up (the policy value 1).",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_disablecatchupfullscan",
+        "Check": "Bool",
+        "Expected": "_1"
+      }
+    },
+    {
+      "Id": "MT.1170",
+      "Area": "Antivirus",
+      "Title": "Catch-up quick scans are off",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy.",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Disable Catchup Quick Scan = Disabled catch-up (the policy value 1).",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_disablecatchupquickscan",
+        "Check": "Bool",
+        "Expected": "_1"
+      }
+    },
+    {
+      "Id": "MT.1171",
+      "Area": "Antivirus",
+      "Title": "Safe samples are submitted automatically",
+      "Why": "Maester checks this value in every assigned Microsoft Defender Antivirus policy. The tool accepts the two values that send samples automatically (1 safe samples, 3 all samples); Maester also accepts 2, which is \"never send\".",
+      "SourceUrl": "https://learn.microsoft.com/windows/client-management/mdm/policy-csp-defender",
+      "Recommended": "Endpoint security, Antivirus policy: Submit Samples Consent = Send safe samples automatically (or send all samples automatically).",
+      "Severity": "Medium",
+      "Rule": {
+        "SettingId": "device_vendor_msft_policy_config_defender_submitsamplesconsent",
+        "Check": "Enum",
+        "Expected": [
+          "_1",
+          "_3"
+        ]
+      }
+    }
+  ]
+}
