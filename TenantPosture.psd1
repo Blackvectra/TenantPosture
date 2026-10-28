@@ -209,6 +209,8 @@
         'Publish-TPCAChecklist',
         'Get-TPIntuneChecklist',
         'Publish-TPIntuneChecklist',
+        'Get-TPSecurityReviewReport',
+        'Publish-TPSecurityReviewReport',
         'Get-TPHipaaClientReport',
         'Publish-TPHipaaClientReport',
         'ConvertTo-TPPdf',

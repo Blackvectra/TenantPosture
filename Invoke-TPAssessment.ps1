@@ -279,10 +279,11 @@ param(
     # written from a partial or quick run.
     [switch] $HIPAA,
 
-    # Also write a PDF of the client-facing HIPAA report, printed by the
-    # Microsoft Edge (or Chrome) already on this computer, headless. When no
-    # browser can print it, the run says so and the HTML prints to PDF from any
-    # browser. Use with -HIPAA (or -AllFiles).
+    # Also write a PDF of the client-facing reports (the HIPAA report with
+    # -HIPAA, the security configuration review with -SecurityReview), printed
+    # by the Microsoft Edge (or Chrome) already on this computer, headless. When
+    # no browser can print it, the run says so and the HTML prints to PDF from
+    # any browser. Use with -HIPAA or -SecurityReview (or -AllFiles).
     [switch] $Pdf,
 
     # The client name printed on client-facing reports. Default: ClientName from
@@ -387,6 +388,13 @@ param(
     # what to set when it is not met. Writes <base>-intune-checklist.html / .md;
     # the view itself is always in the results JSON. Implied by -AllFiles.
     [switch] $IntuneChecklist,
+
+    # The client-facing security configuration review (<base>-security-review.html,
+    # and a PDF with -Pdf): the Conditional Access and Intune checklists regrouped
+    # into recommended next steps (with what to change), ready to turn on, in
+    # place and not checked, in plain language with no account or policy names.
+    # Not written from a partial or quick run. Implied by -AllFiles (HTML).
+    [switch] $SecurityReview,
 
     # Proof of fix: after this run, compare it with an earlier results file of the
     # SAME tenant and write a remediation certificate (<tenant>-proof-<time>.html
@@ -1974,8 +1982,26 @@ if (-not $JsonOnly) {
         }
     }
 
-    if ($Pdf -and -not ($HIPAA -or $AllFiles)) {
-        Write-Host "  [i] -Pdf prints the client-facing HIPAA report; add -HIPAA to write it." -ForegroundColor DarkGray
+    # Client-facing security configuration review (the CA and Intune checklists
+    # in plain language). A partial or quick run is not written, with a note.
+    if (($SecurityReview -or $AllFiles) -and (Get-Command Publish-TPSecurityReviewReport -ErrorAction SilentlyContinue)) {
+        try {
+            $reviewClient = if ($ClientName) { $ClientName }
+                            else { [string](Get-TPObjectField -Item (Get-TPObjectField -Item $clientLookup -Key 'Record' -Default $null) -Key 'ClientName' -Default '') }
+            $reviewModel = Get-TPSecurityReviewReport -CAChecklist $caChecklistView -IntuneChecklist $intuneChecklistView -Metadata $reportMetadata -ClientName $reviewClient
+            if ($reviewModel.Available) {
+                $reviewFiles = Publish-TPSecurityReviewReport -Model $reviewModel -OutputPath (Join-Path $OutputPath "$baseName-security-review.html") -Pdf:$Pdf
+                Write-TPReportFile 'Security review (html)' $reviewFiles.Html
+                if ($reviewFiles.Pdf) { Write-TPReportFile 'Security review (pdf)' $reviewFiles.Pdf }
+                elseif ($reviewFiles.PdfNote) { Write-Host "  [!] $($reviewFiles.PdfNote)" -ForegroundColor Yellow }
+            } else {
+                Write-Host "  [i] Security review not written: $($reviewModel.Note)" -ForegroundColor DarkGray
+            }
+        } catch { Write-Warning "Security review publish failed: $($_.Exception.Message)" }
+    }
+
+    if ($Pdf -and -not ($HIPAA -or $SecurityReview -or $AllFiles)) {
+        Write-Host "  [i] -Pdf prints the client-facing reports; add -HIPAA or -SecurityReview to write them." -ForegroundColor DarkGray
     }
 
     # BOD 25-01 required-configurations view. A view over the findings like the

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **[Client] Security configuration review as a PDF.** `-SecurityReview` (with `-Pdf` for the PDF and `-ClientName`;
+  `-AllFiles` writes the HTML) and the offline `New-TPSecurityReview.ps1 -ResultsPath` turn the Conditional Access and
+  Intune checklists into a client-facing report: recommended next steps (most important first, each with what to
+  change), policies ready to turn on, what is in place, and what could not be checked and why. Page one says it is a
+  point-in-time configuration review, not an audit or a compliance determination; no account name, policy name or
+  command is printed; a partial or quick run is refused. Each Conditional Access check now carries a plain-language
+  recommended change. New suite: `TP.SecurityReview`.
+
 - **[Assessment] Intune and endpoint checklist, the way Maester checks it.** `-IntuneChecklist` (implied by
   `-AllFiles`; `Lib/Get-TPIntuneChecklist.ps1`, `Publishers/Publish-TPIntuneChecklist.ps1`,
   `Config/intune-checklist.json`) runs 41 checks named by their Maester test ids, each with what to set in the Intune

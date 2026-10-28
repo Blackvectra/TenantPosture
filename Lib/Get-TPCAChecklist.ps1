@@ -250,7 +250,7 @@ function Get-TPCAChecklist {
     $newRow = { param($Check, [string] $Status, [string] $Detail, [object[]] $Matched = @(), [object[]] $Items = @())
         [ordered]@{
             Id = [string]$Check.Id; Kind = [string]$Check.Kind; Title = [string]$Check.Title; Why = [string]$Check.Why
-            Severity = [string]$Check.Severity; SourceUrl = [string]$Check.SourceUrl; LicenseRequirement = [string]$Check.LicenseRequirement
+            Severity = [string]$Check.Severity; SourceUrl = [string]$Check.SourceUrl; LicenseRequirement = [string]$Check.LicenseRequirement; Recommended = [string]($Check.Recommended ?? '')
             Template = [string]($Check.Template ?? ''); Status = $Status; StatusLabel = $names[$Status]; Detail = $Detail
             Policies = @($Matched); Items = @($Items)
         }
