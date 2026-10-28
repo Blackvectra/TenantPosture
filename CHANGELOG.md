@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **[Assessment] Intune and endpoint checklist, the way Maester checks it.** `-IntuneChecklist` (implied by
+  `-AllFiles`; `Lib/Get-TPIntuneChecklist.ps1`, `Publishers/Publish-TPIntuneChecklist.ps1`,
+  `Config/intune-checklist.json`) runs 41 checks named by their Maester test ids, each with what to set in the Intune
+  admin center when it is not met: devices with no compliance policy marked not compliant, device clean-up rules, the
+  MDM authority; iOS, Android and macOS compliance policies (jailbreak and root, passcode strength, minimum OS and
+  patch level, Defender risk level, USB debugging, device administrator, System Integrity Protection, Gatekeeper); the
+  three standard protection ASR rules; Windows LAPS; and 23 Microsoft Defender Antivirus values. A policy counts only
+  when it is assigned to someone; data the run did not read is "Not assessed". The compliance collector now keeps
+  each policy's platform settings and reads the tenant's compliance settings, clean-up rules and MDM authority (GET
+  only, no new scope). Written to the results JSON as `IntuneChecklist`. New suite: `TP.IntuneChecklist`.
+
 - **[Assessment] Conditional Access checklist, the way Maester checks it.** `-CAChecklist` (implied by `-AllFiles`;
   works with `-FromResults`; `Lib/Get-TPCAChecklist.ps1`, `Publishers/Publish-TPCAChecklist.ps1`,
   `Config/ca-checklist.json`) runs 33 checks named by their Maester test ids: whether each policy Microsoft recommends

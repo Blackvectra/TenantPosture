@@ -233,6 +233,13 @@ function Invoke-TPCollectIntuneDeviceCompliance {
                         PasscodeRequired        = Get-TPObjectField -Item $p -Key 'passcodeRequired' -Default $null
                         OsMinimumVersion        = [string](Get-TPObjectField -Item $p -Key 'osMinimumVersion' -Default '')
                         IsAssigned              = $(if ($null -ne (Get-TPObjectField -Item $p -Key 'assignments' -Default $null)) { @(Get-TPObjectField -Item $p -Key 'assignments' -Default @() | Where-Object { $_ }).Count -gt 0 } else { $null })
+                        # Inclusion targets only (an exclusion assignment reaches nobody), the
+                        # count Maester's compliance checks use; $null when not read.
+                        InclusionAssignmentCount = (Get-TPComplianceInclusionCount -Policy $p)
+                        # The per-platform settings the Intune checklist judges, by Graph name,
+                        # only those the row returned (an absent key is a setting this
+                        # platform or API version does not carry, never "off").
+                        Settings                = (Get-TPComplianceSettingSnapshot -Policy $p)
                     }
                 }
                 $next = $page['@odata.nextLink']
@@ -446,6 +453,51 @@ function Invoke-TPCollectIntuneDeviceCompliance {
             }
         }
 
+        # ── Tenant-wide Intune settings (the Intune checklist, Maester MT.1054,
+        # MT.1053, MT.1105). Each read is its own section; GET only, scopes held
+        # (DeviceManagementConfiguration.Read.All, DeviceManagementManagedDevices.Read.All,
+        # Organization.Read.All).
+        $result.Data.SectionStatus['TenantSettings'] = 'NotRun'
+        $result.Data.SectionStatus['CleanupRules'] = 'NotRun'
+        $result.Data.SectionStatus['MdmAuthority'] = 'NotRun'
+        try {
+            $ts = Invoke-TPGraphRequest -Method GET -Uri 'https://graph.microsoft.com/beta/deviceManagement/settings' -ErrorAction Stop
+            $sbd = Get-TPObjectField -Item $ts -Key 'secureByDefault' -Default $null
+            $result.Data.TenantSettings = [ordered]@{
+                # True: a device with no compliance policy assigned is marked Not compliant.
+                SecureByDefault = $(if ($sbd -is [bool]) { $sbd } else { $null })
+                ComplianceCheckinThresholdDays = (Get-TPObjectField -Item $ts -Key 'deviceComplianceCheckinThresholdDays' -Default $null)
+            }
+            $result.Data.SectionStatus['TenantSettings'] = 'Collected'
+        } catch {
+            $result.Data.SectionStatus['TenantSettings'] = 'Failed'
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) { Register-TPException -Source 'Intune-DeviceCompliance-TenantSettings' -Message $_.Exception.Message }
+        }
+        try {
+            $cr = Invoke-TPGraphRequest -Method GET -Uri 'https://graph.microsoft.com/beta/deviceManagement/managedDeviceCleanupRules' -ErrorAction Stop
+            $rules = @(Get-TPObjectField -Item $cr -Key 'value' -Default @() | Where-Object { $null -ne $_ })
+            $result.Data.CleanupRules = @($rules | ForEach-Object {
+                [ordered]@{
+                    DisplayName = [string](Get-TPObjectField -Item $_ -Key 'displayName' -Default '')
+                    Platform    = [string](Get-TPObjectField -Item $_ -Key 'deviceCleanupRulePlatformType' -Default '')
+                    InactiveDays = (Get-TPObjectField -Item $_ -Key 'deviceInactivityBeforeRetirementInDays' -Default $null)
+                }
+            })
+            $result.Data.SectionStatus['CleanupRules'] = 'Collected'
+        } catch {
+            $result.Data.SectionStatus['CleanupRules'] = 'Failed'
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) { Register-TPException -Source 'Intune-DeviceCompliance-CleanupRules' -Message $_.Exception.Message }
+        }
+        try {
+            $org = Invoke-TPGraphRequest -Method GET -Uri 'https://graph.microsoft.com/beta/organization?$select=id,mobileDeviceManagementAuthority' -ErrorAction Stop
+            $first = @(Get-TPObjectField -Item $org -Key 'value' -Default @() | Where-Object { $null -ne $_ } | Select-Object -First 1)
+            $result.Data.MdmAuthority = if ($first.Count) { [string](Get-TPObjectField -Item $first[0] -Key 'mobileDeviceManagementAuthority' -Default '') } else { '' }
+            $result.Data.SectionStatus['MdmAuthority'] = if ($result.Data.MdmAuthority) { 'Collected' } else { 'Failed' }
+        } catch {
+            $result.Data.SectionStatus['MdmAuthority'] = 'Failed'
+            if (Get-Command Register-TPException -ErrorAction SilentlyContinue) { Register-TPException -Source 'Intune-DeviceCompliance-MdmAuthority' -Message $_.Exception.Message }
+        }
+
         $result.Success = $true
     } catch {
         if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
@@ -461,4 +513,52 @@ function Invoke-TPCollectIntuneDeviceCompliance {
         $note   = "CompPolicies=$($result.Data.CompliancePolicies.Count) Devices=$($result.Data.OSComplianceSummary.TotalCount)"
         Register-TPCoverage -Family 'Intune-DeviceCompliance' -Status $status -Note $note
     }
+}
+
+
+# The per-platform compliance settings the Intune checklist judges (Maester's
+# iOS, Android and macOS compliance tests, and the Windows device-health ones),
+# copied by Graph property name. Only keys the policy row carries are kept, so
+# an absent key reads "not returned", never "off".
+function Get-TPComplianceSettingSnapshot {
+    [CmdletBinding()]
+    param([AllowNull()] $Policy)
+    $names = @(
+        'securityBlockJailbrokenDevices', 'passcodeRequired', 'passcodeBlockSimple', 'passcodeMinimumLength',
+        'passcodeMinutesOfInactivityBeforeLock', 'osMinimumVersion', 'deviceThreatProtectionEnabled',
+        'deviceThreatProtectionRequiredSecurityLevel', 'advancedThreatProtectionRequiredSecurityLevel',
+        'securityDisableUsbDebugging', 'securityBlockDeviceAdministratorManagedDevices', 'minAndroidSecurityPatchLevel',
+        'passwordRequired', 'passwordMinimumLength', 'passwordMinutesOfInactivityBeforeLock', 'requiredPasswordComplexity',
+        'systemIntegrityProtectionEnabled', 'gatekeeperAllowedAppSource', 'bitLockerEnabled', 'secureBootEnabled',
+        'codeIntegrityEnabled', 'storageRequireEncryption', 'defenderEnabled', 'rtpEnabled', 'antivirusRequired',
+        'activeFirewallRequired', 'tpmRequired'
+    )
+    $out = [ordered]@{}
+    if ($null -eq $Policy) { return $out }
+    foreach ($n in $names) {
+        $present = if ($Policy -is [System.Collections.IDictionary]) { $Policy.Contains($n) } else { $null -ne $Policy.PSObject.Properties[$n] }
+        if ($present) { $out[$n] = Get-TPObjectField -Item $Policy -Key $n -Default $null }
+    }
+    return $out
+}
+
+# Assignments that include someone: an exclusion target reaches nobody.
+# $null when the assignments were not returned.
+function Get-TPComplianceInclusionCount {
+    [CmdletBinding()]
+    param([AllowNull()] $Policy)
+    if ($null -eq $Policy) { return $null }
+    if ($Policy -is [System.Collections.IDictionary]) {
+        if (-not $Policy.Contains('assignments')) { return $null }
+        $list = $Policy['assignments']
+    } else {
+        $prop = $Policy.PSObject.Properties['assignments']
+        if ($null -eq $prop) { return $null }
+        $list = $prop.Value
+    }
+    return @(@($list) | Where-Object { $null -ne $_ } | Where-Object {
+            # '@odata.type' is read by name: Get-TPNestedProperty splits on dots.
+            $t = [string](Get-TPObjectField -Item (Get-TPObjectField -Item $_ -Key 'target' -Default $null) -Key '@odata.type' -Default '')
+            $t -and $t -notmatch '(^|\.)exclusion'
+        }).Count
 }

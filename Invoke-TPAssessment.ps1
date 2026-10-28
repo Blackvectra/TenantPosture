@@ -381,6 +381,13 @@ param(
     # simulation rows then read "Not assessed".
     [switch] $SkipCAWhatIf,
 
+    # Intune and endpoint checklist, the way Maester checks it: Intune tenant
+    # settings, iOS / Android / macOS compliance policies, the standard
+    # protection ASR rules, Windows LAPS and Defender Antivirus values, each with
+    # what to set when it is not met. Writes <base>-intune-checklist.html / .md;
+    # the view itself is always in the results JSON. Implied by -AllFiles.
+    [switch] $IntuneChecklist,
+
     # Proof of fix: after this run, compare it with an earlier results file of the
     # SAME tenant and write a remediation certificate (<tenant>-proof-<time>.html
     # and .md) listing, for each control this run covered, the state before and
@@ -1654,6 +1661,21 @@ if (Get-Command Get-TPCAChecklist -ErrorAction SilentlyContinue) {
     }
 }
 
+# ── Intune and endpoint checklist (Maester's checks) ─────────────────────────
+$intuneChecklistView = $null
+if (Get-Command Get-TPIntuneChecklist -ErrorAction SilentlyContinue) {
+    try {
+        $intuneChecklistView = Get-TPIntuneChecklist
+        if ($intuneChecklistView.Available) {
+            $ic = $intuneChecklistView.Counts
+            Write-Host "  [i] Intune checklist: $($ic.Pass) passed, $($ic.Fail) not met, $($ic.NotAssessed) not assessed, $($ic.NotApplicable) do not apply" -ForegroundColor DarkGray
+        }
+    } catch {
+        Write-Warning "Intune checklist failed: $($_.Exception.Message)"
+        $reportMetadata['IntuneChecklistError'] = $_.Exception.Message
+    }
+}
+
 # ── Publish reports ──────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[-] Generating reports..." -ForegroundColor Cyan
@@ -1702,6 +1724,8 @@ $jsonPayload = @{
     ChangeImpact        = $changeImpactView
     # Maester's Conditional Access checks and the report-only policy bodies.
     CAChecklist         = $caChecklistView
+    # Maester's Intune and endpoint checks.
+    IntuneChecklist     = $intuneChecklistView
 } | ConvertTo-Json -Depth 12
 Set-TPSensitiveFileContent -Path $jsonPath -Content $jsonPayload
 Write-TPReportFile 'JSON' $jsonPath
@@ -2113,6 +2137,19 @@ if (-not $JsonOnly) {
                 Write-Host "  [!] Conditional Access checklist not written: $($caChecklistView.Note)" -ForegroundColor Yellow
             }
         } catch { Write-Warning "Conditional Access checklist publish failed: $($_.Exception.Message)" }
+    }
+
+    # Intune and endpoint checklist (Maester's checks). Implied by -AllFiles.
+    if (($IntuneChecklist -or $AllFiles) -and $null -ne $intuneChecklistView -and (Get-Command Publish-TPIntuneChecklist -ErrorAction SilentlyContinue)) {
+        try {
+            if ($intuneChecklistView.Available) {
+                $icFiles = Publish-TPIntuneChecklist -Model $intuneChecklistView -OutputPath (Join-Path $OutputPath "$baseName-intune-checklist.html") -TenantDomain ([string]$reportMetadata.TenantDomain) -ToolVersion ([string]$reportMetadata.ToolVersion)
+                Write-TPReportFile 'Intune checklist (html)' $icFiles.Html
+                Write-TPReportFile 'Intune checklist (md)' $icFiles.Markdown
+            } else {
+                Write-Host "  [!] Intune checklist not written: $($intuneChecklistView.Note)" -ForegroundColor Yellow
+            }
+        } catch { Write-Warning "Intune checklist publish failed: $($_.Exception.Message)" }
     }
 
     # Multi-page report site (landing page, one page per workload, ActionPlan.csv):
