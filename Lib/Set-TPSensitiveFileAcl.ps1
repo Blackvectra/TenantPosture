@@ -186,17 +186,22 @@ function Set-TPSensitiveFileAcl {
 #
 # v4.6.3 P2 — TOCTOU fix for the assessment JSON + apply rollback log.
 function Set-TPSensitiveFileContent {
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Text')]
     param(
         [Parameter(Mandatory, Position = 0)]
         [string] $Path,
 
-        [Parameter(Mandatory, Position = 1)]
+        [Parameter(Mandatory, Position = 1, ParameterSetName = 'Text')]
         [AllowEmptyString()]
         [AllowNull()]
         [string] $Content,
 
-        [System.Text.Encoding] $Encoding = [System.Text.UTF8Encoding]::new($false)
+        [Parameter(ParameterSetName = 'Text')]
+        [System.Text.Encoding] $Encoding = [System.Text.UTF8Encoding]::new($false),
+
+        # A binary file (a PDF) written through the same hardened handle, byte for byte.
+        [Parameter(Mandatory, ParameterSetName = 'Bytes')]
+        [byte[]] $Bytes
     )
 
     # The content is written to a new, randomly named file beside the target,
@@ -241,10 +246,14 @@ function Set-TPSensitiveFileContent {
             throw "Set-TPSensitiveFileContent: could not restrict access on '$Path', so it was not written: $($_.Exception.Message)$note"
         }
         if (-not $hardened -and -not $stageDir) { throw "Set-TPSensitiveFileContent: this runtime cannot harden '$Path' before writing, so it was not written." }
-        $pre = $Encoding.GetPreamble()   # the caller's BOM (Excel needs one on the action-plan CSV)
-        if ($pre.Length -gt 0) { $fs.Write($pre, 0, $pre.Length) }
-        $bytes = $Encoding.GetBytes([string]$Content)
-        $fs.Write($bytes, 0, $bytes.Length)
+        if ($PSCmdlet.ParameterSetName -eq 'Bytes') {
+            $fs.Write($Bytes, 0, $Bytes.Length)
+        } else {
+            $pre = $Encoding.GetPreamble()   # the caller's BOM (Excel needs one on the action-plan CSV)
+            if ($pre.Length -gt 0) { $fs.Write($pre, 0, $pre.Length) }
+            $encoded = $Encoding.GetBytes([string]$Content)
+            $fs.Write($encoded, 0, $encoded.Length)
+        }
         $fs.Flush($true)
         $fs.Dispose(); $fs = $null
         if (-not $hardened) {

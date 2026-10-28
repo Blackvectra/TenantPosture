@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **[Client] HIPAA Security Rule report as a PDF a client can keep.** `New-TPHipaaReport.ps1` (offline, from a saved
+  full-run results file) and `Invoke-TPAssessment.ps1 -HIPAA` (now also writing `<base>-hipaa-report.html`, and with
+  `-Pdf` the PDF; `-ClientName` names the client) render `Lib/Get-TPHipaaClientReport.ps1` through
+  `Publishers/Publish-TPHipaaClientReport.ps1` in the shared report theme: the HIPAA readiness view's 63 standards and
+  specifications regrouped into Verified in Microsoft 365, Partly verified, Needs attention (failed checks with
+  severity, and the recommended next steps on page one), Not verified in this review, and Your documentation (a
+  checklist in the rule's own order). Page one states it is not a risk analysis or a compliance determination before
+  any number; nothing says compliant; no finding detail, command or account name is carried; a partial or quick run is
+  refused. `Lib/ConvertTo-TPPdf.ps1` prints the HTML with the Edge or Chrome already installed (headless, a throwaway
+  profile, every host name resolving nowhere, arguments as a list), checks the PDF header and writes it through
+  `Set-TPSensitiveFileContent`, which gains a `-Bytes` parameter set; it never throws, and a failure is reported with
+  the HTML still written. Browser scripts are left on because the print pipeline writes nothing without them; the
+  page's own policy blocks every script. New suite: `TP.HipaaClientReport`.
+
 - **[MSP] Change impact: what fixing it would break, and for whom.** `-ChangeImpact` (implied by `-AllFiles`; works
   with `-FromResults`; `Lib/Get-TPChangeImpact.ps1`, `Publishers/Publish-TPChangeImpact.ps1`,
   `Config/change-impact.json`) sorts the open findings into Implement now (licensed and on the improvement plan's own

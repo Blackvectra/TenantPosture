@@ -273,7 +273,22 @@ param(
     # assessment evidenced for it and what needs documents, interviews or a
     # walkthrough. Not a risk analysis and not a compliance determination; the
     # report says so on page one. Markdown + HTML. Implied by -AllFiles.
+    # Also writes the client-facing HIPAA report (<base>-hipaa-report.html):
+    # what was verified in Microsoft 365, what needs attention, what could not
+    # be checked, and the documentation checklist; a PDF of it with -Pdf. Not
+    # written from a partial or quick run.
     [switch] $HIPAA,
+
+    # Also write a PDF of the client-facing HIPAA report, printed by the
+    # Microsoft Edge (or Chrome) already on this computer, headless. When no
+    # browser can print it, the run says so and the HTML prints to PDF from any
+    # browser. Use with -HIPAA (or -AllFiles).
+    [switch] $Pdf,
+
+    # The client name printed on client-facing reports. Default: ClientName from
+    # Config/clients.json for -TenantDomain, else the tenant domain.
+    [ValidateLength(0, 120)]
+    [string] $ClientName,
 
     # CISA BOD 25-01 required-configurations view: every Microsoft 365 policy
     # CISA lists as required (Config/bod-25-01-required.json), what this
@@ -1863,6 +1878,29 @@ if (-not $JsonOnly) {
                 Write-Host "      $($hs['Total'] - $hs['EvidenceCollected']) of $($hs['Total']) HIPAA Security Rule items have no evidence from this run: $($hs['AttestationRequired']) have no mapped tenant check and need documents, interviews or a walkthrough; $($hs['Mapped'] - $hs['EvidenceCollected']) have mapped checks that produced none." -ForegroundColor Yellow
             }
         } catch { Write-Warning "HIPAA readiness publish failed: $($_.Exception.Message)" }
+
+        # The client-facing version: the same view regrouped into what a client
+        # can act on, printable, and a PDF with -Pdf. A partial or quick run is
+        # not written, with a note.
+        if (Get-Command Publish-TPHipaaClientReport -ErrorAction SilentlyContinue) {
+            try {
+                $hipaaClient = if ($ClientName) { $ClientName }
+                               else { [string](Get-TPObjectField -Item (Get-TPObjectField -Item $clientLookup -Key 'Record' -Default $null) -Key 'ClientName' -Default '') }
+                $hipaaModel = Get-TPHipaaClientReport -Findings $findings -Metadata $reportMetadata -ClientName $hipaaClient
+                if ($hipaaModel.Available) {
+                    $hipaaFiles = Publish-TPHipaaClientReport -Model $hipaaModel -OutputPath (Join-Path $OutputPath "$baseName-hipaa-report.html") -Pdf:$Pdf
+                    Write-TPReportFile 'HIPAA client report (html)' $hipaaFiles.Html
+                    if ($hipaaFiles.Pdf) { Write-TPReportFile 'HIPAA client report (pdf)' $hipaaFiles.Pdf }
+                    elseif ($hipaaFiles.PdfNote) { Write-Host "  [!] $($hipaaFiles.PdfNote)" -ForegroundColor Yellow }
+                } else {
+                    Write-Host "  [i] HIPAA client report not written: $($hipaaModel.Note)" -ForegroundColor DarkGray
+                }
+            } catch { Write-Warning "HIPAA client report publish failed: $($_.Exception.Message)" }
+        }
+    }
+
+    if ($Pdf -and -not ($HIPAA -or $AllFiles)) {
+        Write-Host "  [i] -Pdf prints the client-facing HIPAA report; add -HIPAA to write it." -ForegroundColor DarkGray
     }
 
     # BOD 25-01 required-configurations view. A view over the findings like the
