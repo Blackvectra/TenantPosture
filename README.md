@@ -40,6 +40,7 @@ Four assessment entry points, and standalone offline tools that connect to nothi
 | `Invoke-TPEmailAssessment.ps1` | Per-user mailbox incident-response deep-dive (Email-IR mode) |
 | `New-TPFleetDashboard.ps1` | **Offline, internal.** The fleet view for an MSP: every client's latest full run (score and maturity as recorded), trend, open Critical/High, baseline evidence coverage, what changed since the previous full run, and who is current, aging, overdue or never assessed. HTML, Markdown and a one-row-per-client CSV; `-Anonymize` labels clients Client A, B, .... See [MSP deliverables](#msp-deliverables-fleet-dashboard-proof-of-fix-onboarding-report) |
 | `New-TPRemediationProof.ps1` | **Offline, client-facing.** A proof-of-fix certificate from two results files of one tenant: each re-checked control's state before and after, with a verdict, both run times, tool versions and the files' SHA-256. Also `Invoke-TPAssessment.ps1 -ProofAgainst <before results>` |
+| `New-TPHipaaReport.ps1` | **Offline, client-facing.** The HIPAA Security Rule report as HTML and PDF from a saved full-run results file: what was verified in Microsoft 365, what needs attention, what could not be checked, and the documentation checklist. `-ClientName`, `-PreparedBy`, `-Profile`, `-NoPdf`. See [Client-facing HIPAA report](#client-facing-hipaa-report-pdf) |
 | `Compare-TPTenantBaseline.ps1` | **Offline, internal.** Compares two tenants (a prospect and an existing client, say) against the NRG Security Baseline from two `-results.json` files. Any tier; only controls required at both are compared. Markdown, HTML and CSV; `-Anonymize` labels the tenants A and B. See [`docs/TP-TENANT-COMPARISON.md`](docs/TP-TENANT-COMPARISON.md) |
 
 ---
@@ -159,7 +160,9 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 | Per-client collector flags | A `Collectors` block on a `clients.json` record (`"Collectors": { "SharePointShell": true }`) declares opt-in collectors for that client. The entry point, the batch runner and the standalone plan all read it. An operator expectation, not proof: the run still reports a collector that fails, and the plan comparison names the row. |
 | `-NISTMatrix` | Standalone NIST SP 800-53 Rev 5 matrix. |
 | `-SSP`, `-SSPAnswers` | NIST SP 800-171 Rev 2 System Security Plan. Answers come from `Config/ssp/<tenant-domain>.psd1` unless `-SSPAnswers` names a file. |
-| `-HIPAA` | HIPAA Security Rule readiness view (45 CFR 164 Subpart C): every standard and implementation specification, Required or Addressable, with the tenant evidence for it or "attestation required". Not a risk analysis and not a compliance determination. Markdown + HTML. |
+| `-HIPAA` | HIPAA Security Rule readiness view (45 CFR 164 Subpart C): every standard and implementation specification, Required or Addressable, with the tenant evidence for it or "attestation required". Not a risk analysis and not a compliance determination. Markdown + HTML. Also writes the **client-facing HIPAA report** (`<base>-hipaa-report.html`; see below). |
+| `-Pdf` | Prints the client-facing HIPAA report to PDF with the Microsoft Edge (or Chrome) already on the computer, headless. When no browser can print it the run says so and the HTML prints to PDF from any browser. |
+| `-ClientName` | The client name on client-facing reports (default: `ClientName` in `clients.json`, else the tenant domain). |
 | `-BOD2501` | CISA BOD 25-01 required-configurations view for government clients: every Microsoft 365 policy CISA lists as required (`Config/bod-25-01-required.json`, 56 policies), what this assessment's checks found for it and what they do not check, with the ScubaGear result beside it when `-ScubaResultsPath` is given and disagreements flagged for review. A technical readiness view, not an attestation; ScubaGear's report is what CISA expects. Markdown + HTML. Implied by `-AllFiles`. |
 | `-SSPQuestionnaire`, `-SSPQuestionnaireFamily` | Fillable client questionnaire for the SSP requirements the run could not evidence, optionally for one 800-171 family (for example `3.9`). Not included in `-AllFiles`. |
 | `-ManualReviewQuestionnaire`, `-ManualReviewWorkload` | Fillable questionnaire for the controls the run could not assess, optionally for one workload (for example `SPO`). Not included in `-AllFiles`. |
@@ -389,7 +392,7 @@ New-TPFleetDashboard.ps1         ← Offline fleet dashboard across every client
 New-TPRemediationProof.ps1       ← Offline proof-of-fix certificate from two runs of one tenant (connects to nothing)
 Start-TPMcpServer.ps1            ← Local read-only MCP server over saved results (connects to nothing)
 TenantPosture.psm1               ← Module loader (recursive dot-source, path traversal check)
-TenantPosture.psd1               ← Module manifest (497 exports, dependency declarations)
+TenantPosture.psd1               ← Module manifest (500 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-TPFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -438,7 +441,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA (ScubaGear v2.0.0) + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          137 Pester suites — the FULL suite gates every PR
+Testing/                          138 Pester suites — the FULL suite gates every PR
   TP.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   TP.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   TP.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -551,6 +554,21 @@ Three deliverables share one modern, self-contained look (`Lib/Get-TPReportTheme
 **Proof of fix (client-facing).** After fixing, re-check with `-ControlId` and pass the earlier run: `.\Invoke-TPAssessment.ps1 -ControlId EXO-1.6 -ProofAgainst .\output\contoso-<time>-results.json`, or from two saved files, `.\New-TPRemediationProof.ps1 -BeforeResults before.json -AfterResults after.json [-ControlId patterns]`. The certificate (`<tenant>-proof-<time>.html` / `.md`, printable to PDF) lists each control's state and current value before and after with a verdict; a control the after run could not judge is Not verifiable, never resolved. Evidence: both run times (UTC), tool versions, the SHA-256 of both files and the selection patterns; never the operator or the tenant ID. Different tenants or an "after" run that is not newer are refused.
 
 **Onboarding report (client-facing).** `-OnboardingReport` (implied by `-AllFiles`, works with `-FromResults`) writes "Where you stand": the recorded score and maturity, top risks in plain language from each control's business risk, what is working, what needs attention, and a 30/60/90-day plan. Days 1-30 holds Critical and High items on the improvement plan's own "Do now" track (a documented low-friction archetype); Days 31-60 the remaining Critical and High items and policy changes or staged rollouts; Days 61-90 the rest. Items with no documented operational impact are "Plan after review", never Days 1-30, and items the tenant is not licensed for go to "Needs a license decision" with the license that unlocks them. A window says when work starts; effort is a class, never a time estimate, and the report quotes no price. When `Config/microsoft-changes.json` exists, a "Coming Microsoft changes" section lists the entries dated today or later with the related controls' state.
+
+### Client-facing HIPAA report (PDF)
+
+A report a healthcare client can keep and forward: how their Microsoft 365 environment is configured against the HIPAA Security Rule (45 CFR Part 164, Subpart C), and what they still have to document themselves.
+
+```powershell
+# From a saved full run (no sign-in, nothing connected):
+.\New-TPHipaaReport.ps1 -ResultsPath .\output\clinic-20261028-090000-results.json -ClientName 'Contoso Family Health' -Profile nls
+# Or during a run:
+.\Invoke-TPAssessment.ps1 -TenantDomain clinic.com -HIPAA -Pdf -ClientName 'Contoso Family Health'
+```
+
+Every one of the rule's 63 standards and implementation specifications lands in one group: **Verified in Microsoft 365** (every supporting setting the tool checks was in place), **Partly verified** (a standard's own checks passed, some of its specifications are not yet verified), **Needs attention** (a supporting setting is missing or partly in place, with severity; the summary lists the recommended next steps), **Not verified in this review** (the checks could not run), and **Your documentation** (a checklist of what Microsoft 365 cannot show: the risk analysis, policies, business associate agreements, training, contingency plans). Page one says what it is not before any number: not a HIPAA risk analysis and not a compliance determination; it supports the client's HIPAA program for the parts Microsoft 365 controls. Nothing in it says "compliant". It carries no finding detail, no remediation commands and no account names. A partial or quick run is refused.
+
+The PDF is printed by the Edge or Chrome already on the workstation, headless, with a throwaway profile and no network, and saved with the same owner-only permissions as every other output. If printing fails, the HTML is still written and prints to PDF from any browser (Ctrl+P, Save as PDF).
 
 ### Change impact: what fixing it would break — `-ChangeImpact`
 
@@ -718,7 +736,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **137 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **138 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite through the same gate CI uses. The gate parses every
@@ -776,7 +794,7 @@ Nine GitHub Actions workflows cover the repository. All run automatically on pus
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (137 suites) · PSScriptAnalyzer with SARIF upload · PowerShell security rules and InjectionHunter (any unreviewed finding fails) · CI modules installed by exact version and SHA-256 · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (138 suites) · PSScriptAnalyzer with SARIF upload · PowerShell security rules and InjectionHunter (any unreviewed finding fails) · CI modules installed by exact version and SHA-256 · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -807,4 +825,4 @@ You may use, modify and redistribute it under that license, including commercial
 
 ---
 
-*TenantPosture v4.14.3 · 253 posture controls + EMAIL/SIGNIN IR heuristics · 497 exported functions · full Pester suite (137 suites) gating CI*
+*TenantPosture v4.14.3 · 253 posture controls + EMAIL/SIGNIN IR heuristics · 500 exported functions · full Pester suite (138 suites) gating CI*
