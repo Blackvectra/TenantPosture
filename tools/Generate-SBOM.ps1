@@ -107,7 +107,7 @@ $optional = @(
     # own file so it can be installed by hash without openpyxl. The questionnaire
     # publishers render the PDF through reportlab, which is neither pinned nor
     # installed, so no version is recorded for it.
-    @{ Name = 'pypdf';                                  Version = '6.20.1';         Scope = 'optional'; Semantics = 'pinned by version and SHA-256 in .github/runtime-pdf-requirements.txt; installed by hash by the operator or by the installer when a different version is present; the importer refuses below 4.0.0' }
+    @{ Name = 'pypdf';                                  Version = '6.21.2';         Scope = 'optional'; Semantics = 'pinned by version and SHA-256 in .github/runtime-pdf-requirements.txt; installed by hash by the operator or by the installer when a different version is present; the importer refuses below 4.0.0' }
     @{ Name = 'reportlab';                              Version = '';               Scope = 'optional'; Semantics = 'not pinned; installed by the operator (pip install reportlab) for the questionnaire PDF output' }
 )
 $dependencies = @()

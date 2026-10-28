@@ -23,7 +23,7 @@ inventory.
 |---|---|---|---|---|
 | Pode | 2.10.0 or later | PSGallery | MIT | The `-Web` GUI (`Lib/Start-TPWebServer.ps1`) |
 | openpyxl | 3.1.5 (pinned by version and SHA-256 in `.github/runtime-xlsx-requirements.txt`; the installer installs from that file with `--require-hashes`) | PyPI | MIT | The XLSX publishers, through `Lib/Invoke-TPPython.ps1` |
-| pypdf | 6.20.1 when present (pinned by version and SHA-256 in `.github/runtime-pdf-requirements.txt`, its own file so it installs by hash without openpyxl; the operator installs it, the installer holds a present copy to this version; the importer refuses below 4.0.0) | PyPI | BSD-3-Clause | The questionnaire importers (`Import-TPSSPQuestionnaire.ps1`, `Import-TPManualReviewQuestionnaire.ps1`) |
+| pypdf | 6.21.2 when present (pinned by version and SHA-256 in `.github/runtime-pdf-requirements.txt`, its own file so it installs by hash without openpyxl; the operator installs it, the installer holds a present copy to this version; the importer refuses below 4.0.0) | PyPI | BSD-3-Clause | The questionnaire importers (`Import-TPSSPQuestionnaire.ps1`, `Import-TPManualReviewQuestionnaire.ps1`) |
 | reportlab | not pinned (operator installs with pip) | PyPI | BSD-3-Clause | The questionnaire PDF publishers (`Publish-TPSSPQuestionnaire.ps1`, `Publish-TPManualReviewQuestionnaire.ps1`) |
 | Microsoft.Graph.Reports, .Identity.Governance, .Identity.SignIns, .Users | 2.20.0 | PSGallery | MIT | Collectors, when present (`Lib/Connect-TPServices.ps1`) |
 
