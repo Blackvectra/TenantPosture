@@ -7,7 +7,9 @@
 #
 # Returns: structured hashtable under key 'Intune-AppProtection' via Set-TPRawData.
 # Reads:   deviceAppManagement/managedAppPolicies, deviceAppManagement/mobileAppConfigurations,
-#          deviceAppManagement/targetedManagedAppConfigurations.
+#          deviceAppManagement/targetedManagedAppConfigurations, and (beta, with
+#          assignments) iosManagedAppProtections and androidManagedAppProtections
+#          for the Intune checklist. Scope: DeviceManagementApps.Read.All.
 #
 # NIST SP 800-53: AC-19 (access control for mobile devices), SC-28 (protection of
 #                 information at rest), CM-7 (least functionality)
@@ -26,6 +28,9 @@ function Invoke-TPCollectIntuneAppProtection {
         Data    = @{
             AppProtectionPolicies = @()
             AppConfigPolicies     = @()
+            # The iOS and Android app protection policies with their settings and
+            # assignments, for the Intune checklist (Maester MT.1238-1251).
+            AppProtectionDetail   = @()
         }
     }
 
@@ -172,9 +177,40 @@ function Invoke-TPCollectIntuneAppProtection {
             }
         }
 
+        # ── iOS and Android app protection, with settings and assignments ─────
+        # The platform endpoints return each policy's own settings and expand its
+        # assignments (managedAppPolicies does neither). Beta, as Maester reads
+        # them; DeviceManagementApps.Read.All, already requested. Each platform is
+        # its own section, so one failed read never reads as "no policy".
+        $detailStatus = @{ IosAppProtection = 'NotRun'; AndroidAppProtection = 'NotRun' }
+        foreach ($plat in @(@('IosAppProtection', 'iOS', 'iosManagedAppProtections'), @('AndroidAppProtection', 'Android', 'androidManagedAppProtections'))) {
+            try {
+                $rows = @(Get-TPGraphAllPages -Uri "https://graph.microsoft.com/beta/deviceAppManagement/$($plat[2])?`$expand=assignments")
+                foreach ($p in $rows) {
+                    if ($null -eq $p) { continue }
+                    $result.Data.AppProtectionDetail += [ordered]@{
+                        Id                       = [string](Get-TPObjectField -Item $p -Key 'id' -Default '')
+                        DisplayName              = [string](Get-TPObjectField -Item $p -Key 'displayName' -Default '')
+                        Platform                 = $plat[1]
+                        IsAssignedFlag           = ((Get-TPObjectField -Item $p -Key 'isAssigned' -Default $null) -eq $true)
+                        InclusionAssignmentCount = (Get-TPAppProtectionInclusionCount -Policy $p)
+                        Settings                 = (Get-TPAppProtectionSettingSnapshot -Policy $p)
+                    }
+                }
+                $detailStatus[$plat[0]] = 'Collected'
+            } catch {
+                $detailStatus[$plat[0]] = 'Failed'
+                if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                    Register-TPException -Source "Intune-AppProtection-$($plat[1])" -Message $_.Exception.Message
+                }
+            }
+        }
+
         $result.Data.SectionStatus = @{
             AppProtectionPolicies     = $(if ($mamFailed) { 'Failed' } else { 'Collected' })
             AppConfigPolicies         = $(if ($cfgMdmFailed -and $cfgMamFailed) { 'Failed' } else { 'Collected' })
+            IosAppProtection          = $detailStatus.IosAppProtection
+            AndroidAppProtection      = $detailStatus.AndroidAppProtection
         }
 
         $result.Success = $true
@@ -192,4 +228,48 @@ function Invoke-TPCollectIntuneAppProtection {
         $note   = "MAM=$($result.Data.AppProtectionPolicies.Count) AppCfg=$($result.Data.AppConfigPolicies.Count)"
         Register-TPCoverage -Family 'Intune-AppProtection' -Status $status -Note $note
     }
+}
+
+
+# The app protection settings the Intune checklist judges, by Graph name. Only
+# keys the policy returned are kept: absent is "not returned", never "off".
+function Get-TPAppProtectionSettingSnapshot {
+    [CmdletBinding()]
+    param([AllowNull()] $Policy)
+    $names = @(
+        'pinRequired', 'minimumPinLength', 'maximumPinRetries', 'simplePinBlocked', 'disableAppPinIfDevicePinIsSet',
+        'allowedOutboundDataTransferDestinations', 'allowedOutboundClipboardSharingLevel', 'saveAsBlocked', 'dataBackupBlocked',
+        'minimumRequiredOsVersion', 'minimumRequiredAppVersion', 'minimumRequiredPatchVersion',
+        'periodOfflineBeforeAccessCheck', 'periodOfflineBeforeWipeIsEnforced',
+        'maximumAllowedDeviceThreatLevel', 'mobileThreatDefenseRemediationAction',
+        'appDataEncryptionType', 'encryptAppData', 'disableAppEncryptionIfDeviceEncryptionIsEnabled', 'screenCaptureBlocked',
+        'requiredAndroidSafetyNetDeviceAttestationType', 'appActionIfAndroidSafetyNetDeviceAttestationFailed'
+    )
+    $out = [ordered]@{}
+    if ($null -eq $Policy) { return $out }
+    foreach ($n in $names) {
+        $present = if ($Policy -is [System.Collections.IDictionary]) { $Policy.Contains($n) } else { $null -ne $Policy.PSObject.Properties[$n] }
+        if ($present) { $out[$n] = Get-TPObjectField -Item $Policy -Key $n -Default $null }
+    }
+    return $out
+}
+
+# Assignments that include someone (an exclusion target reaches nobody);
+# $null when the assignments were not returned.
+function Get-TPAppProtectionInclusionCount {
+    [CmdletBinding()]
+    param([AllowNull()] $Policy)
+    if ($null -eq $Policy) { return $null }
+    if ($Policy -is [System.Collections.IDictionary]) {
+        if (-not $Policy.Contains('assignments')) { return $null }
+        $list = $Policy['assignments']
+    } else {
+        $prop = $Policy.PSObject.Properties['assignments']
+        if ($null -eq $prop) { return $null }
+        $list = $prop.Value
+    }
+    return @(@($list) | Where-Object { $null -ne $_ } | Where-Object {
+            $t = [string](Get-TPObjectField -Item (Get-TPObjectField -Item $_ -Key 'target' -Default $null) -Key '@odata.type' -Default '')
+            $t -and $t -notmatch '(^|\.)exclusion'
+        }).Count
 }

@@ -8,8 +8,9 @@
 # Purpose: The Intune and endpoint checklist, the way Maester checks it (owner,
 #   2026-10-28: "follow the way Maester does it"): tenant settings (MT.1053,
 #   MT.1054, MT.1105), iOS, Android and macOS compliance policies (MT.1214-1216,
-#   MT.1228-1237), the standard protection ASR rules (MT.1178), Windows LAPS
-#   (MT.1177) and the Microsoft Defender Antivirus values (MT.1148-1171), each
+#   MT.1228-1237), iOS and Android app protection (MT.1238-1251), the standard
+#   protection ASR rules (MT.1178), Windows LAPS (MT.1177) and the Microsoft
+#   Defender Antivirus values (MT.1148-1171), each
 #   with what to set in the Intune admin center when it is not met.
 #
 # HOW A ROW IS JUDGED (Maester's rules, ported)
@@ -148,6 +149,61 @@ function Get-TPIntuneChecklist {
         'MT.1216' = { param($Pol) $v = & $setting $Pol 'advancedThreatProtectionRequiredSecurityLevel'; if (-not $v.Present) { $null } else { [string]$v.Value -in @('secured', 'low', 'medium', 'high') } }
     }
 
+    # App protection (Maester MT.1238-1251), over the platform reads with
+    # settings and assignments. A policy counts when an inclusion assignment or
+    # Graph's own isAssigned says it reaches someone (Maester's union).
+    $ap = & $raw 'Intune-AppProtection'
+    $apRead = & $ok $ap
+    $apDetail = @()
+    if ($apRead) { $apDetail = @(& $field $ap 'Data.AppProtectionDetail' @() | Where-Object { $null -ne $_ }) }
+    $apAssigned = { param($Pol)
+        $inc = & $num (Get-TPObjectField -Item $Pol -Key 'InclusionAssignmentCount' -Default $null)
+        ($null -ne $inc -and $inc -gt 0) -or ((Get-TPObjectField -Item $Pol -Key 'IsAssignedFlag' -Default $false) -eq $true)
+    }
+    $hours = { param($Value)
+        if ($null -eq $Value -or "$Value" -eq '') { return $null }
+        try { return [System.Xml.XmlConvert]::ToTimeSpan([string]$Value) } catch { return $null }
+    }
+    $apRules = @{
+        PIN = { param($Pol)
+            $pin = & $setting $Pol 'pinRequired'; if (-not $pin.Present) { return $null }
+            $len = & $num (& $setting $Pol 'minimumPinLength').Value; $retries = & $num (& $setting $Pol 'maximumPinRetries').Value
+            ($pin.Value -eq $true) -and ((& $setting $Pol 'simplePinBlocked').Value -eq $true) -and ($null -ne $len -and $len -ge 6) -and ($null -ne $retries -and $retries -gt 0 -and $retries -le 5)
+        }
+        Data = { param($Pol)
+            $out = & $setting $Pol 'allowedOutboundDataTransferDestinations'; if (-not $out.Present) { return $null }
+            ([string]$out.Value -in @('managedApps', 'none')) -and ([string](& $setting $Pol 'allowedOutboundClipboardSharingLevel').Value -in @('managedApps', 'managedAppsWithPasteIn', 'blocked')) -and
+            ((& $setting $Pol 'saveAsBlocked').Value -eq $true) -and ((& $setting $Pol 'dataBackupBlocked').Value -eq $true)
+        }
+        EncryptIos = { param($Pol) $v = & $setting $Pol 'appDataEncryptionType'; if (-not $v.Present) { $null } else { [string]$v.Value -in @('whenDeviceLocked', 'whenDeviceLockedExceptOpenFiles', 'afterDeviceRestart') } }
+        EncryptAndroid = { param($Pol)
+            $v = & $setting $Pol 'encryptAppData'; if (-not $v.Present) { return $null }
+            ($v.Value -eq $true) -and ((& $setting $Pol 'disableAppEncryptionIfDeviceEncryptionIsEnabled').Value -ne $true)
+        }
+        Versions = { param($Pol)
+            $os = & $setting $Pol 'minimumRequiredOsVersion'; if (-not $os.Present) { return $null }
+            (-not [string]::IsNullOrWhiteSpace([string]$os.Value)) -and (-not [string]::IsNullOrWhiteSpace([string](& $setting $Pol 'minimumRequiredAppVersion').Value))
+        }
+        Offline = { param($Pol)
+            $a = & $setting $Pol 'periodOfflineBeforeAccessCheck'; if (-not $a.Present) { return $null }
+            $access = & $hours $a.Value; $wipe = & $hours (& $setting $Pol 'periodOfflineBeforeWipeIsEnforced').Value
+            ($null -ne $access -and $access.TotalHours -gt 0 -and $access.TotalHours -le 12) -and ($null -ne $wipe -and $wipe.TotalDays -gt 0 -and $wipe.TotalDays -le 90)
+        }
+        Threat = { param($Pol)
+            $lvl = & $setting $Pol 'maximumAllowedDeviceThreatLevel'; if (-not $lvl.Present) { return $null }
+            ([string]$lvl.Value -in @('secured', 'low', 'medium')) -and ([string](& $setting $Pol 'mobileThreatDefenseRemediationAction').Value -in @('block', 'wipe'))
+        }
+        Screen = { param($Pol) $v = & $setting $Pol 'screenCaptureBlocked'; if (-not $v.Present) { $null } else { $v.Value -eq $true } }
+        Attest = { param($Pol)
+            $t = & $setting $Pol 'requiredAndroidSafetyNetDeviceAttestationType'; if (-not $t.Present) { return $null }
+            ([string]$t.Value -in @('basicIntegrity', 'basicIntegrityAndDeviceCertification')) -and ([string](& $setting $Pol 'appActionIfAndroidSafetyNetDeviceAttestationFailed').Value -in @('block', 'wipe'))
+        }
+    }
+    $apRuleOf = @{
+        'MT.1238' = 'PIN'; 'MT.1239' = 'Data'; 'MT.1240' = 'EncryptIos'; 'MT.1241' = 'Versions'; 'MT.1242' = 'Offline'; 'MT.1243' = 'Threat'
+        'MT.1244' = 'PIN'; 'MT.1245' = 'Data'; 'MT.1246' = 'EncryptAndroid'; 'MT.1247' = 'Versions'; 'MT.1248' = 'Offline'; 'MT.1249' = 'Threat'; 'MT.1250' = 'Screen'; 'MT.1251' = 'Attest'
+    }
+
     $rows = [System.Collections.Generic.List[object]]::new()
     $newRow = { param($Check, [string] $Status, [string] $Detail, [object[]] $Items = @())
         [ordered]@{
@@ -213,6 +269,36 @@ function Get-TPIntuneChecklist {
                 } else {
                     $text = "No assigned $area compliance policy sets the required value."
                     if ($unassignedMet.Count) { $text += " $($unassignedMet.Count) policy(ies) set it but are not assigned to anyone." }
+                    $rows.Add((& $newRow $check 'Fail' $text $items))
+                }
+            }
+            { $_ -in @('iOS app protection', 'Android app protection') } {
+                $plat = if ($area -like 'iOS*') { 'iOS' } else { 'Android' }
+                $sectionName = if ($plat -eq 'iOS') { 'IosAppProtection' } else { 'AndroidAppProtection' }
+                $sec = & $section $ap $sectionName
+                if (-not $apRead -or $sec -ne 'Collected') {
+                    $rows.Add((& $newRow $check 'NotAssessed' $(if ($apRead -and -not $sec) { 'The app protection settings were not read (a results file from before this check).' } else { "The $plat app protection policies were not read in this run." })))
+                    break
+                }
+                $pols = @($apDetail | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'Platform' -Default '') -eq $plat })
+                if ($pols.Count -eq 0) { $rows.Add((& $newRow $check 'Fail' "There is no $plat app protection policy, so company data in Outlook, Teams and OneDrive on $plat is not protected on devices the organization does not manage.")); break }
+                $rule = $apRules[$apRuleOf[$id]]
+                $met = [System.Collections.Generic.List[object]]::new(); $unassignedMet = [System.Collections.Generic.List[object]]::new(); $short = [System.Collections.Generic.List[object]]::new(); $unknown = 0
+                foreach ($pol in $pols) {
+                    $r = & $rule $pol
+                    if ($null -eq $r) { $unknown++; continue }
+                    if ($r -and (& $apAssigned $pol)) { $met.Add($pol) } elseif ($r) { $unassignedMet.Add($pol) } elseif (& $apAssigned $pol) { $short.Add($pol) }
+                }
+                $items = @($short | ForEach-Object { [ordered]@{ Name = (& $pname $_); Note = 'Assigned; does not set the required values' } }) + @($unassignedMet | ForEach-Object { [ordered]@{ Name = (& $pname $_); Note = 'Sets the values but is not assigned' } })
+                if ($met.Count -gt 0) {
+                    $text = "Met by: " + (@($met | ForEach-Object { & $pname $_ }) -join '; ') + '.'
+                    if ($short.Count) { $text += " $($short.Count) other assigned policy(ies) do not, so users only they reach are held to less." }
+                    $rows.Add((& $newRow $check 'Pass' $text $items))
+                } elseif ($unknown -eq $pols.Count) {
+                    $rows.Add((& $newRow $check 'NotAssessed' "None of the $plat app protection policies returned these settings."))
+                } else {
+                    $text = "No assigned $plat app protection policy sets the required values."
+                    if ($unassignedMet.Count) { $text += " $($unassignedMet.Count) policy(ies) set them but are not assigned to anyone." }
                     $rows.Add((& $newRow $check 'Fail' $text $items))
                 }
             }
@@ -309,6 +395,7 @@ function Get-TPIntuneChecklist {
     $notes = [System.Collections.Generic.List[string]]::new()
     if (-not $dcRead) { $notes.Add('The Intune compliance collector did not run or failed (Intune skipped, not licensed, or no access), so its rows are not assessed.') }
     if (-not $esRead) { $notes.Add('The Intune endpoint security collector did not run or failed, so the ASR, LAPS and antivirus rows are not assessed.') }
+    if (-not $apRead) { $notes.Add('The Intune app protection collector did not run or failed, so the app protection rows are not assessed.') }
     return [ordered]@{
         Available        = $true
         Note             = ''

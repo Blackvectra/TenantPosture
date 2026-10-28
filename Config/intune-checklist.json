@@ -536,6 +536,132 @@
           "_3"
         ]
       }
+    },
+    {
+      "Id": "MT.1238",
+      "Area": "iOS app protection",
+      "Title": "An iOS app protection policy requires a strong app PIN",
+      "Why": "Without a PIN, anyone holding an unlocked phone opens company mail and files in the managed apps.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-ios",
+      "Recommended": "iOS app protection policy, Access requirements: PIN for access = Require; Simple PIN = Block; Select minimum PIN length = 6 or more; PIN reset after number of days and Maximum PIN attempts = 5 or fewer.",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1239",
+      "Area": "iOS app protection",
+      "Title": "An iOS app protection policy keeps organization data inside managed apps",
+      "Why": "Without it, company data can be copied, saved or backed up to personal apps and cloud storage.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-ios",
+      "Recommended": "iOS app protection policy, Data protection: Send org data to other apps = Policy managed apps; Restrict cut, copy and paste = Policy managed apps (with paste in); Save copies of org data = Block; Backup org data = Block.",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1240",
+      "Area": "iOS app protection",
+      "Title": "An iOS app protection policy encrypts organization data",
+      "Why": "Encryption keeps company data unreadable when the device is locked or lost.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-ios",
+      "Recommended": "iOS app protection policy, Data protection: Encrypt org data = Require (When device is locked).",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1241",
+      "Area": "iOS app protection",
+      "Title": "An iOS app protection policy requires a minimum OS and app version",
+      "Why": "An outdated iOS or app version keeps known vulnerabilities and still opens company data.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-ios",
+      "Recommended": "iOS app protection policy, Conditional launch: Min OS version and Min app version, with Block access.",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1242",
+      "Area": "iOS app protection",
+      "Title": "An iOS app protection policy limits offline access to organization data",
+      "Why": "A device that stops checking in keeps company data for ever unless access is blocked and the data wiped.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-ios",
+      "Recommended": "iOS app protection policy, Conditional launch: Offline grace period = Block access after 12 hours or less; Wipe data after 90 days or less.",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1243",
+      "Area": "iOS app protection",
+      "Title": "An iOS app protection policy acts on the device threat level",
+      "Why": "Lets a mobile threat defense product (such as Defender for Endpoint) keep a compromised phone out of company data.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-ios",
+      "Recommended": "iOS app protection policy, Conditional launch: Max allowed device threat level = Secured, Low or Medium, action Block access (needs a threat defense connector).",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1244",
+      "Area": "Android app protection",
+      "Title": "An Android app protection policy requires a strong app PIN",
+      "Why": "Without a PIN, anyone holding an unlocked phone opens company mail and files in the managed apps.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-android",
+      "Recommended": "Android app protection policy, Access requirements: PIN for access = Require; Simple PIN = Block; Select minimum PIN length = 6 or more; PIN reset after number of days and Maximum PIN attempts = 5 or fewer.",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1245",
+      "Area": "Android app protection",
+      "Title": "An Android app protection policy keeps organization data inside managed apps",
+      "Why": "Without it, company data can be copied, saved or backed up to personal apps and cloud storage.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-android",
+      "Recommended": "Android app protection policy, Data protection: Send org data to other apps = Policy managed apps; Restrict cut, copy and paste = Policy managed apps (with paste in); Save copies of org data = Block; Backup org data = Block.",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1246",
+      "Area": "Android app protection",
+      "Title": "An Android app protection policy encrypts organization data",
+      "Why": "Encryption keeps company data unreadable on a lost device; Android must not waive it because the device is encrypted.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-android",
+      "Recommended": "Android app protection policy, Data protection: Encrypt org data = Require; Encrypt org data on enrolled devices = Require (do not waive it).",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1247",
+      "Area": "Android app protection",
+      "Title": "An Android app protection policy requires a minimum OS and app version",
+      "Why": "An outdated Android or app version keeps known vulnerabilities and still opens company data.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-android",
+      "Recommended": "Android app protection policy, Conditional launch: Min OS version and Min app version (and Min patch version), with Block access.",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1248",
+      "Area": "Android app protection",
+      "Title": "An Android app protection policy limits offline access to organization data",
+      "Why": "A device that stops checking in keeps company data for ever unless access is blocked and the data wiped.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-android",
+      "Recommended": "Android app protection policy, Conditional launch: Offline grace period = Block access after 12 hours or less; Wipe data after 90 days or less.",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1249",
+      "Area": "Android app protection",
+      "Title": "An Android app protection policy acts on the device threat level",
+      "Why": "Lets a mobile threat defense product keep a compromised phone out of company data.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-android",
+      "Recommended": "Android app protection policy, Conditional launch: Max allowed device threat level = Secured, Low or Medium, action Block access (needs a threat defense connector).",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1250",
+      "Area": "Android app protection",
+      "Title": "An Android app protection policy blocks screen capture of organization data",
+      "Why": "Screenshots and screen recording copy company data out of the managed apps.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-android",
+      "Recommended": "Android app protection policy, Data protection: Screen capture and Google Assistant = Block.",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1251",
+      "Area": "Android app protection",
+      "Title": "An Android app protection policy requires Play Integrity device attestation",
+      "Why": "Play Integrity tells a genuine, unmodified Android device from a rooted or emulated one.",
+      "SourceUrl": "https://learn.microsoft.com/intune/intune-service/apps/app-protection-policy-settings-android",
+      "Recommended": "Android app protection policy, Conditional launch: Play integrity verdict = Basic integrity (and certified devices), action Block access.",
+      "Severity": "Medium"
     }
   ]
 }
