@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **[Dependencies] pypdf 6.21.2.** The questionnaire importers' PDF reader moves from 6.20.1 to 6.21.2 in every pin
+  at once: `.github/runtime-pdf-requirements.txt` (both hashes checked against PyPI with `pip download
+  --require-hashes`), `tools/Generate-SBOM.ps1`, `docs/security/SBOM.md` and `CLAUDE.md`, which `TP.RuntimePins`
+  requires to agree. Dependabot's #190 and #193 changed only the requirements file and could not pass that test, so
+  they are superseded. `Install-TPPrerequisites.ps1` replaces a present pypdf of any other version with the pinned one,
+  so a working 6.20.1 install is upgraded on the next installer run. 6.21.2 declares the same dependencies as 6.20.1
+  (`typing_extensions` below Python 3.11). The importer round trip (a fillable questionnaire written with reportlab,
+  filled, then read back) was run locally against 6.21.2; no CI job installs the pinned file, so CI does not exercise
+  a real pypdf.
+
 - **[Client] HIPAA Security Rule report as a PDF a client can keep.** `New-TPHipaaReport.ps1` (offline, from a saved
   full-run results file) and `Invoke-TPAssessment.ps1 -HIPAA` (now also writing `<base>-hipaa-report.html`, and with
   `-Pdf` the PDF; `-ClientName` names the client) render `Lib/Get-TPHipaaClientReport.ps1` through
@@ -347,7 +357,7 @@
   SHA-256, each verified against the gallery before it was recorded. The weekly freshness check reads that file,
   so it reports a newer release once it has been public for seven days and fails when the same major version has
   moved on. CI does not install these modules (about 500 MB), so the pin is the version the tool is validated
-  against, not something CI loads. The Python packages the tool uses at run time, openpyxl 3.1.5 and pypdf 6.20.1,
+  against, not something CI loads. The Python packages the tool uses at run time, openpyxl 3.1.5 and pypdf (6.20.1 then; 6.21.2 since the entry above),
   move to hash-locked requirements files that Dependabot's pip ecosystem for `/.github` already watches (weekly,
   7-day cooldown), and **the recorded hashes now gate the install**. They did not at first: the installer read a
   version out of the file and then ran `pip install openpyxl==3.1.5`, which verifies no hash, so a compromised
