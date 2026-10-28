@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **[Assessment] Conditional Access checklist, the way Maester checks it.** `-CAChecklist` (implied by `-AllFiles`;
+  works with `-FromResults`; `Lib/Get-TPCAChecklist.ps1`, `Publishers/Publish-TPCAChecklist.ps1`,
+  `Config/ca-checklist.json`) runs 33 checks named by their Maester test ids: whether each policy Microsoft recommends
+  is in place and turned on (MFA for all users, admins and Azure management, legacy authentication and device code
+  blocked, security info registration, guest MFA, device compliance, unknown platforms, unmanaged-device sessions,
+  app-enforced restrictions, risky sign-ins and users, high-risk agents), whether the policies that exist are set up
+  safely (break-glass exclusions, sync accounts, unprotected groups, exclusions with no fallback, deleted users,
+  groups and roles, combined risk policies, device registration conflict, the retired approved-app grant, policies
+  with no target, Microsoft-managed policies left in report-only), and what Microsoft's What If evaluation says for
+  five sampled users and the approved break-glass accounts. A policy that would pass but is in report-only mode is
+  "Report-only", never a pass; data that was not read is "Not assessed". For every recommended policy that is missing,
+  the matching Microsoft template is written as a report-only policy file (`<base>-ca-policies/`, with the approved
+  emergency-access accounts and the Directory Synchronization Accounts role excluded) for an administrator to review
+  and import; the tool creates nothing. The What If evaluation is the tool's one POST (an evaluation that changes
+  nothing, under the `Policy.Read.All` scope already held; `-SkipCAWhatIf` turns it off). The CA collector also reads
+  the users, groups and roles each policy names (deleted objects, group protection), agent risk levels, application
+  filters and app-enforced restrictions; the directory settings collector reads the device registration MFA setting.
+  The view is written to the results JSON as `CAChecklist`. New suite: `TP.CAChecklist`.
+
 - **[Dependencies] pypdf 6.21.2.** The questionnaire importers' PDF reader moves from 6.20.1 to 6.21.2 in every pin
   at once: `.github/runtime-pdf-requirements.txt` (both hashes checked against PyPI with `pip download
   --require-hashes`), `tools/Generate-SBOM.ps1`, `docs/security/SBOM.md` and `CLAUDE.md`, which `TP.RuntimePins`

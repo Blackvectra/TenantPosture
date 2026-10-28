@@ -79,6 +79,7 @@ function Get-TPCollectorCatalog {
         [ordered]@{ Function = 'Invoke-TPCollectAADAppPermissions';      Keys = @('AAD-AppPermissions');      Service = 'Graph' }
         [ordered]@{ Function = 'Invoke-TPCollectAADDirectorySettings';   Keys = @('AAD-DirectorySettings');   Service = 'Graph' }
         [ordered]@{ Function = 'Invoke-TPCollectAADSignInEvidence';      Keys = @('AAD-SignInEvidence');      Service = 'Graph' }
+        [ordered]@{ Function = 'Invoke-TPCollectAADCAWhatIf';            Keys = @('AAD-CAWhatIf');            Service = 'Graph' }
         [ordered]@{ Function = 'Invoke-TPCollectSharePoint';             Keys = @('SharePoint');              Service = 'Graph' }
         [ordered]@{ Function = 'Invoke-TPCollectIntuneEndpointSecurity'; Keys = @('Intune-EndpointSecurity'); Service = 'Graph' }
         [ordered]@{ Function = 'Invoke-TPCollectIntuneDeviceCompliance'; Keys = @('Intune-DeviceCompliance'); Service = 'Graph' }

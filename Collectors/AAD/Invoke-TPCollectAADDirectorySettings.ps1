@@ -147,6 +147,11 @@ function Invoke-TPCollectAADDirectorySettings {
             EnableGlobalAdmins    = (ConvertTo-TPDirectorySettingBool (Get-TPObjectField -Item $la -Key 'enableGlobalAdmins' -Default $null))
             RegisteringUsers      = (& $membership $ru)
             LocalAdminPasswordEnabled = (ConvertTo-TPDirectorySettingBool (Get-TPObjectField -Item $laps -Key 'isEnabled' -Default $null))
+            # 'required' / 'notRequired' / 'unknownFutureValue'; '' when not
+            # returned. "Require MFA to register or join devices" (the CA
+            # checklist's MT.1061 row: it conflicts with a CA policy on the
+            # register-device user action).
+            MultiFactorAuthConfiguration = [string](Get-TPObjectField -Item $drp -Key 'multiFactorAuthConfiguration' -Default '')
         }
         $result.Data.SectionStatus.DeviceRegistrationPolicy = 'Collected'
     } catch {

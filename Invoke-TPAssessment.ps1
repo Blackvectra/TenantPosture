@@ -365,6 +365,22 @@ param(
     # Implied by -AllFiles.
     [switch] $ChangeImpact,
 
+    # Conditional Access checklist, the way Maester checks it: is each policy
+    # Microsoft recommends in place and turned on, are the existing policies set
+    # up safely (break-glass exclusions, sync accounts, deleted objects, unprotected
+    # groups, exclusions with no fallback), and what Entra's What If evaluation
+    # says for a sample of real accounts. Writes <base>-ca-checklist.html / .md
+    # and, for each recommended policy that is missing, a report-only policy file
+    # in <base>-ca-policies\ for an administrator to review and import (the tool
+    # creates nothing). The view itself is always in the results JSON. Implied by
+    # -AllFiles.
+    [switch] $CAChecklist,
+
+    # Skip the Conditional Access What If simulation (Microsoft's evaluate
+    # action, the tool's one POST; see Lib/Invoke-TPCAWhatIf.ps1). The checklist's
+    # simulation rows then read "Not assessed".
+    [switch] $SkipCAWhatIf,
+
     # Proof of fix: after this run, compare it with an earlier results file of the
     # SAME tenant and write a remediation certificate (<tenant>-proof-<time>.html
     # and .md) listing, for each control this run covered, the state before and
@@ -1303,7 +1319,7 @@ if (-not $skipCollection) {
     }
 
     if ($conn.Graph) {
-        Write-TPCollectorGroup 'Identity (Entra ID)' -Function 'Invoke-TPCollectAADAuthPolicies', 'Invoke-TPCollectAADCAPolicies', 'Invoke-TPCollectAADUsers', 'Invoke-TPCollectAADRoles', 'Invoke-TPCollectAADPIM', 'Invoke-TPCollectAADIdentityGovernance', 'Invoke-TPCollectAADInventory', 'Invoke-TPCollectAADAppPermissions', 'Invoke-TPCollectAADDirectorySettings', 'Invoke-TPCollectAADSignInEvidence'
+        Write-TPCollectorGroup 'Identity (Entra ID)' -Function 'Invoke-TPCollectAADAuthPolicies', 'Invoke-TPCollectAADCAPolicies', 'Invoke-TPCollectAADUsers', 'Invoke-TPCollectAADRoles', 'Invoke-TPCollectAADPIM', 'Invoke-TPCollectAADIdentityGovernance', 'Invoke-TPCollectAADInventory', 'Invoke-TPCollectAADAppPermissions', 'Invoke-TPCollectAADDirectorySettings', 'Invoke-TPCollectAADSignInEvidence', 'Invoke-TPCollectAADCAWhatIf'
         Invoke-TPCollectorStep 'Auth and authorization policies'        'Invoke-TPCollectAADAuthPolicies'
         Invoke-TPCollectorStep 'Conditional Access policies'            'Invoke-TPCollectAADCAPolicies'
         Invoke-TPCollectorStep 'Users and MFA registration'             'Invoke-TPCollectAADUsers'
@@ -1313,6 +1329,18 @@ if (-not $skipCollection) {
         Invoke-TPCollectorStep 'Application (app-only) permissions'     'Invoke-TPCollectAADAppPermissions'
         Invoke-TPCollectorStep 'Group creation and device settings'     'Invoke-TPCollectAADDirectorySettings'
         Invoke-TPCollectorStep 'Sign-in evidence (30 days)'             'Invoke-TPCollectAADSignInEvidence'
+        if (-not $SkipCAWhatIf) {
+            # Microsoft's What If evaluation for a sample of users and the approved
+            # break-glass accounts (Maester MT.1033 / MT.1034). Read-only: the
+            # evaluate action changes nothing; see Lib/Invoke-TPCAWhatIf.ps1.
+            $whatIfEmergency = @()
+            try {
+                $eaRecord = Get-TPBaselineExceptions -TenantDomain ([string]$conn.TenantDomain)
+                $eaMap = Get-TPObjectField -Item $eaRecord -Key 'EmergencyAccess' -Default $null
+                if ($eaMap -is [System.Collections.IDictionary]) { $whatIfEmergency = @($eaMap.Keys | Where-Object { [string]$_ -like 'user:*' } | ForEach-Object { ([string]$_).Substring(5) }) }
+            } catch { Write-Verbose "Emergency access record not read: $($_.Exception.Message)" }
+            Invoke-TPCollectorStep 'Conditional Access What If (sample)'    'Invoke-TPCollectAADCAWhatIf' -Params @{ EmergencyAccessUserIds = $whatIfEmergency }
+        }
 
         if (-not $SkipSharePoint) {
             Write-TPCollectorGroup 'SharePoint and OneDrive' -Function 'Invoke-TPCollectSharePoint'
@@ -1605,6 +1633,27 @@ if (Get-Command Get-TPChangeImpact -ErrorAction SilentlyContinue) {
     }
 }
 
+# ── Conditional Access checklist (Maester's checks) ──────────────────────────
+# A view over the Conditional Access data already read: recommended policies,
+# policy hygiene and the What If simulation, with a report-only policy body for
+# every recommended policy that is missing. Written to the results JSON on every
+# run; the report files need -CAChecklist or -AllFiles. No finding, no score.
+$caChecklistView = $null
+if (Get-Command Get-TPCAChecklist -ErrorAction SilentlyContinue) {
+    try {
+        $eaForChecklist = try { Get-TPBaselineExceptions -TenantDomain ([string]$reportMetadata.TenantDomain) } catch { $null }
+        $licForChecklist = try { Get-TPTenantLicenseProfile } catch { $null }
+        $caChecklistView = Get-TPCAChecklist -EmergencyAccessRecord $eaForChecklist -LicenseProfile $licForChecklist
+        if ($caChecklistView.Available) {
+            $cc = $caChecklistView.Counts
+            Write-Host "  [i] Conditional Access checklist: $($cc.Pass) passed, $($cc.Fail) not met, $($cc.Staged) report-only, $($cc.NotAssessed) not assessed; $(@($caChecklistView.Fixes).Count) report-only polic(ies) to import" -ForegroundColor DarkGray
+        }
+    } catch {
+        Write-Warning "Conditional Access checklist failed: $($_.Exception.Message)"
+        $reportMetadata['CAChecklistError'] = $_.Exception.Message
+    }
+}
+
 # ── Publish reports ──────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[-] Generating reports..." -ForegroundColor Cyan
@@ -1651,6 +1700,8 @@ $jsonPayload = @{
     # Open findings sorted by what fixing them disturbs, with the accounts the
     # run's data shows each risky change would affect (UPN and display name only).
     ChangeImpact        = $changeImpactView
+    # Maester's Conditional Access checks and the report-only policy bodies.
+    CAChecklist         = $caChecklistView
 } | ConvertTo-Json -Depth 12
 Set-TPSensitiveFileContent -Path $jsonPath -Content $jsonPayload
 Write-TPReportFile 'JSON' $jsonPath
@@ -2047,6 +2098,21 @@ if (-not $JsonOnly) {
                 Write-Host "  [!] Change-impact report not written: $($changeImpactView.Note)" -ForegroundColor Yellow
             }
         } catch { Write-Warning "Change-impact report publish failed: $($_.Exception.Message)" }
+    }
+
+    # Conditional Access checklist (Maester's checks) and the report-only policy
+    # files for what is missing. Its own switch, implied by -AllFiles.
+    if (($CAChecklist -or $AllFiles) -and $null -ne $caChecklistView -and (Get-Command Publish-TPCAChecklist -ErrorAction SilentlyContinue)) {
+        try {
+            if ($caChecklistView.Available) {
+                $caFiles = Publish-TPCAChecklist -Model $caChecklistView -OutputPath (Join-Path $OutputPath "$baseName-ca-checklist.html") -TenantDomain ([string]$reportMetadata.TenantDomain) -ToolVersion ([string]$reportMetadata.ToolVersion)
+                Write-TPReportFile 'CA checklist (html)' $caFiles.Html
+                Write-TPReportFile 'CA checklist (md)' $caFiles.Markdown
+                if ($caFiles.PolicyFolder) { Write-TPReportFile "CA report-only policies ($(@($caFiles.PolicyFiles).Count - 1))" $caFiles.PolicyFolder }
+            } else {
+                Write-Host "  [!] Conditional Access checklist not written: $($caChecklistView.Note)" -ForegroundColor Yellow
+            }
+        } catch { Write-Warning "Conditional Access checklist publish failed: $($_.Exception.Message)" }
     }
 
     # Multi-page report site (landing page, one page per workload, ActionPlan.csv):
