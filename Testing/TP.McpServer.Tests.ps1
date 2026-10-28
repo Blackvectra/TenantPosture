@@ -32,6 +32,10 @@ BeforeAll {
     # Identities the server must never return by default.
     $script:Upn        = 'jane.doe@contoso.example'
     $script:Display    = 'Jane Q Doe'
+    # Named only by the change-impact view, never in a finding: proves the server
+    # learns the identities that view names before it answers.
+    $script:CiName     = 'Kim Changeimpact Person'
+    $script:CiUpn      = 'kim.changeimpact@contoso.example'
     $script:Operator   = 'operator.person@msp.example'
     $script:TenantId   = '11111111-2222-3333-4444-555555555555'
     $script:RawMarker  = 'RAWDATA-ONLY-MARKER-7f3a'
@@ -104,6 +108,18 @@ BeforeAll {
                 (& $baselineRow 'AAD-1.2' 'Failed' 'Failed' 'ControlFailed')
                 (& $baselineRow 'EXO-1.1' 'NotVerified' 'NotVerified' 'CollectorUnavailable')
             )
+        }
+        ChangeImpact = [ordered]@{
+            Available = $true; Note = ''; RunScope = 'Full'; ScopeNotice = ''
+            Summary = [ordered]@{ ImplementNow = 1; NeedsPlanning = 0; CouldBreakAccounts = 1; LicenseDecision = 0; AccountsNamed = 1 }
+            ImplementNow = @([ordered]@{ ControlId = 'DEF-1.1'; Title = 'Preset policies'; Severity = 'Medium'; State = 'Gap' })
+            NeedsPlanning = @()
+            CouldBreakAccounts = @([ordered]@{ ControlId = 'AAD-1.2'; Title = 'MFA for all users'; Severity = 'Critical'; State = 'Partial'
+                Why = 'Requiring MFA blocks accounts that cannot complete it.'
+                Evidence = @([ordered]@{ Type = 'MfaUnregistered'; Label = 'No MFA method registered'; Role = 'WouldBreak'; Status = 'Named'; Complete = $true; Count = 1; NotShown = 0; Note = ''
+                    Accounts = @([ordered]@{ DisplayName = $script:CiName; UserPrincipalName = $script:CiUpn; ObjectId = 'bbbbbbbb-0000-0000-0000-000000000002'; Detail = 'No MFA method registered.' }) }) })
+            LicenseDecision = @()
+            EmergencyAccess = [ordered]@{ Type = 'EmergencyAccess'; Label = 'Emergency-access accounts to exclude'; Role = 'MustExclude'; Status = 'NotRead'; Complete = $false; Count = 0; Accounts = @(); NotShown = 0; Note = 'None on record.' }
         }
     })
 
@@ -207,6 +223,9 @@ BeforeAll {
         (& $script:Call 21 'list_findings' @{ folder = '_flat'; id = $script:FlatId; limit = 2 })
         (& $script:Call 22 'get_baseline' @{ folder = '_flat'; id = $script:FlatId; status = 'Failed' })
         (& $script:Call 23 'list_runs' @{ tenant = 'fabrikam' })
+        (& $script:Call 24 'get_change_impact' @{ folder = '_flat'; id = $script:FlatId })
+        (& $script:Call 25 'get_change_impact' @{ folder = $f; id = $script:LaterId })
+        (& $script:Call 26 'get_change_impact' @{ folder = '_flat'; id = $script:FlatId; list = 'couldBreakAccounts'; controlId = 'AAD-1.2' })
     )
     $script:Default = & $script:Serve $script:AllCalls
     $script:WithIds = & $script:Serve $script:AllCalls @('-IncludeIdentities')
@@ -241,9 +260,9 @@ Describe 'MCP server: protocol over a real child process' {
         $script:Default.ById[1]['result'].Count | Should -Be 0
     }
 
-    It 'lists the eight read-only tools with input and output schemas' {
+    It 'lists the nine read-only tools with input and output schemas' {
         $tools = @($script:Default.ById[2]['result']['tools'])
-        @($tools | ForEach-Object { $_['name'] }) | Should -Be @('list_runs', 'get_run_summary', 'list_findings', 'get_finding', 'get_control', 'compare_runs', 'get_baseline', 'get_scope')
+        @($tools | ForEach-Object { $_['name'] }) | Should -Be @('list_runs', 'get_run_summary', 'list_findings', 'get_finding', 'get_control', 'compare_runs', 'get_baseline', 'get_scope', 'get_change_impact')
         foreach ($t in $tools) {
             $t['inputSchema']['type'] | Should -Be 'object'
             $t['inputSchema']['additionalProperties'] | Should -BeFalse
@@ -257,7 +276,7 @@ Describe 'MCP server: protocol over a real child process' {
 
     It 'every tool answers without isError, and structuredContent matches the text and its output schema' {
         $tools = @{}; foreach ($t in @($script:Default.ById[2]['result']['tools'])) { $tools[$t['name']] = $t }
-        $calls = @{ 10 = 'list_runs'; 11 = 'get_run_summary'; 12 = 'list_findings'; 13 = 'get_finding'; 14 = 'get_control'; 15 = 'compare_runs'; 16 = 'get_baseline'; 17 = 'get_scope' }
+        $calls = @{ 10 = 'list_runs'; 11 = 'get_run_summary'; 12 = 'list_findings'; 13 = 'get_finding'; 14 = 'get_control'; 15 = 'compare_runs'; 16 = 'get_baseline'; 17 = 'get_scope'; 24 = 'get_change_impact'; 25 = 'get_change_impact' }
         foreach ($id in $calls.Keys) {
             $res = $script:Default.ById[$id]['result']
             $res.Contains('isError') | Should -BeFalse -Because "$($calls[$id]) should succeed: $($res['content'][0]['text'])"
@@ -482,7 +501,7 @@ Describe 'MCP server: privacy' {
 
     It 'by default no UPN, display name, operator, tenant ID, raw data, exception text or path is returned' {
         $all = ($script:Default.Raw -join "`n")
-        foreach ($secret in $script:Upn, $script:Display, $script:Operator, $script:TenantId, $script:RawMarker, $script:RawUpn, $script:ExcMarker, $script:Tmp, '/secret/path') {
+        foreach ($secret in $script:Upn, $script:Display, $script:CiName, $script:CiUpn, $script:Operator, $script:TenantId, $script:RawMarker, $script:RawUpn, $script:ExcMarker, $script:Tmp, '/secret/path') {
             $all | Should -Not -Match ([regex]::Escape($secret)) -Because "$secret must not leave the server"
         }
         $all | Should -Match 'user-\d+'
@@ -508,6 +527,7 @@ Describe 'MCP server: privacy' {
         $all = ($script:WithIds.Raw -join "`n")
         $all | Should -Match ([regex]::Escape($script:Upn))
         $all | Should -Match ([regex]::Escape($script:Display))
+        $all | Should -Match ([regex]::Escape($script:CiName))
         foreach ($secret in $script:Operator, $script:TenantId, $script:RawMarker, $script:RawUpn, $script:ExcMarker, $script:Tmp, '/secret/path') {
             $all | Should -Not -Match ([regex]::Escape($secret))
         }
@@ -644,5 +664,29 @@ Describe 'MCP server: read-only and off the module' {
         @($calls | Sort-Object -Unique) | Should -Be @('$found.Path')
         $calls2 = [regex]::Matches($tool, 'Get-TPMcpRun -Path (\S+)') | ForEach-Object { $_.Groups[1].Value }
         @($calls2 | Sort-Object -Unique) | Should -Be @('$found.Path')
+    }
+}
+
+Describe 'MCP server: get_change_impact' {
+    It 'returns the recorded lists, names accounts by pseudonym, and says what a list is not' {
+        $a = & $script:Answer $script:Default.ById[24]
+        $a['recorded'] | Should -BeTrue
+        @($a['implementNow']).Count | Should -Be 1
+        $acct = $a['couldBreakAccounts'][0]['Evidence'][0]['Accounts'][0]
+        $acct['DisplayName'] | Should -Match '\Auser-\d+\z'
+        $acct['UserPrincipalName'] | Should -Match '\Auser-\d+\z'
+        $a['note'] | Should -Match 'never means nothing can break'
+        $a['note'] | Should -Not -Match '(?i)\bcompliant\b'
+    }
+    It 'a run that recorded no view says so and recomputes nothing' {
+        $a = & $script:Answer $script:Default.ById[25]
+        $a['recorded'] | Should -BeFalse
+        $a['note'] | Should -Match 'not recomputed'
+    }
+    It 'narrows to one list and one control' {
+        $a = & $script:Answer $script:Default.ById[26]
+        $a.Contains('implementNow') | Should -BeFalse
+        @($a['couldBreakAccounts']).Count | Should -Be 1
+        $a['couldBreakAccounts'][0]['ControlId'] | Should -Be 'AAD-1.2'
     }
 }

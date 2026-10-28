@@ -6,7 +6,7 @@
 #
 # Purpose:  Read one assessment results file for the local MCP server
 #           (Start-TPMcpServer.ps1), materializing only the parts a tool may
-#           use: Metadata, Findings, Coverage, BaselineCompliance, each raw-data
+#           use: Metadata, Findings, Coverage, BaselineCompliance, ChangeImpact, each raw-data
 #           key's Success flag and the subscribed SKUs (license profile). The
 #           raw inventory, the Exceptions array and the connection record are
 #           never materialized, so no tool can return them.
@@ -66,6 +66,7 @@ function Read-TPMcpRunFile {
         Findings           = @()
         Coverage           = $null
         BaselineCompliance = $null
+        ChangeImpact       = $null
         RawDataStatus      = @{}
         HasRawData         = $false
         SubscribedSkus     = @()
@@ -114,6 +115,13 @@ function Read-TPMcpRunFile {
             $be = Get-TPMcpJsonChild -Element $root -Name 'BaselineCompliance'
             if ($null -ne $be -and $be.ValueKind -eq [System.Text.Json.JsonValueKind]::Object) {
                 $run.BaselineCompliance = ConvertFrom-TPMcpJsonElement -Element $be
+            }
+
+            # The change-impact view the run recorded (open items sorted by what
+            # fixing them disturbs, with the accounts named); absent in older files.
+            $ci = Get-TPMcpJsonChild -Element $root -Name 'ChangeImpact'
+            if ($null -ne $ci -and $ci.ValueKind -eq [System.Text.Json.JsonValueKind]::Object) {
+                $run.ChangeImpact = ConvertFrom-TPMcpJsonElement -Element $ci
             }
 
             # Raw data: only whether each collector succeeded, and the SKUs.

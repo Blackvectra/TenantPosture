@@ -123,6 +123,15 @@ function Get-TPMcpToolDefinitions {
         (& $tool 'get_scope' 'What one run did not assess' 'Lists which controls the run did not reach a verdict on and why (collection incomplete, license blocked, skipped by the operator, no automated check, no result), with the plain-language limitations. Computed from the results file the way a -FromResults republish does; the answer says so.' `
             ([ordered]@{ folder = $folder; id = $id }) @('folder', 'id') `
             ([ordered]@{ computed = $bool; basis = $str; totalControls = $int; scoredControls = $int; unscoredControls = $int; buckets = $obj; coverageIssues = $arr; limitations = $arr }) @('computed', 'basis', 'buckets', 'limitations'))
+
+        (& $tool 'get_change_impact' 'What fixing each open item would break' 'Returns the change-impact view the run recorded: its open findings sorted into implementNow (licensed and invisible to users), needsPlanning (someone will notice), couldBreakAccounts (can lock a person, an administrator, a device or a mailbox out) and licenseDecision, and for each risky change the accounts the run''s data shows would be affected, how complete that evidence is, what the tool cannot see, and the emergency-access accounts to exclude. Optionally one list, or one control.' `
+            ([ordered]@{
+                folder    = $folder
+                id        = $id
+                list      = [ordered]@{ type = 'string'; enum = @('implementNow', 'needsPlanning', 'couldBreakAccounts', 'licenseDecision'); description = 'Optional: return only this list.' }
+                controlId = $cid
+            }) @('folder', 'id') `
+            ([ordered]@{ recorded = $bool; summary = $obj; implementNow = $arr; needsPlanning = $arr; couldBreakAccounts = $arr; licenseDecision = $arr; emergencyAccess = $obj; scopeNotice = $str; note = $str }) @('recorded', 'note'))
     )
 }
 
@@ -150,6 +159,8 @@ function Get-TPMcpRunByAddress {
         foreach ($f in @($run.Findings)) {
             Import-TPMcpIdentities -State $Ctx.Pseudo -Value (Get-TPObjectField -Item $f -Key 'AffectedObjects' -Default $null)
         }
+        # The accounts the change-impact view names (DisplayName, UserPrincipalName).
+        if ($null -ne $run.ChangeImpact) { Import-TPMcpIdentities -State $Ctx.Pseudo -Value $run.ChangeImpact }
         $run['IdentitiesLearned'] = $true
     }
     return $run
@@ -624,6 +635,37 @@ function Invoke-TPMcpGetBaseline {
     }
 }
 
+function Invoke-TPMcpGetChangeImpact {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [hashtable] $Ctx, [Parameter(Mandatory)] [hashtable] $Arguments)
+
+    $run = Get-TPMcpRunByAddress -Ctx $Ctx -Folder $Arguments['folder'] -Id $Arguments['id']
+    $ci = $run.ChangeImpact
+    if ($null -eq $ci -or -not [bool](Get-TPObjectField -Item $ci -Key 'Available' -Default $false)) {
+        return [ordered]@{ recorded = $false; note = 'The results file records no change-impact view (a run made before this tool version, or the view failed). It is not recomputed here; republish the run with Invoke-TPAssessment.ps1 -FromResults to add it.' }
+    }
+    $cidArg = [string]($Arguments['controlId'] ?? '')
+    if ($cidArg -and -not (Test-TPMcpControlId -Value $cidArg)) { Stop-TPMcpTool -Message 'controlId must look like AAD-1.1.' }
+    $names = [ordered]@{ implementNow = 'ImplementNow'; needsPlanning = 'NeedsPlanning'; couldBreakAccounts = 'CouldBreakAccounts'; licenseDecision = 'LicenseDecision' }
+    $want = [string]($Arguments['list'] ?? '')
+    $out = [ordered]@{ recorded = $true; summary = (Get-TPMcpField -Item $ci -Key 'Summary') }
+    foreach ($k in $names.Keys) {
+        if ($want -and $k -ne $want) { continue }
+        # Get-TPMcpField returns the list whole; assign it before enumerating.
+        $list = Get-TPMcpField -Item $ci -Key $names[$k]
+        $items = @($list | Where-Object { $null -ne $_ })
+        if ($cidArg) { $items = @($items | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'ControlId' -Default '') -eq $cidArg }) }
+        $out[$k] = $items
+    }
+    $out['emergencyAccess'] = Get-TPMcpField -Item $ci -Key 'EmergencyAccess'
+    $out['scopeNotice'] = [string](Get-TPObjectField -Item $ci -Key 'ScopeNotice' -Default '')
+    $out['note'] = 'As the run recorded it. Accounts are named only from what the run read: a block whose status is NotRead or NotEstablished, or that is not Complete, is not a list of everyone affected, and NoneFound never means nothing can break. EmergencyAccess accounts are to be excluded from a new policy, not fixed. Changes nothing in the tenant.'
+    if ($cidArg -and -not (@($names.Keys | Where-Object { $out.Contains($_) -and @($out[$_]).Count -gt 0 }).Count)) {
+        $out['note'] = 'This control is not open in this run (or not in the list asked for), so it is in none of the lists. ' + $out['note']
+    }
+    return $out
+}
+
 function Invoke-TPMcpGetScope {
     [CmdletBinding()]
     param([Parameter(Mandatory)] [hashtable] $Ctx, [Parameter(Mandatory)] [hashtable] $Arguments)
@@ -738,6 +780,7 @@ function Invoke-TPMcpTool {
         compare_runs    = 'Invoke-TPMcpCompareRuns'
         get_baseline    = 'Invoke-TPMcpGetBaseline'
         get_scope       = 'Invoke-TPMcpGetScope'
+        get_change_impact = 'Invoke-TPMcpGetChangeImpact'
     }
     $def = @(Get-TPMcpToolDefinitions) | Where-Object { $_['name'] -ceq $Name } | Select-Object -First 1
     if ($null -eq $def -or -not $impl.ContainsKey($Name)) { throw [System.ArgumentException]::new('Unknown tool.') }

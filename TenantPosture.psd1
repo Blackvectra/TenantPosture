@@ -202,6 +202,8 @@
         'Publish-TPRemediationProof',
         'Get-TPOnboardingModel',
         'Publish-TPOnboardingReport',
+        'Get-TPChangeImpact',
+        'Publish-TPChangeImpact',
         'Get-TPModuleHealth',
         'Repair-TPModuleHealth',
         'Get-TPModuleInstallScope',

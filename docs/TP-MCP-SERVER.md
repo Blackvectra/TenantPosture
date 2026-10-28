@@ -27,7 +27,7 @@ client; the client then starts it as a child process when it needs it.
 - **It never returns** the raw inventory (`RawData`), the `Exceptions` array, the tenant
   ID, the operator's account, the connection record, the baseline exceptions path or any
   file path. Those parts of a results file are not even materialized: the reader keeps
-  only `Metadata`, `Findings`, `Coverage`, `BaselineCompliance`, each collector's
+  only `Metadata`, `Findings`, `Coverage`, `BaselineCompliance`, `ChangeImpact`, each collector's
   `Success` flag and the subscribed SKUs.
 
 `Testing/TP.McpServer.Tests.ps1` runs the real server in a child process and pins each of
@@ -94,6 +94,9 @@ The tools keep the tool's distinctions:
   store it, and names what it used and which control catalog.
 - `compare_runs` never calls a gap that became `NotApplicable` or `Error` resolved; it is
   `VerdictChanged`.
+- `get_change_impact` returns the accounts a risky change would affect only as far as the
+  run read them: a block that is `NotRead`, `NotEstablished` or not `Complete` is not a
+  list of everyone affected, and `NoneFound` never means nothing can break.
 - Coverage lines are labeled as not scores, and no text the server writes says
   "compliant".
 
@@ -180,6 +183,7 @@ All tools are read-only (`readOnlyHint: true`, `openWorldHint: false`).
 | `compare_runs` | `folderA`, `idA`, `folderB`, `idB` (A before, B after) | `runA`, `runB`, `changed[]` (before, after, `Improved` / `Regressed` / `VerdictChanged`), `newGaps[]`, `resolvedGaps[]`, `onlyInA[]`, `onlyInB[]`, `unchangedCount`, `notes`. Refused unless both runs carry the same tenant ID (the guard `Publish-TPDeltaReport` applies); two different tenants are compared with `Compare-TPTenantBaseline.ps1`, offline |
 | `get_baseline` | `folder`, `id`, `status?` (`Satisfied`, `Failed`, `NotVerified`, `NotApplicable`, `LicenseBlocked`, `ApprovedException`), `limit?` (default 100, max 200) | the recorded `BaselineCompliance`: version, tier, summary, both coverage lines, `rows[]` (`controlId`, `title`, `tier`, `observedState`, `baselineStatus`, `constraint`, `disposition`, `effectivenessState`, `reasonCode`, `reason`), or `recorded: false` |
 | `get_scope` | `folder`, `id` | `computed`, `basis`, control counts, `buckets` (`CollectionIncomplete`, `NoResult`, `Errors`, `StandardNotApproved`, `SkippedByOperator`, `NotEvaluatedThisMode`, `LicenseBlocked`, `ThirdPartyAttested`, `NoProgrammaticCheck`, `NotApplicableToTenant`, each with its controls and reasons), `coverageIssues`, `limitations` |
+| `get_change_impact` | `folder`, `id`, `list?` (`implementNow`, `needsPlanning`, `couldBreakAccounts`, `licenseDecision`), `controlId?` | the change-impact view the run recorded: `summary`, the four lists (each risky change with `Why`, its `Evidence` blocks naming accounts, each block's `Status` `Named` / `NoneFound` / `NotEstablished` / `NotRead` and `Complete`, `Unseen`, and its `EmergencyAccess` reminder), `emergencyAccess`, `scopeNotice`, `note`; `recorded: false` for a run made before the view existed (not recomputed; republish with `-FromResults`). Account names are pseudonymized like every other identity |
 
 ## Files
 
@@ -187,7 +191,7 @@ All tools are read-only (`readOnlyHint: true`, `openWorldHint: false`).
 |---|---|
 | `Start-TPMcpServer.ps1` | Entry point: imports the psm1 (not the manifest, so no Graph module is needed), loads the run index and the path guard, serves until standard input closes. |
 | `Mcp/Invoke-TPMcpProtocol.ps1` | JSON-RPC framing, version negotiation, method dispatch. |
-| `Mcp/Invoke-TPMcpTool.ps1` | Tool definitions (input and output schemas), argument validation, the eight tools. |
+| `Mcp/Invoke-TPMcpTool.ps1` | Tool definitions (input and output schemas), argument validation, the nine tools. |
 | `Mcp/Read-TPMcpRun.ps1` | Bounded results-file reader (`JsonDocument`; only the parts listed above are materialized). |
 | `Mcp/Protect-TPMcpOutput.ps1` | Pseudonymization, format-character stripping, truncation. |
 | `Lib/Resolve-TPWebRunPath.ps1` | The path guard, shared with the web GUI (`-Kind Results`). |

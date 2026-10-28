@@ -384,7 +384,7 @@ function Invoke-TPCollectIntuneDeviceCompliance {
 
         # ── Managed devices → OS compliance summary ──────────────────────────
         try {
-            $next = 'https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$select=id,deviceName,operatingSystem,complianceState'
+            $next = 'https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$select=id,deviceName,operatingSystem,complianceState,userPrincipalName'
             $devList = @()
             # Pagination cap (v4.6.3 P2): managed device count can run into
             # tens of thousands on large tenants. Cap at 200 pages (~200k
@@ -403,6 +403,7 @@ function Invoke-TPCollectIntuneDeviceCompliance {
                         -Message "Pagination cap reached ($maxPages pages); managed device list may be truncated."
                 }
             }
+            $devTruncated = [bool]($pageCount -ge $maxPages -and $next)
             $result.Data.OSComplianceSummary.TotalCount        = $devList.Count
             # complianceState is the device's OVERALL state against every rule
             # of its compliance policies — not an OS-version verdict.
@@ -423,6 +424,21 @@ function Invoke-TPCollectIntuneDeviceCompliance {
             $winNames = @($devList | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'operatingSystem' -Default '') -like 'Windows*' } |
                 ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'deviceName' -Default '') })
             $result.Data.OSComplianceSummary.WindowsDeviceNames = $winNames
+            # Each non-compliant device with its primary user, so the change-impact
+            # view can name who loses access when compliance is required. Same
+            # read, same scope (DeviceManagementManagedDevices.Read.All); a device
+            # with no primary user keeps an empty name and is counted, never dropped.
+            $result.Data.OSComplianceSummary.NonCompliantDevices = @($devList |
+                Where-Object { [string](Get-TPObjectField -Item $_ -Key 'complianceState' -Default '') -ne 'compliant' } |
+                ForEach-Object {
+                    [ordered]@{
+                        DeviceName        = [string](Get-TPObjectField -Item $_ -Key 'deviceName' -Default '')
+                        OperatingSystem   = [string](Get-TPObjectField -Item $_ -Key 'operatingSystem' -Default '')
+                        ComplianceState   = [string](Get-TPObjectField -Item $_ -Key 'complianceState' -Default '')
+                        UserPrincipalName = [string](Get-TPObjectField -Item $_ -Key 'userPrincipalName' -Default '')
+                    }
+                })
+            $result.Data.OSComplianceSummary.NonCompliantTruncated = $devTruncated
         } catch {
             $result.Data.SectionStatus['OSComplianceSummary'] = 'Failed'
             if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {

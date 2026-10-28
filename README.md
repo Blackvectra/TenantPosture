@@ -164,6 +164,7 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 | `-SSPQuestionnaire`, `-SSPQuestionnaireFamily` | Fillable client questionnaire for the SSP requirements the run could not evidence, optionally for one 800-171 family (for example `3.9`). Not included in `-AllFiles`. |
 | `-ManualReviewQuestionnaire`, `-ManualReviewWorkload` | Fillable questionnaire for the controls the run could not assess, optionally for one workload (for example `SPO`). Not included in `-AllFiles`. |
 | `-ImprovementPlan` | Ordered NIST SP 800-53 improvement plan with the projected coverage after each step. |
+| `-ChangeImpact` | What fixing each open item would break (`<base>-change-impact.html` / `.md`): **Implement now** (licensed, documented as invisible to users), **Needs planning** (someone will notice), and **Could break accounts** (can lock a person, an administrator, a device or a mailbox out), each risky change naming the accounts the run's data shows would be affected and the emergency-access accounts to exclude. The view is always in the results JSON (`ChangeImpact`, read by the MCP server's `get_change_impact`); this switch writes the files. Implied by `-AllFiles`; works with `-FromResults`. |
 | `-OnboardingReport` | The new-client onboarding report (`<base>-onboarding.html` / `.md`): executive one-pager, what is working, what needs attention, a 30/60/90-day plan from the operational-impact effort classes and the license gate, the license decisions, and the coming Microsoft changes when `Config/microsoft-changes.json` exists. Covers the whole tenant: refused with `-ControlId` (exit 4 before sign-in); implied by `-AllFiles`, which skips it with a note on a partial or quick run. |
 | `-ProofAgainst` | Proof of fix: after this run, compare it with an earlier results file of the same tenant and write `<tenant>-proof-<time>.html` / `.md` (each control this run covered: state before and after, Resolved / Improved / Not resolved / Regressed / Not verifiable / No earlier verdict / Already met). The file is checked before anything signs in; another tenant's file or an older "after" run is refused. Pair it with a `-ControlId` re-check after fixing. |
 | `-DistributionListsOnly` | The distribution-list scan: signs in to Exchange Online only and writes `<tenant>-<time>-distribution-lists.txt` and `.csv` (members, settings, who can reach each list, the recommendation). Read-only; every other area is not assessed. See [Distribution-list scan](#distribution-list-scan--distributionlistsonly). Not part of `-AllFiles`. |
@@ -388,7 +389,7 @@ New-TPFleetDashboard.ps1         ← Offline fleet dashboard across every client
 New-TPRemediationProof.ps1       ← Offline proof-of-fix certificate from two runs of one tenant (connects to nothing)
 Start-TPMcpServer.ps1            ← Local read-only MCP server over saved results (connects to nothing)
 TenantPosture.psm1               ← Module loader (recursive dot-source, path traversal check)
-TenantPosture.psd1               ← Module manifest (495 exports, dependency declarations)
+TenantPosture.psd1               ← Module manifest (497 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-TPFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -437,7 +438,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA (ScubaGear v2.0.0) + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          136 Pester suites — the FULL suite gates every PR
+Testing/                          137 Pester suites — the FULL suite gates every PR
   TP.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   TP.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   TP.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -550,6 +551,21 @@ Three deliverables share one modern, self-contained look (`Lib/Get-TPReportTheme
 **Proof of fix (client-facing).** After fixing, re-check with `-ControlId` and pass the earlier run: `.\Invoke-TPAssessment.ps1 -ControlId EXO-1.6 -ProofAgainst .\output\contoso-<time>-results.json`, or from two saved files, `.\New-TPRemediationProof.ps1 -BeforeResults before.json -AfterResults after.json [-ControlId patterns]`. The certificate (`<tenant>-proof-<time>.html` / `.md`, printable to PDF) lists each control's state and current value before and after with a verdict; a control the after run could not judge is Not verifiable, never resolved. Evidence: both run times (UTC), tool versions, the SHA-256 of both files and the selection patterns; never the operator or the tenant ID. Different tenants or an "after" run that is not newer are refused.
 
 **Onboarding report (client-facing).** `-OnboardingReport` (implied by `-AllFiles`, works with `-FromResults`) writes "Where you stand": the recorded score and maturity, top risks in plain language from each control's business risk, what is working, what needs attention, and a 30/60/90-day plan. Days 1-30 holds Critical and High items on the improvement plan's own "Do now" track (a documented low-friction archetype); Days 31-60 the remaining Critical and High items and policy changes or staged rollouts; Days 61-90 the rest. Items with no documented operational impact are "Plan after review", never Days 1-30, and items the tenant is not licensed for go to "Needs a license decision" with the license that unlocks them. A window says when work starts; effort is a class, never a time estimate, and the report quotes no price. When `Config/microsoft-changes.json` exists, a "Coming Microsoft changes" section lists the entries dated today or later with the related controls' state.
+
+### Change impact: what fixing it would break — `-ChangeImpact`
+
+Before a fix goes in, the question is who it breaks. `-ChangeImpact` sorts the run's open findings into three lists:
+
+- **Implement now**: licensed, and the change is documented as invisible to users (the improvement plan's own "Do now" rule).
+- **Needs planning**: licensed, and somebody will notice: plan a window, tell people, or do a discovery pass first.
+- **Could break accounts**: the change can lock a person, an administrator, a device or a mailbox out (the controls listed in `Config/change-impact.json`, each with the reason), or its operational impact is not documented at all.
+
+Each risky change names the accounts the run's own data shows would be affected: successful legacy-client sign-ins (by client: IMAP, POP3, SMTP AUTH), accounts with no MFA method, sign-ins with no second factor, administrators with no phishing-resistant method, accounts whose only MFA is a phone, permanent admin assignments, Global Administrators, mailboxes with SMTP AUTH or external forwarding, external forwarding rules, shared mailboxes that can sign in, and users of non-compliant Intune devices. Every sign-in-policy change also lists the approved emergency-access accounts from `Config/baseline-exceptions/<tenant>.psd1` to exclude, or warns that none is on record. Each list states how complete it is: **Not read** (with the reason), **Not established** (the read was incomplete and found nobody), **None found** (a complete read, which still does not mean nothing can break), and what the tool cannot see (device-code sign-ins, unenrolled devices). A control the tenant is not confirmed licensed for is a license decision, never in the lists. It is a view: it changes no finding and no score.
+
+```powershell
+.\Invoke-TPAssessment.ps1 -TenantDomain client.com -ChangeImpact
+.\Invoke-TPAssessment.ps1 -FromResults .\output\client-20261028-090000-results.json -ChangeImpact
+```
 
 ### Distribution-list scan — `-DistributionListsOnly`
 
@@ -702,7 +718,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **136 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **137 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite through the same gate CI uses. The gate parses every
@@ -760,7 +776,7 @@ Nine GitHub Actions workflows cover the repository. All run automatically on pus
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (136 suites) · PSScriptAnalyzer with SARIF upload · PowerShell security rules and InjectionHunter (any unreviewed finding fails) · CI modules installed by exact version and SHA-256 · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (137 suites) · PSScriptAnalyzer with SARIF upload · PowerShell security rules and InjectionHunter (any unreviewed finding fails) · CI modules installed by exact version and SHA-256 · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -791,4 +807,4 @@ You may use, modify and redistribute it under that license, including commercial
 
 ---
 
-*TenantPosture v4.14.3 · 253 posture controls + EMAIL/SIGNIN IR heuristics · 495 exported functions · full Pester suite (136 suites) gating CI*
+*TenantPosture v4.14.3 · 253 posture controls + EMAIL/SIGNIN IR heuristics · 497 exported functions · full Pester suite (137 suites) gating CI*

@@ -133,13 +133,15 @@ function Get-ConnectionInformation { @() }
             $script:Results | Should -Not -BeNullOrEmpty
             @($script:Results.Findings).Count | Should -BeGreaterThan 100
             $script:Results.ContainsKey('BaselineCompliance') | Should -BeTrue
+            $script:Results.ContainsKey('ChangeImpact') | Should -BeTrue
+            $script:Results.ChangeImpact.Available | Should -BeTrue
             $script:Results.ContainsKey('Coverage') | Should -BeTrue
         }
         It 'no publisher failed' {
             $script:Live.Output | Should -Not -Match 'publish failed' -Because $script:Live.Output
         }
         It 'wrote the HTML report, the Markdown summary, the playbook, the NIST matrix, the SSP, the BOD 25-01 view and the onboarding report (-AllFiles implies it)' {
-            foreach ($pattern in '*-assessment.html', '*-assessment.md', '*-playbook.md', '*-executive.md', '*-nist-800-53-matrix.md', '*-ssp-800-171.md', '*-nist-improvement-plan.md', '*-onboarding.html', '*-onboarding.md', '*-bod-25-01.md') {
+            foreach ($pattern in '*-assessment.html', '*-assessment.md', '*-playbook.md', '*-executive.md', '*-nist-800-53-matrix.md', '*-ssp-800-171.md', '*-nist-improvement-plan.md', '*-onboarding.html', '*-onboarding.md', '*-bod-25-01.md', '*-change-impact.html', '*-change-impact.md') {
                 @(Get-ChildItem -LiteralPath $script:LiveOut -Filter $pattern -ErrorAction SilentlyContinue).Count | Should -BeGreaterThan 0 -Because "$pattern was not written"
             }
         }
