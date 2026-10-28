@@ -80,7 +80,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-mfa-strength",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "mfa-all-users",
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Add a Conditional Access policy that requires multifactor authentication for all users and all applications (Microsoft template: Require multifactor authentication for all users)."
     },
     {
       "Id": "MT.1006",
@@ -90,7 +91,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-old-require-mfa-admin",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "mfa-admins",
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Add a Conditional Access policy that requires multifactor authentication for every administrator role (Microsoft template: Require multifactor authentication for admins)."
     },
     {
       "Id": "MT.1008",
@@ -100,7 +102,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-old-require-mfa-azure-mgmt",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "mfa-azure-mgmt",
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Add a Conditional Access policy that requires multifactor authentication for Azure management (Microsoft template)."
     },
     {
       "Id": "MT.1009",
@@ -110,7 +113,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-block-legacy-authentication",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "block-legacy-auth",
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Add a Conditional Access policy that blocks legacy authentication for all users (Microsoft template: Block legacy authentication)."
     },
     {
       "Id": "MT.1010",
@@ -120,7 +124,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-block-legacy-authentication",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "block-legacy-auth",
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Include Exchange ActiveSync in the policy that blocks legacy authentication (Microsoft template: Block legacy authentication)."
     },
     {
       "Id": "MT.1052",
@@ -130,7 +135,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-block-authentication-flows",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "block-device-code",
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Add a Conditional Access policy that blocks the device code sign-in flow, excluding only devices that need it."
     },
     {
       "Id": "MT.1011",
@@ -140,7 +146,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-security-info-registration",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "secure-security-info",
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Add a Conditional Access policy that protects registering MFA methods from outside your trusted locations (Microsoft template: Securing security info registration)."
     },
     {
       "Id": "MT.1016",
@@ -150,7 +157,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-old-require-mfa-guest",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "mfa-guests",
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Add a Conditional Access policy that requires multifactor authentication for guests and external users."
     },
     {
       "Id": "MT.1001",
@@ -160,7 +168,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-alt-all-users-compliant-hybrid-or-mfa",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1 + Intune",
       "Template": "compliant-hybrid-or-mfa",
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Add a Conditional Access policy that requires a compliant or hybrid joined device, or MFA, for all users, once devices are enrolled in Intune."
     },
     {
       "Id": "MT.1014",
@@ -170,7 +179,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-alt-admin-device-compliand-hybrid",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1 + Intune",
       "Template": "admin-compliant-device",
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Require administrators to work from a compliant or hybrid joined device (Microsoft template)."
     },
     {
       "Id": "MT.1015",
@@ -180,7 +190,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-device-unknown-unsupported",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "block-unknown-platforms",
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Block sign-ins from device platforms your organization does not use or manage (Microsoft template)."
     },
     {
       "Id": "MT.1017",
@@ -190,7 +201,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-persistent-browser",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "unmanaged-device-session",
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Stop browsers on unmanaged devices from staying signed in (Microsoft template: No persistent browser session)."
     },
     {
       "Id": "MT.1018",
@@ -200,7 +212,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-persistent-browser",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "unmanaged-device-session",
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Ask for sign-in again periodically on unmanaged devices (Microsoft template: sign-in frequency)."
     },
     {
       "Id": "MT.1019",
@@ -210,7 +223,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-app-enforced-restrictions",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "app-enforced-restrictions",
-      "Severity": "Low"
+      "Severity": "Low",
+      "Recommended": "Use application enforced restrictions so SharePoint, OneDrive and Exchange give unmanaged devices limited, web-only access."
     },
     {
       "Id": "MT.1012",
@@ -220,7 +234,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-risk-based-sign-in",
       "LicenseRequirement": "Entra ID P2",
       "Template": "risky-sign-in",
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Require multifactor authentication when Microsoft rates a sign-in medium or high risk (needs Entra ID P2)."
     },
     {
       "Id": "MT.1013",
@@ -230,7 +245,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-risk-based-user",
       "LicenseRequirement": "Entra ID P2",
       "Template": "risky-user",
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Require a secure password change when Microsoft rates a user high risk (needs Entra ID P2)."
     },
     {
       "Id": "MT.1003",
@@ -240,7 +256,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/plan-conditional-access#apply-conditional-access-policies-to-every-app",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "mfa-all-users",
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Have at least one Conditional Access policy that applies to all applications."
     },
     {
       "Id": "MT.1004",
@@ -250,7 +267,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/plan-conditional-access#apply-conditional-access-policies-to-every-app",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "mfa-all-users",
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Have at least one Conditional Access policy that applies to all users and all applications."
     },
     {
       "Id": "MT.1181",
@@ -260,7 +278,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-agent-block-high-risk",
       "LicenseRequirement": "Entra ID P2",
       "Template": null,
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Block AI agent identities that Microsoft rates high risk (Microsoft template: Block high-risk agent identities)."
     },
     {
       "Id": "MT.1005",
@@ -270,7 +289,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/role-based-access-control/security-emergency-access",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": null,
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Exclude your emergency access (break-glass) accounts from every Conditional Access policy, and record which accounts they are."
     },
     {
       "Id": "MT.1020",
@@ -280,7 +300,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-mfa-strength",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": null,
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Exclude the directory synchronization account role from policies that apply to all users."
     },
     {
       "Id": "MT.1035",
@@ -290,7 +311,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/concept-conditional-access-users-groups",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": null,
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Protect the groups your Conditional Access policies use (role-assignable groups or a restricted management administrative unit)."
     },
     {
       "Id": "MT.1036",
@@ -300,7 +322,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/plan-conditional-access",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": null,
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Make sure everyone excluded from one policy is covered by another."
     },
     {
       "Id": "MT.1038",
@@ -310,7 +333,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/plan-conditional-access",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": null,
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Remove deleted groups from your Conditional Access policies."
     },
     {
       "Id": "MT.1066",
@@ -320,7 +344,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/plan-conditional-access",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": null,
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Remove deleted users, groups and roles from your Conditional Access policies."
     },
     {
       "Id": "MT.1049",
@@ -330,7 +355,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/id-protection/howto-identity-protection-configure-risk-policies",
       "LicenseRequirement": "Entra ID P2",
       "Template": null,
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Handle user risk and sign-in risk in separate Conditional Access policies."
     },
     {
       "Id": "MT.1061",
@@ -340,7 +366,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-device-registration",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": null,
-      "Severity": "Low"
+      "Severity": "Low",
+      "Recommended": "Require MFA for device registration in one place only: turn the device setting off when a Conditional Access policy handles it."
     },
     {
       "Id": "MT.1072",
@@ -350,7 +377,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/migrate-approved-client-app",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": null,
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Replace the retired \"Require approved client app\" grant with \"Require app protection policy\"."
     },
     {
       "Id": "MT.1184",
@@ -360,7 +388,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/concept-conditional-access-cloud-apps",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": null,
-      "Severity": "Low"
+      "Severity": "Low",
+      "Recommended": "Give every Conditional Access policy at least one target application, or remove it."
     },
     {
       "Id": "MT.1224",
@@ -370,7 +399,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/managed-policies",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": null,
-      "Severity": "Medium"
+      "Severity": "Medium",
+      "Recommended": "Review the Microsoft-managed Conditional Access policies and turn them on."
     },
     {
       "Id": "MT.1033",
@@ -380,7 +410,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/what-if-tool",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "block-legacy-auth",
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Make sure an enabled Conditional Access policy blocks legacy authentication for every user."
     },
     {
       "Id": "MT.1034",
@@ -390,7 +421,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/what-if-tool",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": null,
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Make sure no Conditional Access policy applies to your emergency access accounts."
     },
     {
       "Id": "TP-WHATIF-MFA",
@@ -400,7 +432,8 @@
       "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/what-if-tool",
       "LicenseRequirement": "M365 Business Premium or Entra ID P1",
       "Template": "mfa-all-users",
-      "Severity": "High"
+      "Severity": "High",
+      "Recommended": "Make sure an enabled Conditional Access policy requires multifactor authentication for every user."
     }
   ],
   "templates": {

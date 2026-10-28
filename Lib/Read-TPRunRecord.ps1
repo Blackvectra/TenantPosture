@@ -51,7 +51,12 @@ function Read-TPRunRecord {
     [OutputType([System.Collections.Specialized.OrderedDictionary])]
     param(
         [Parameter(Mandatory)] [string] $Path,
-        [switch] $Hash
+        [switch] $Hash,
+        # Also materialize the Conditional Access and Intune checklists, trimmed
+        # to each row's id, area, title, reason, severity, status and the
+        # recommended change (never a row's detail, items, policy names or the
+        # report-only policy bodies), for the client security review.
+        [switch] $IncludeChecklists
     )
 
     Set-StrictMode -Version Latest
@@ -70,6 +75,8 @@ function Read-TPRunRecord {
         BaselineCompliance = $null
         IsIncidentResponse = $false
         DroppedFindings    = 0
+        CAChecklist        = $null
+        IntuneChecklist    = $null
     }
 
     $fields = Get-TPRunRecordFindingFields
@@ -128,6 +135,25 @@ function Read-TPRunRecord {
 
             if ($root.TryGetProperty('BaselineCompliance', [ref]$el) -and $el.ValueKind -eq [System.Text.Json.JsonValueKind]::Object) {
                 $record.BaselineCompliance = $el.GetRawText() | ConvertFrom-Json -Depth 64 -ErrorAction Stop
+            }
+
+            if ($IncludeChecklists) {
+                foreach ($key in 'CAChecklist', 'IntuneChecklist') {
+                    if (-not ($root.TryGetProperty($key, [ref]$el) -and $el.ValueKind -eq [System.Text.Json.JsonValueKind]::Object)) { continue }
+                    $full = $el.GetRawText() | ConvertFrom-Json -Depth 64 -ErrorAction Stop
+                    $keep = @('Id', 'Kind', 'Area', 'Title', 'Why', 'Severity', 'Status', 'Recommended', 'SourceUrl', 'LicenseRequirement')
+                    $rows = @(@(Get-TPObjectField -Item $full -Key 'Rows' -Default @()) | Where-Object { $null -ne $_ } | ForEach-Object {
+                            $src = $_; $r = [ordered]@{}
+                            foreach ($k in $keep) { $r[$k] = [string](Get-TPObjectField -Item $src -Key $k -Default '') }
+                            if ($r.Id -cmatch '\A(MT\.\d{4}|TP-[A-Z-]{1,30})\z') { [pscustomobject]$r }
+                        })
+                    $record[$key] = [ordered]@{
+                        Available       = [bool](Get-TPObjectField -Item $full -Key 'Available' -Default $false)
+                        Rows            = $rows
+                        SecurityDefaults = (Get-TPObjectField -Item $full -Key 'SecurityDefaults' -Default $null)
+                        MaesterReference = [string](Get-TPObjectField -Item $full -Key 'MaesterReference' -Default '')
+                    }
+                }
             }
         } finally { $doc.Dispose() }
     } finally { $stream.Dispose() }
