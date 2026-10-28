@@ -116,6 +116,10 @@ function Invoke-TPCollectAADCAPolicies {
                             # policy targets; AAD-3.3 reads which policy backs a
                             # PIM activation context.
                             AuthenticationContext = @(& $g 'conditions.applications.includeAuthenticationContextClassReferences')
+                            # An application filter targets resources by attribute;
+                            # only its presence is kept (the CA checklist's
+                            # "no target resources" row).
+                            ApplicationFilterPresent = ($null -ne (& $g 'conditions.applications.applicationFilter' $null))
                         }
                         # Read by AAD-11.7 (device filter for admins) and
                         # AAD-11.9 (workload identities); never projected before,
@@ -132,6 +136,9 @@ function Invoke-TPCollectAADCAPolicies {
                         # policies, AAD-11.9). Empty when the policy sets none; a
                         # results file from before this read has no key at all.
                         ServicePrincipalRiskLevels = @(& $g 'conditions.servicePrincipalRiskLevels')
+                        # Agent identity risk (beta only; filled from the beta
+                        # list below, the CA checklist's MT.1181 row reads it).
+                        AgentIdRiskLevels = @(& $g 'conditions.agentIdRiskLevels')
                     }
                     GrantControls    = @{
                         Operator             = [string](& $g 'grantControls.operator' '')
@@ -144,6 +151,8 @@ function Invoke-TPCollectAADCAPolicies {
                         # SMS/voice without depending on the separate
                         # authenticationStrengthPolicies call (which can fail).
                         AuthStrengthCombinations = @(& $g 'grantControls.authenticationStrength.allowedCombinations')
+                        # 'mfa' for every multifactor strength (built-in or custom).
+                        AuthStrengthRequirementsSatisfied = [string](& $g 'grantControls.authenticationStrength.requirementsSatisfied' '')
                         TermsOfUse           = @(& $g 'grantControls.termsOfUse')
                     }
                     SessionControls  = @{
@@ -157,6 +166,8 @@ function Invoke-TPCollectAADCAPolicies {
                             }
                         } else { $null }
                         ContinuousAccessEvaluation = [string](& $g 'sessionControls.continuousAccessEvaluation.mode' '')
+                        # $null when the policy sets no app-enforced restriction.
+                        ApplicationEnforcedRestrictions = (& $g 'sessionControls.applicationEnforcedRestrictions.isEnabled' $null)
                         # Token protection lives only in the beta shape; filled below.
                         SecureSignInSession = $null
                         PersistentBrowser = if ($pb) {
@@ -185,6 +196,7 @@ function Invoke-TPCollectAADCAPolicies {
                     -Uri 'https://graph.microsoft.com/beta/identity/conditionalAccess/policies?$top=250' `
                     -Headers @{ Prefer = 'include-unknown-enum-members' })
                 $byId = @{}
+                $agentRisk = @{}
                 $knownIds = @{}
                 foreach ($pol in $result.Data.Policies) { $knownIds[[string]$pol['Id']] = $true }
                 $betaOnly = [System.Collections.Generic.List[string]]::new()
@@ -192,6 +204,7 @@ function Invoke-TPCollectAADCAPolicies {
                     $id  = [string](Get-TPObjectField -Item $bp -Key 'id' -Default '')
                     $ssi = Get-TPNestedProperty -Object $bp -Path 'sessionControls.secureSignInSession.isEnabled' -Default $null
                     if ($id) { $byId[$id] = $ssi }
+                    if ($id) { $agentRisk[$id] = @(Get-TPNestedProperty -Object $bp -Path 'conditions.agentIdRiskLevels' -Default @() | Where-Object { $_ }) }
                     if ($id -and -not $knownIds.ContainsKey($id)) {
                         $extra = & $projectPolicy $bp
                         $extra['Source'] = 'beta'
@@ -205,6 +218,7 @@ function Invoke-TPCollectAADCAPolicies {
                 foreach ($pol in $result.Data.Policies) {
                     $polId = [string]$pol['Id']
                     if ($byId.ContainsKey($polId) -and $null -ne $byId[$polId]) { $pol['SessionControls']['SecureSignInSession'] = [bool]$byId[$polId] }
+                    if ($agentRisk.ContainsKey($polId)) { $pol['Conditions']['AgentIdRiskLevels'] = @($agentRisk[$polId]) }
                 }
                 $result.Data.SectionStatus['TokenProtection'] = 'Collected'
             } catch {
@@ -292,6 +306,26 @@ function Invoke-TPCollectAADCAPolicies {
             }
         }
 
+        # Objects the policies name (Maester MT.1035, MT.1038, MT.1066). Each
+        # user, group and role id in an include or exclude list is read by id:
+        # a 404 is an object that no longer exists (the policy names a deleted
+        # object), any other error leaves that object unread. Groups are read
+        # from beta for isManagementRestricted (a restricted management
+        # administrative unit) beside isAssignableToRole. GET only, scopes
+        # already held (Directory.Read.All, RoleManagement.Read.All).
+        $result.Data.SectionStatus['ReferencedObjects'] = 'NotRun'
+        if ($policiesCollected) {
+            try {
+                $result.Data.ReferencedObjects = Get-TPCAReferencedObjects -Policies @($result.Data.Policies)
+                $result.Data.SectionStatus['ReferencedObjects'] = if ($result.Data.ReferencedObjects.Truncated -or $result.Data.ReferencedObjects.Unread -gt 0) { 'Partial' } else { 'Collected' }
+            } catch {
+                $result.Data.SectionStatus['ReferencedObjects'] = 'Failed'
+                if (Get-Command Register-TPException -ErrorAction SilentlyContinue) {
+                    Register-TPException -Source 'AAD-CAPolicies-ReferencedObjects' -Message $_.Exception.Message
+                }
+            }
+        }
+
         # Honest success: only if the CA-policies fetch itself succeeded. A
         # failed policies fetch -> Success=$false -> evaluators route CA controls
         # to NotApplicable ("couldn't assess"), never to a false Gap.
@@ -329,4 +363,64 @@ function Invoke-TPCollectAADCAPolicies {
         Set-TPRawData -Key 'AAD-CAPolicies' -Data $result
     }
     return $result
+}
+
+
+function Get-TPCAReferencedObjects {
+    <#
+    .SYNOPSIS
+        Reads every user, group and role a Conditional Access policy names, by
+        id, and says which exist. A 404 is "does not exist"; any other error
+        is "not read" and is never reported as a deleted object.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Policies,
+        [ValidateRange(1, 2000)] [int] $MaxObjects = 300
+    )
+    $guid = '\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z'
+    $wanted = [ordered]@{}
+    foreach ($p in $Policies) {
+        foreach ($pair in @(@('User', 'IncludeUsers'), @('User', 'ExcludeUsers'), @('Group', 'IncludeGroups'), @('Group', 'ExcludeGroups'), @('Role', 'IncludeRoles'), @('Role', 'ExcludeRoles'))) {
+            foreach ($id in @(Get-TPNestedProperty -Object $p -Path "Conditions.Users.$($pair[1])" -Default @())) {
+                $v = ([string]$id).ToLowerInvariant()
+                if ($v -cmatch $guid) { $wanted["$($pair[0]):$v"] = [ordered]@{ Kind = $pair[0]; Id = $v } }
+            }
+        }
+    }
+    $objects = [System.Collections.Generic.List[object]]::new()
+    $unread = 0
+    $keys = @($wanted.Keys)
+    $truncated = $keys.Count -gt $MaxObjects
+    foreach ($k in ($keys | Select-Object -First $MaxObjects)) {
+        $w = $wanted[$k]
+        $uri = switch ($w.Kind) {
+            'User'  { "https://graph.microsoft.com/v1.0/users/$($w.Id)?`$select=id,displayName,userPrincipalName,accountEnabled" }
+            'Group' { "https://graph.microsoft.com/beta/groups/$($w.Id)?`$select=id,displayName,isAssignableToRole,isManagementRestricted" }
+            'Role'  { "https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions/$($w.Id)?`$select=id,displayName" }
+        }
+        $row = [ordered]@{ Kind = $w.Kind; Id = $w.Id; Exists = $null; DisplayName = ''; UserPrincipalName = ''; IsAssignableToRole = $null; IsManagementRestricted = $null }
+        try {
+            $o = Invoke-TPGraphRequest -Method GET -Uri $uri -ErrorAction Stop
+            $row.Exists = $true
+            $row.DisplayName = [string](Get-TPObjectField -Item $o -Key 'displayName' -Default '')
+            $row.UserPrincipalName = [string](Get-TPObjectField -Item $o -Key 'userPrincipalName' -Default '')
+            if ($w.Kind -eq 'Group') {
+                $a = Get-TPObjectField -Item $o -Key 'isAssignableToRole' -Default $null
+                $m = Get-TPObjectField -Item $o -Key 'isManagementRestricted' -Default $null
+                $row.IsAssignableToRole = if ($a -is [bool]) { $a } else { $null }
+                $row.IsManagementRestricted = if ($m -is [bool]) { $m } else { $null }
+            }
+        } catch {
+            $status = Get-TPNestedProperty -Object $_ -Path 'Exception.Response.StatusCode' -Default $null
+            $text = "$($_.Exception.Message) $([string](Get-TPNestedProperty -Object $_ -Path 'ErrorDetails.Message' -Default ''))"
+            if ([string]$status -in @('NotFound', '404') -or $text -match '\b404\b|Request_ResourceNotFound|ResourceNotFound|does not exist') {
+                $row.Exists = $false
+            } else {
+                $unread++
+            }
+        }
+        $objects.Add($row)
+    }
+    return [ordered]@{ Objects = $objects.ToArray(); Requested = $keys.Count; Unread = $unread; Truncated = $truncated }
 }

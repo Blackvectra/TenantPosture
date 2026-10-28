@@ -182,6 +182,7 @@ $script:ExportedFunctions = @(
     'Get-TPCoverageScore',
     'Invoke-TPCollectAADAppPermissions',
     'Invoke-TPCollectAADSignInEvidence',
+    'Invoke-TPCollectAADCAWhatIf',
     'Invoke-TPCollectAADDirectorySettings',
     'Test-TPControlAppPermTenantTakeover', 'Test-TPControlAppPermDataAccess',
     'Get-TPAppPermissionRiskCatalog', 'Get-TPAppPermissionContext', 'Get-TPAppPermissionTierMap',
@@ -233,7 +234,7 @@ $script:ExportedFunctions = @(
     'Get-TPBaselineExceptionPath', 'Get-TPBaselineException', 'New-TPBaselineException', 'Set-TPBaselineException', 'Remove-TPBaselineException',
     'Get-TPBaselineTenantComparison', 'Publish-TPBaselineTenantComparison',
     # ── MSP deliverables: shared theme, fleet dashboard, proof of fix, onboarding report ──
-    'Get-TPReportTheme', 'Read-TPRunRecord', 'Get-TPRunRecordTime', 'Get-TPFleetModel', 'Publish-TPFleetDashboard', 'Get-TPRemediationProof', 'Publish-TPRemediationProof', 'Get-TPOnboardingModel', 'Publish-TPOnboardingReport', 'Get-TPChangeImpact', 'Publish-TPChangeImpact', 'Get-TPHipaaClientReport', 'Publish-TPHipaaClientReport', 'ConvertTo-TPPdf',
+    'Get-TPReportTheme', 'Read-TPRunRecord', 'Get-TPRunRecordTime', 'Get-TPFleetModel', 'Publish-TPFleetDashboard', 'Get-TPRemediationProof', 'Publish-TPRemediationProof', 'Get-TPOnboardingModel', 'Publish-TPOnboardingReport', 'Get-TPChangeImpact', 'Publish-TPChangeImpact', 'Get-TPCAChecklist', 'Publish-TPCAChecklist', 'Get-TPHipaaClientReport', 'Publish-TPHipaaClientReport', 'ConvertTo-TPPdf',
     'Get-TPModuleHealth',
     'Repair-TPModuleHealth',
     'Get-TPModuleInstallScope', 'Get-TPExoModuleFloor', 'Get-TPExoPreflightNotes', 'Get-TPPowerShellSupportStatus', 'Get-TPCloudFileHint', 'Get-TPMsalConflictHint', 'Get-TPGapSummary', 'Format-TPGapSummary', 'Get-TPControlViewMap', 'Get-TPEvidenceLimitMap', 'Get-TPEvidenceLimitNote', 'Get-TPEvidenceLimitMd', 'Test-TPSafeModuleVersionPath', 'Get-TPConnectErrorText', 'Get-TPExoConnectHint',

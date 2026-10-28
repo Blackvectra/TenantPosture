@@ -6,6 +6,8 @@ This tool is **read-only by design.** No cmdlets that write, modify, or delete t
 
 Enforced by: CI static analysis (`Read-Only Posture` test in `TP.Security.Tests.ps1`) verifies no tenant write cmdlets appear outside of `-Remediation` strings in any production file.
 
+One request is a POST without being a write: the Conditional Access checklist asks Microsoft's What If evaluation (`POST /identity/conditionalAccess/evaluate`, the call the Entra admin center's What If tool makes) which policies would apply to a simulated sign-in for a sample of users and the approved break-glass accounts. Microsoft documents it as an evaluation of the existing policies under `Policy.Read.All`; it changes nothing. It lives in one function, `Invoke-TPCAWhatIfEvaluation`, with a constant URI and a body built only from validated ids, and `TP.CAChecklist.Tests.ps1` fails any other non-GET Graph call in the module. `-SkipCAWhatIf` turns it off. The checklist also writes report-only Conditional Access policy files for an administrator to review and import; the tool never creates a policy.
+
 Two sanctioned write paths ship in this repository. Neither executes during an assessment run:
 
 1. `Register-TPTenantApp` — optional onboarding helper that creates a read-only enterprise app in a customer tenant. Gated behind `-RegisterApp` + `SupportsShouldProcess` (`-WhatIf` / `-Confirm`).

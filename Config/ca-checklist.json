@@ -1,0 +1,933 @@
+{
+  "_comment": "The Conditional Access checklist (Lib/Get-TPCAChecklist.ps1). Checks follow Maester's tests by id (MT.xxxx; the match rules are the tool's port of Maester's, with the differences named in the Lib file); templates are Microsoft's Conditional Access templates as report-only policy bodies for POST /identity/conditionalAccess/policies. The tool never creates a policy. @AdminRoles expands to the roles below; @SyncRole to the Directory Synchronization Accounts role; emergency-access exclusions come from the tenant's approved record.",
+  "version": "1.0",
+  "maesterReference": "maester365/maester main, retrieved 2026-10-28",
+  "sourceRetrieved": "2026-10-28",
+  "adminRoles": [
+    {
+      "Id": "62e90394-69f5-4237-9190-012177145e10",
+      "Name": "Global Administrator"
+    },
+    {
+      "Id": "194ae4cb-b126-40b2-bd5b-6091b380977d",
+      "Name": "Security Administrator"
+    },
+    {
+      "Id": "f28a1f50-f6e7-4571-818b-6a12f2af6b6c",
+      "Name": "SharePoint Administrator"
+    },
+    {
+      "Id": "29232cdf-9323-42fd-ade2-1d097af3e4de",
+      "Name": "Exchange Administrator"
+    },
+    {
+      "Id": "b1be1c3e-b65d-4f19-8427-f6fa0d97feb9",
+      "Name": "Conditional Access Administrator"
+    },
+    {
+      "Id": "729827e3-9c14-49f7-bb1b-9608f156bbb8",
+      "Name": "Helpdesk Administrator"
+    },
+    {
+      "Id": "b0f54661-2d74-4c50-afa3-1ec803f12efe",
+      "Name": "Billing Administrator"
+    },
+    {
+      "Id": "fe930be7-5e62-47db-91af-98c3a49a38b1",
+      "Name": "User Administrator"
+    },
+    {
+      "Id": "c4e39bd9-1100-46d3-8c65-fb160da0071f",
+      "Name": "Authentication Administrator"
+    },
+    {
+      "Id": "9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3",
+      "Name": "Application Administrator"
+    },
+    {
+      "Id": "158c047a-c907-4556-b7ef-446551a6b5f7",
+      "Name": "Cloud Application Administrator"
+    },
+    {
+      "Id": "966707d0-3269-4727-9be2-8c3a10f19b9d",
+      "Name": "Password Administrator"
+    },
+    {
+      "Id": "7be44c8a-adaf-4e2a-84d6-ab2649e08a13",
+      "Name": "Privileged Authentication Administrator"
+    },
+    {
+      "Id": "e8611ab8-c189-46e8-94e1-60213ab1f814",
+      "Name": "Privileged Role Administrator"
+    }
+  ],
+  "syncRoles": [
+    {
+      "Id": "d29b2b05-8046-44ba-8758-1e26182fcf32",
+      "Name": "Directory Synchronization Accounts"
+    },
+    {
+      "Id": "a92aed5d-d78a-4d16-b381-09adb37eb3b0",
+      "Name": "On Premises Directory Sync Account"
+    }
+  ],
+  "checks": [
+    {
+      "Id": "MT.1007",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy requires MFA for all users",
+      "Why": "A password alone is enough to sign in for any account no policy asks for a second factor.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-mfa-strength",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "mfa-all-users",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1006",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy requires MFA for admins",
+      "Why": "The 14 administrator roles Microsoft lists hold the keys to the tenant; each must be asked for a second factor.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-old-require-mfa-admin",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "mfa-admins",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1008",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy requires MFA for Azure management",
+      "Why": "Azure management covers the Azure portal, CLI and PowerShell, where a signed-in account can change subscriptions.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-old-require-mfa-azure-mgmt",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "mfa-azure-mgmt",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1009",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy blocks other legacy authentication clients",
+      "Why": "Legacy protocols (POP, IMAP, SMTP AUTH, older Office) cannot do MFA, so they are how password-spray attacks get in.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-block-legacy-authentication",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "block-legacy-auth",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1010",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy blocks legacy authentication for Exchange ActiveSync",
+      "Why": "Exchange ActiveSync clients that use basic authentication bypass MFA the same way.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-block-legacy-authentication",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "block-legacy-auth",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1052",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy covers the device code flow",
+      "Why": "Device code phishing relays a sign-in code to the victim, and MFA does not stop it; block the flow or require a managed device.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-block-authentication-flows",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "block-device-code",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1011",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy secures security info registration",
+      "Why": "Whoever registers the MFA method owns the account; registration from outside trusted locations should need a strong check.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-security-info-registration",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "secure-security-info",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1016",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy requires MFA for guest access",
+      "Why": "Guests sign in with their home account; without this they reach your data on a password their organization controls.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-old-require-mfa-guest",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "mfa-guests",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1001",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy requires a compliant device",
+      "Why": "Requiring a compliant (Intune-managed) device keeps data off unmanaged and personal devices.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-alt-all-users-compliant-hybrid-or-mfa",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1 + Intune",
+      "Template": "compliant-hybrid-or-mfa",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1014",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy requires a compliant or hybrid joined device for admins",
+      "Why": "Administrators should work only from managed devices; a stolen admin session on a personal laptop is a full compromise.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-alt-admin-device-compliand-hybrid",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1 + Intune",
+      "Template": "admin-compliant-device",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1015",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy blocks unknown or unsupported device platforms",
+      "Why": "A sign-in from a platform you do not manage (for example ChromeOS or a spoofed client) slips past device-based policies.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-device-unknown-unsupported",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "block-unknown-platforms",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1017",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy prevents persistent browser sessions on unmanaged devices",
+      "Why": "A browser that stays signed in on a shared or personal computer leaves the next person signed in as your user.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-persistent-browser",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "unmanaged-device-session",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1018",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy sets a sign-in frequency on unmanaged devices",
+      "Why": "Periodic reauthentication limits how long a session on an unmanaged device stays usable.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-persistent-browser",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "unmanaged-device-session",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1019",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy uses application enforced restrictions",
+      "Why": "Lets SharePoint, OneDrive and Exchange give unmanaged devices a limited, web-only experience.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-app-enforced-restrictions",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "app-enforced-restrictions",
+      "Severity": "Low"
+    },
+    {
+      "Id": "MT.1012",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy requires MFA for risky sign-ins",
+      "Why": "A sign-in Microsoft rates medium or high risk (unfamiliar location, anonymous IP, token replay) should prove itself.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-risk-based-sign-in",
+      "LicenseRequirement": "Entra ID P2",
+      "Template": "risky-sign-in",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1013",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy requires a password change for high-risk users",
+      "Why": "A user Microsoft believes is compromised (for example a leaked password) should reset with MFA before signing in again.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-risk-based-user",
+      "LicenseRequirement": "Entra ID P2",
+      "Template": "risky-user",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1003",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy targets all resources",
+      "Why": "A policy scoped to some apps leaves every other app reachable on whatever the default allows.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/plan-conditional-access#apply-conditional-access-policies-to-every-app",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "mfa-all-users",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1004",
+      "Kind": "Presence",
+      "Title": "At least one Conditional Access policy targets all resources and all users",
+      "Why": "Microsoft recommends a baseline policy for all users and all resources with no app exclusions.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/plan-conditional-access#apply-conditional-access-policies-to-every-app",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "mfa-all-users",
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1181",
+      "Kind": "Presence",
+      "Title": "A Conditional Access policy blocks high-risk agent identities",
+      "Why": "AI agents sign in on their own; an agent identity Microsoft rates high risk should be blocked.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-agent-block-high-risk",
+      "LicenseRequirement": "Entra ID P2",
+      "Template": null,
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1005",
+      "Kind": "Hygiene",
+      "Title": "Every Conditional Access policy excludes the emergency access accounts",
+      "Why": "A misconfigured policy can lock out every administrator; the break-glass accounts are how you get back in.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/role-based-access-control/security-emergency-access",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": null,
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1020",
+      "Kind": "Hygiene",
+      "Title": "Conditional Access policies scoped to all users exclude the directory synchronization accounts",
+      "Why": "Microsoft Entra Connect signs in without MFA; an all-users policy that catches it stops directory synchronization.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-mfa-strength",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": null,
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1035",
+      "Kind": "Hygiene",
+      "Title": "Groups used in Conditional Access are protected (role-assignable or restricted management)",
+      "Why": "Anyone who can edit a group in a policy exclusion can take a user out of the policy.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/concept-conditional-access-users-groups",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": null,
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1036",
+      "Kind": "Hygiene",
+      "Title": "Every excluded user, group or role is included by another policy",
+      "Why": "An exclusion with no fallback leaves that object with no protection at all.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/plan-conditional-access",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": null,
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1038",
+      "Kind": "Hygiene",
+      "Title": "No Conditional Access policy names a deleted group",
+      "Why": "A deleted group in an include list protects nobody; in an exclude list it hides a gap you can no longer see.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/plan-conditional-access",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": null,
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1066",
+      "Kind": "Hygiene",
+      "Title": "No Conditional Access policy names a user, group or role that no longer exists",
+      "Why": "A policy pointing at deleted objects may not apply the way it reads.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/plan-conditional-access",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": null,
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1049",
+      "Kind": "Hygiene",
+      "Title": "User risk and sign-in risk are configured in separate policies",
+      "Why": "A policy with both conditions applies only when both are true, so neither risk is handled on its own.",
+      "SourceUrl": "https://learn.microsoft.com/entra/id-protection/howto-identity-protection-configure-risk-policies",
+      "LicenseRequirement": "Entra ID P2",
+      "Template": null,
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1061",
+      "Kind": "Hygiene",
+      "Title": "Device registration MFA is not set in two places",
+      "Why": "When \"Require MFA to register or join devices\" is on in device settings, a Conditional Access policy on the register-device action is not enforced.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-device-registration",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": null,
+      "Severity": "Low"
+    },
+    {
+      "Id": "MT.1072",
+      "Kind": "Hygiene",
+      "Title": "No Conditional Access policy uses the retired \"Require approved client app\" grant",
+      "Why": "Microsoft stopped enforcing this grant in March 2026; a policy relying on it no longer requires anything.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/migrate-approved-client-app",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": null,
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1184",
+      "Kind": "Hygiene",
+      "Title": "Every Conditional Access policy targets at least one resource",
+      "Why": "A policy with no target resources has no effect even when it is on.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/concept-conditional-access-cloud-apps",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": null,
+      "Severity": "Low"
+    },
+    {
+      "Id": "MT.1224",
+      "Kind": "Hygiene",
+      "Title": "Microsoft-managed Conditional Access policies are not left in report-only mode",
+      "Why": "Microsoft turns its managed policies on after review; one left in report-only protects nothing.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/managed-policies",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": null,
+      "Severity": "Medium"
+    },
+    {
+      "Id": "MT.1033",
+      "Kind": "Simulation",
+      "Title": "Regular users are blocked from legacy authentication (What If)",
+      "Why": "Entra itself evaluates an Exchange ActiveSync sign-in for a sample of users, including group membership the policy list cannot show.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/what-if-tool",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "block-legacy-auth",
+      "Severity": "High"
+    },
+    {
+      "Id": "MT.1034",
+      "Kind": "Simulation",
+      "Title": "Emergency access accounts are not blocked (What If)",
+      "Why": "Entra evaluates the same sign-in for each approved break-glass account; no policy should apply.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/what-if-tool",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": null,
+      "Severity": "High"
+    },
+    {
+      "Id": "TP-WHATIF-MFA",
+      "Kind": "Simulation",
+      "Title": "Regular users are asked for MFA in a browser (What If; the tool's addition)",
+      "Why": "Entra evaluates a browser sign-in to Exchange Online for the same sample; an enabled policy should require MFA or block.",
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/what-if-tool",
+      "LicenseRequirement": "M365 Business Premium or Entra ID P1",
+      "Template": "mfa-all-users",
+      "Severity": "High"
+    }
+  ],
+  "templates": {
+    "mfa-all-users": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-mfa-strength",
+      "Note": null,
+      "Policy": {
+        "displayName": "Require multifactor authentication for all users",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeUsers": [
+              "All"
+            ],
+            "excludeRoles": [
+              "@SyncRole"
+            ]
+          },
+          "applications": {
+            "includeApplications": [
+              "All"
+            ]
+          },
+          "clientAppTypes": [
+            "all"
+          ]
+        },
+        "grantControls": {
+          "operator": "OR",
+          "builtInControls": [],
+          "authenticationStrength": {
+            "id": "00000000-0000-0000-0000-000000000002"
+          }
+        },
+        "sessionControls": null
+      }
+    },
+    "mfa-admins": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-old-require-mfa-admin",
+      "Note": null,
+      "Policy": {
+        "displayName": "Require multifactor authentication for admins",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeRoles": [
+              "@AdminRoles"
+            ]
+          },
+          "applications": {
+            "includeApplications": [
+              "All"
+            ]
+          },
+          "clientAppTypes": [
+            "all"
+          ]
+        },
+        "grantControls": {
+          "operator": "OR",
+          "builtInControls": [],
+          "authenticationStrength": {
+            "id": "00000000-0000-0000-0000-000000000002"
+          }
+        },
+        "sessionControls": null
+      }
+    },
+    "mfa-azure-mgmt": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-old-require-mfa-azure-mgmt",
+      "Note": null,
+      "Policy": {
+        "displayName": "Require multifactor authentication for Azure management",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeUsers": [
+              "All"
+            ],
+            "excludeRoles": [
+              "@SyncRole"
+            ]
+          },
+          "applications": {
+            "includeApplications": [
+              "797f4846-ba00-4fd7-ba43-dac1f8f63013"
+            ]
+          },
+          "clientAppTypes": [
+            "all"
+          ]
+        },
+        "grantControls": {
+          "operator": "OR",
+          "builtInControls": [],
+          "authenticationStrength": {
+            "id": "00000000-0000-0000-0000-000000000002"
+          }
+        },
+        "sessionControls": null
+      }
+    },
+    "block-legacy-auth": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-block-legacy-authentication",
+      "Note": null,
+      "Policy": {
+        "displayName": "Block legacy authentication",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeUsers": [
+              "All"
+            ]
+          },
+          "applications": {
+            "includeApplications": [
+              "All"
+            ]
+          },
+          "clientAppTypes": [
+            "exchangeActiveSync",
+            "other"
+          ]
+        },
+        "grantControls": {
+          "operator": "OR",
+          "builtInControls": [
+            "block"
+          ]
+        },
+        "sessionControls": null
+      }
+    },
+    "block-device-code": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-block-authentication-flows",
+      "Note": "Exclude any account that must use device code sign-in (for example Teams Rooms on Android) before turning it on.",
+      "Policy": {
+        "displayName": "Block device code flow",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeUsers": [
+              "All"
+            ],
+            "excludeRoles": [
+              "@SyncRole"
+            ]
+          },
+          "applications": {
+            "includeApplications": [
+              "All"
+            ]
+          },
+          "clientAppTypes": [
+            "all"
+          ],
+          "authenticationFlows": {
+            "transferMethods": "deviceCodeFlow"
+          }
+        },
+        "grantControls": {
+          "operator": "OR",
+          "builtInControls": [
+            "block"
+          ]
+        },
+        "sessionControls": null
+      }
+    },
+    "secure-security-info": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-security-info-registration",
+      "Note": "Mark your office IP ranges as trusted named locations first; new users then register with a Temporary Access Pass.",
+      "Policy": {
+        "displayName": "Securing security info registration",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeUsers": [
+              "All"
+            ],
+            "excludeRoles": [
+              "@SyncRole"
+            ],
+            "excludeGuestsOrExternalUsers": {
+              "guestOrExternalUserTypes": "internalGuest,b2bCollaborationGuest,b2bCollaborationMember,b2bDirectConnectUser,otherExternalUser,serviceProvider",
+              "externalTenants": {
+                "@odata.type": "#microsoft.graph.conditionalAccessAllExternalTenants",
+                "membershipKind": "all"
+              }
+            }
+          },
+          "applications": {
+            "includeUserActions": [
+              "urn:user:registersecurityinfo"
+            ]
+          },
+          "clientAppTypes": [
+            "all"
+          ],
+          "locations": {
+            "includeLocations": [
+              "All"
+            ],
+            "excludeLocations": [
+              "AllTrusted"
+            ]
+          }
+        },
+        "grantControls": {
+          "operator": "OR",
+          "builtInControls": [],
+          "authenticationStrength": {
+            "id": "00000000-0000-0000-0000-000000000002"
+          }
+        },
+        "sessionControls": null
+      }
+    },
+    "mfa-guests": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-old-require-mfa-guest",
+      "Note": null,
+      "Policy": {
+        "displayName": "Require multifactor authentication for guest access",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeGuestsOrExternalUsers": {
+              "guestOrExternalUserTypes": "internalGuest,b2bCollaborationGuest,b2bCollaborationMember,b2bDirectConnectUser,otherExternalUser,serviceProvider",
+              "externalTenants": {
+                "@odata.type": "#microsoft.graph.conditionalAccessAllExternalTenants",
+                "membershipKind": "all"
+              }
+            }
+          },
+          "applications": {
+            "includeApplications": [
+              "All"
+            ]
+          },
+          "clientAppTypes": [
+            "all"
+          ]
+        },
+        "grantControls": {
+          "operator": "OR",
+          "builtInControls": [
+            "mfa"
+          ]
+        },
+        "sessionControls": null
+      }
+    },
+    "compliant-hybrid-or-mfa": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-alt-all-users-compliant-hybrid-or-mfa",
+      "Note": "Needs Intune compliance policies assigned to the devices before it can be turned on without blocking people.",
+      "Policy": {
+        "displayName": "Require compliant or hybrid joined device or MFA for all users",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeUsers": [
+              "All"
+            ],
+            "excludeRoles": [
+              "@SyncRole"
+            ]
+          },
+          "applications": {
+            "includeApplications": [
+              "All"
+            ]
+          },
+          "clientAppTypes": [
+            "all"
+          ]
+        },
+        "grantControls": {
+          "operator": "OR",
+          "builtInControls": [
+            "mfa",
+            "compliantDevice",
+            "domainJoinedDevice"
+          ]
+        },
+        "sessionControls": null
+      }
+    },
+    "admin-compliant-device": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-alt-admin-device-compliand-hybrid",
+      "Note": "Every administrator needs an enrolled, compliant (or hybrid joined) device before this is turned on.",
+      "Policy": {
+        "displayName": "Require compliant or hybrid joined device for administrators",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeRoles": [
+              "@AdminRoles"
+            ]
+          },
+          "applications": {
+            "includeApplications": [
+              "All"
+            ]
+          },
+          "clientAppTypes": [
+            "all"
+          ]
+        },
+        "grantControls": {
+          "operator": "OR",
+          "builtInControls": [
+            "compliantDevice",
+            "domainJoinedDevice"
+          ]
+        },
+        "sessionControls": null
+      }
+    },
+    "block-unknown-platforms": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-device-unknown-unsupported",
+      "Note": "Remove from excludePlatforms any platform your organization does not use, so it is blocked too.",
+      "Policy": {
+        "displayName": "Block access for unknown or unsupported device platforms",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeUsers": [
+              "All"
+            ],
+            "excludeRoles": [
+              "@SyncRole"
+            ]
+          },
+          "applications": {
+            "includeApplications": [
+              "All"
+            ]
+          },
+          "clientAppTypes": [
+            "all"
+          ],
+          "platforms": {
+            "includePlatforms": [
+              "all"
+            ],
+            "excludePlatforms": [
+              "android",
+              "iOS",
+              "windows",
+              "macOS",
+              "linux"
+            ]
+          }
+        },
+        "grantControls": {
+          "operator": "OR",
+          "builtInControls": [
+            "block"
+          ]
+        },
+        "sessionControls": null
+      }
+    },
+    "unmanaged-device-session": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-persistent-browser",
+      "Note": null,
+      "Policy": {
+        "displayName": "Require reauthentication and disable browser persistence on unmanaged devices",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeUsers": [
+              "All"
+            ],
+            "excludeRoles": [
+              "@SyncRole"
+            ]
+          },
+          "applications": {
+            "includeApplications": [
+              "All"
+            ]
+          },
+          "clientAppTypes": [
+            "all"
+          ],
+          "devices": {
+            "deviceFilter": {
+              "mode": "include",
+              "rule": "device.trustType -ne \"ServerAD\" -or device.isCompliant -ne True"
+            }
+          }
+        },
+        "grantControls": null,
+        "sessionControls": {
+          "signInFrequency": {
+            "isEnabled": true,
+            "type": "hours",
+            "value": 1,
+            "frequencyInterval": "timeBased",
+            "authenticationType": "primaryAndSecondaryAuthentication"
+          },
+          "persistentBrowser": {
+            "isEnabled": true,
+            "mode": "never"
+          }
+        }
+      }
+    },
+    "app-enforced-restrictions": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-all-users-app-enforced-restrictions",
+      "Note": "SharePoint applies it only after its unmanaged-device setting (Access control) is set to limited or blocked access.",
+      "Policy": {
+        "displayName": "Use application enforced restrictions for unmanaged devices",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeUsers": [
+              "All"
+            ],
+            "excludeRoles": [
+              "@SyncRole"
+            ]
+          },
+          "applications": {
+            "includeApplications": [
+              "Office365"
+            ]
+          },
+          "clientAppTypes": [
+            "all"
+          ]
+        },
+        "grantControls": null,
+        "sessionControls": {
+          "applicationEnforcedRestrictions": {
+            "isEnabled": true
+          }
+        }
+      }
+    },
+    "risky-sign-in": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-risk-based-sign-in",
+      "Note": null,
+      "Policy": {
+        "displayName": "Require MFA for risky sign-ins",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeUsers": [
+              "All"
+            ],
+            "excludeRoles": [
+              "@SyncRole"
+            ]
+          },
+          "applications": {
+            "includeApplications": [
+              "All"
+            ]
+          },
+          "clientAppTypes": [
+            "all"
+          ],
+          "signInRiskLevels": [
+            "high",
+            "medium"
+          ]
+        },
+        "grantControls": {
+          "operator": "OR",
+          "builtInControls": [],
+          "authenticationStrength": {
+            "id": "00000000-0000-0000-0000-000000000002"
+          }
+        },
+        "sessionControls": {
+          "signInFrequency": {
+            "isEnabled": true,
+            "frequencyInterval": "everyTime",
+            "authenticationType": "primaryAndSecondaryAuthentication"
+          }
+        }
+      }
+    },
+    "risky-user": {
+      "SourceUrl": "https://learn.microsoft.com/entra/identity/conditional-access/policy-risk-based-user",
+      "Note": "Users must be registered for MFA and self-service password reset first, or a high-risk user is blocked.",
+      "Policy": {
+        "displayName": "Require password change for high-risk users",
+        "state": "enabledForReportingButNotEnforced",
+        "conditions": {
+          "users": {
+            "includeUsers": [
+              "All"
+            ],
+            "excludeRoles": [
+              "@SyncRole"
+            ]
+          },
+          "applications": {
+            "includeApplications": [
+              "All"
+            ]
+          },
+          "clientAppTypes": [
+            "all"
+          ],
+          "userRiskLevels": [
+            "high"
+          ]
+        },
+        "grantControls": {
+          "operator": "AND",
+          "builtInControls": [
+            "mfa",
+            "passwordChange"
+          ]
+        },
+        "sessionControls": {
+          "signInFrequency": {
+            "isEnabled": true,
+            "frequencyInterval": "everyTime",
+            "authenticationType": "primaryAndSecondaryAuthentication"
+          }
+        }
+      }
+    }
+  }
+}
