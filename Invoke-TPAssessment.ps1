@@ -340,6 +340,16 @@ param(
     # (and then skipped, with a note, on a partial or quick run).
     [switch] $OnboardingReport,
 
+    # Change impact: the open findings sorted into what can be fixed now, what
+    # needs planning, and what could break accounts, naming the accounts the
+    # run's data shows each risky change would affect (legacy-client sign-ins,
+    # accounts with no MFA method, admins without a phishing-resistant method,
+    # forwarding and SMTP AUTH mailboxes, users of non-compliant devices) and
+    # the emergency-access accounts to exclude. HTML + Markdown
+    # (<base>-change-impact.*). The view itself is always in the results JSON.
+    # Implied by -AllFiles.
+    [switch] $ChangeImpact,
+
     # Proof of fix: after this run, compare it with an earlier results file of the
     # SAME tenant and write a remediation certificate (<tenant>-proof-<time>.html
     # and .md) listing, for each control this run covered, the state before and
@@ -1560,6 +1570,26 @@ if (Get-Command Get-TPBaselineCompliance -ErrorAction SilentlyContinue) {
     }
 }
 
+# ── Change impact: what fixing each open item would break, and for whom ──────
+# A view over the findings and the raw data already read: Implement now / Needs
+# planning / Could break accounts, naming the accounts the run's data shows would
+# be affected. Computed on every run and written to the results JSON (the MCP
+# server's get_change_impact reads it); the report files need -ChangeImpact or
+# -AllFiles. It creates no finding and moves no score.
+$changeImpactView = $null
+if (Get-Command Get-TPChangeImpact -ErrorAction SilentlyContinue) {
+    try {
+        $changeImpactView = Get-TPChangeImpact -Findings $findings -Metadata $reportMetadata
+        if ($changeImpactView.Available) {
+            $ciSummary = $changeImpactView.Summary
+            Write-Host "  [i] Change impact: $($ciSummary.ImplementNow) can go in now, $($ciSummary.NeedsPlanning) need planning, $($ciSummary.CouldBreakAccounts) could break accounts ($($ciSummary.AccountsNamed) account(s) named), $($ciSummary.LicenseDecision) need a license decision" -ForegroundColor DarkGray
+        }
+    } catch {
+        Write-Warning "Change-impact view failed: $($_.Exception.Message)"
+        $reportMetadata['ChangeImpactError'] = $_.Exception.Message
+    }
+}
+
 # ── Publish reports ──────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[-] Generating reports..." -ForegroundColor Cyan
@@ -1603,6 +1633,9 @@ $jsonPayload = @{
     BaselineRegressions = $baselineRegressions
     BaselinePlan        = $baselinePlan
     BaselinePlanComparison = $baselinePlanComparison
+    # Open findings sorted by what fixing them disturbs, with the accounts the
+    # run's data shows each risky change would affect (UPN and display name only).
+    ChangeImpact        = $changeImpactView
 } | ConvertTo-Json -Depth 12
 Set-TPSensitiveFileContent -Path $jsonPath -Content $jsonPayload
 Write-TPReportFile 'JSON' $jsonPath
@@ -1961,6 +1994,21 @@ if (-not $JsonOnly) {
                 Write-Host "  [i] Onboarding report not written: $($obModel.Note)" -ForegroundColor DarkGray
             }
         } catch { Write-Warning "Onboarding report publish failed: $($_.Exception.Message)" }
+    }
+
+    # Change impact: Implement now / Needs planning / Could break accounts, with the
+    # accounts named. Its own switch, implied by -AllFiles; a partial run is allowed
+    # and says so on the page.
+    if (($ChangeImpact -or $AllFiles) -and $null -ne $changeImpactView -and (Get-Command Publish-TPChangeImpact -ErrorAction SilentlyContinue)) {
+        try {
+            if ($changeImpactView.Available) {
+                $ciFiles = Publish-TPChangeImpact -Model $changeImpactView -OutputPath (Join-Path $OutputPath "$baseName-change-impact.html")
+                Write-TPReportFile 'Change impact (html)' $ciFiles.Html
+                Write-TPReportFile 'Change impact (md)' $ciFiles.Markdown
+            } else {
+                Write-Host "  [!] Change-impact report not written: $($changeImpactView.Note)" -ForegroundColor Yellow
+            }
+        } catch { Write-Warning "Change-impact report publish failed: $($_.Exception.Message)" }
     }
 
     # Multi-page report site (landing page, one page per workload, ActionPlan.csv):

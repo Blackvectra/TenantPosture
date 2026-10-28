@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **[MSP] Change impact: what fixing it would break, and for whom.** `-ChangeImpact` (implied by `-AllFiles`; works
+  with `-FromResults`; `Lib/Get-TPChangeImpact.ps1`, `Publishers/Publish-TPChangeImpact.ps1`,
+  `Config/change-impact.json`) sorts the open findings into Implement now (licensed and on the improvement plan's own
+  Do now track), Needs planning, and Could break accounts (25 controls listed with the reason each can lock a person,
+  an administrator, a device or a mailbox out, plus any control whose operational impact is undocumented), and names,
+  for each risky change, the accounts the run's data shows would be affected: legacy-client sign-ins by client,
+  accounts with no MFA method, single-factor sign-ins (only where the recorded steps show no second factor), admins
+  with no phishing-resistant method, phone-only MFA, permanent and Global Administrator assignments, SMTP AUTH and
+  external-forwarding mailboxes, external forwarding rules, shared mailboxes that can sign in, and users of
+  non-compliant Intune devices, plus the approved emergency-access accounts to exclude (or a warning that none is on
+  record). Every list says whether it was read, read completely, or not established, and what the tool cannot see; a
+  disabled account is dropped and an approved emergency-access account is marked to exclude, not fix. Unconfirmed
+  licensing is a license decision, never a list item. The view is written to every results JSON as `ChangeImpact`
+  and the MCP server gains a ninth tool, `get_change_impact`, which returns it with accounts pseudonymized. The Intune
+  device read now selects each device's `userPrincipalName` (same scope) and records the non-compliant devices with
+  their user. A new suite, `TP.ChangeImpact`, includes a check that no entry-point variable shadows a parameter
+  under another casing (the `$changeImpact` / `-ChangeImpact` trap).
+
 - **[MSP] Fleet dashboard, proof of fix and onboarding report, in one shared look.** `Lib/Get-TPReportTheme.ps1`
   is the stylesheet and HTML builders the three share: system fonts, cards, light and dark, a print stylesheet
   (light on white, a page break per section), inline SVG sparklines and bars, the loaded profile's brand color as an
