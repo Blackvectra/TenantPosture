@@ -224,7 +224,7 @@ jobs:
         # Run even if the analyzer step failed, so Error-severity findings
         # still surface in the Code Scanning UI for triage.
         if: always() && hashFiles('psscriptanalyzer.sarif') != ''
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: psscriptanalyzer.sarif
           # `category` namespaces results so PSScriptAnalyzer findings don't
@@ -255,7 +255,7 @@ jobs:
       - name: Upload security-rule results to Code Scanning
         # Uploaded on every run, empty when clean, so a fixed alert closes.
         if: always() && hashFiles('psscriptanalyzer-security.sarif') != ''
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: psscriptanalyzer-security.sarif
           category: psscriptanalyzer-security
