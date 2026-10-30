@@ -229,6 +229,17 @@ param(
     })]
     [string] $DeviceResults,
 
+    # SCAP scan results (XCCDF / ARF from DISA SCC or OpenSCAP) to show beside
+    # the assessment as a separate, unscored view: a folder (searched for
+    # *.xml) or one file. Writes <base>-scap.html / .md; the view is also in
+    # the results JSON (ScapView). TenantPosture does not verify the results.
+    [ValidateScript({
+        if ($_ -match '\.\.[\\\/]') { throw 'Path traversal not allowed.' }
+        if (-not (Test-Path -LiteralPath $_)) { throw "SCAP results path not found: $_" }
+        return $true
+    })]
+    [string] $ScapResults,
+
     # Which framework(s) the REPORT presents. NRG assesses against NIST
     # SP 800-53 Rev 5, so that is the default here. This narrows the report,
     # never the assessment: every control still carries its CIS, SCuBA, CMMC,
@@ -1701,6 +1712,24 @@ if (Get-Command Get-TPIntuneChecklist -ErrorAction SilentlyContinue) {
     }
 }
 
+# ── SCAP results (endpoint STIG / CIS scans), a separate view ────────────────
+$scapView = $null
+if ($ScapResults -and (Get-Command Get-TPScapView -ErrorAction SilentlyContinue)) {
+    try {
+        $scapView = Get-TPScapView -Path ((Resolve-Path -LiteralPath $ScapResults).Path)
+        if ($scapView.Available) {
+            foreach ($sb in @($scapView.Benchmarks)) {
+                Write-Host "  [i] SCAP $($sb.Title): $($sb.HostsCurrent) of $($sb.HostsTotal) host(s) current; $($sb.Counts.Failing) rule(s) failing" -ForegroundColor DarkGray
+            }
+        } else {
+            Write-Host "  [!] SCAP results not used: $($scapView.Note)" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Warning "SCAP results view failed: $($_.Exception.Message)"
+        $reportMetadata['ScapViewError'] = $_.Exception.Message
+    }
+}
+
 # ── Publish reports ──────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "[-] Generating reports..." -ForegroundColor Cyan
@@ -1751,6 +1780,8 @@ $jsonPayload = @{
     CAChecklist         = $caChecklistView
     # Maester's Intune and endpoint checks.
     IntuneChecklist     = $intuneChecklistView
+    # Imported SCAP (XCCDF) endpoint results: a separate view, never scored.
+    ScapView            = $scapView
 } | ConvertTo-Json -Depth 12
 Set-TPSensitiveFileContent -Path $jsonPath -Content $jsonPayload
 Write-TPReportFile 'JSON' $jsonPath
@@ -2193,6 +2224,15 @@ if (-not $JsonOnly) {
                 Write-Host "  [!] Intune checklist not written: $($intuneChecklistView.Note)" -ForegroundColor Yellow
             }
         } catch { Write-Warning "Intune checklist publish failed: $($_.Exception.Message)" }
+    }
+
+    # SCAP results view, written whenever -ScapResults was given.
+    if ($null -ne $scapView -and $scapView.Available -and (Get-Command Publish-TPScapView -ErrorAction SilentlyContinue)) {
+        try {
+            $scapFiles = Publish-TPScapView -Model $scapView -OutputPath (Join-Path $OutputPath "$baseName-scap.html") -ToolVersion ([string]$reportMetadata.ToolVersion)
+            Write-TPReportFile 'SCAP results (html)' $scapFiles.Html
+            Write-TPReportFile 'SCAP results (md)' $scapFiles.Markdown
+        } catch { Write-Warning "SCAP results publish failed: $($_.Exception.Message)" }
     }
 
     # Multi-page report site (landing page, one page per workload, ActionPlan.csv):

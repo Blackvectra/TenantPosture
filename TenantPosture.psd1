@@ -209,6 +209,8 @@
         'Publish-TPCAChecklist',
         'Get-TPIntuneChecklist',
         'Publish-TPIntuneChecklist',
+        'Get-TPScapView',
+        'Publish-TPScapView',
         'Get-TPSecurityReviewReport',
         'Publish-TPSecurityReviewReport',
         'Get-TPHipaaClientReport',
