@@ -367,6 +367,8 @@ function Get-TPBaselineCompliance {
 
     $raw = if ($PSBoundParameters.ContainsKey('RawData')) { $RawData } elseif (Get-Command Get-TPRawData -ErrorAction SilentlyContinue) { Get-TPRawData } else { $null }
     $cov = if ($PSBoundParameters.ContainsKey('Coverage')) { $Coverage } elseif (Get-Command Get-TPCoverage -ErrorAction SilentlyContinue) { Get-TPCoverage } else { @{} }
+    # Kept under its own name: $cov is reused for a finding's device coverage below.
+    $runCoverage = $cov
     if ($null -eq $cov) { $cov = @{} }
     $rawPopulated = ($null -ne $raw) -and (@($raw.Keys).Count -gt 0)
 
@@ -644,13 +646,19 @@ function Get-TPBaselineCompliance {
                 # recorded in the log, or none in a complete read.
                 $ea = if ($exc) { Get-TPObjectField -Item $exc -Key 'EmergencyAccess' -Default $null } else { $null }
                 if ($ea -isnot [System.Collections.IDictionary]) { $ea = @{} }
-                try {
-                    $se = Get-TPSignInEffectiveness -Check ([string](Get-TPObjectField -Item $ev -Key 'Check' -Default '')) `
-                        -Scope ([string](Get-TPObjectField -Item $ev -Key 'Scope' -Default '')) -RawData $raw -EmergencyAccess $ea
-                    $r.EffectivenessState = $se.State; $r.EffectivenessDetail = $se.Detail
-                } catch {
+                $sinCov = if ($runCoverage -is [System.Collections.IDictionary] -and $runCoverage.Contains('AAD-SignInEvidence')) { $runCoverage['AAD-SignInEvidence'] } else { $null }
+                if ([string](Get-TPObjectField -Item $sinCov -Key 'Status' -Default '') -eq 'Skipped') {
                     $r.EffectivenessState = 'Unknown'
-                    $r.EffectivenessDetail = "The sign-in evidence could not be judged: $($_.Exception.Message)"
+                    $r.EffectivenessDetail = 'Sign-in evidence was skipped by the operator for this run (-SkipSignInEvidence), so effectiveness is not shown.'
+                } else {
+                    try {
+                        $se = Get-TPSignInEffectiveness -Check ([string](Get-TPObjectField -Item $ev -Key 'Check' -Default '')) `
+                            -Scope ([string](Get-TPObjectField -Item $ev -Key 'Scope' -Default '')) -RawData $raw -EmergencyAccess $ea
+                        $r.EffectivenessState = $se.State; $r.EffectivenessDetail = $se.Detail
+                    } catch {
+                        $r.EffectivenessState = 'Unknown'
+                        $r.EffectivenessDetail = "The sign-in evidence could not be judged: $($_.Exception.Message)"
+                    }
                 }
             } else {
                 $r.EffectivenessState = 'Unknown'

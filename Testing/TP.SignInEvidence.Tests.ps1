@@ -47,6 +47,7 @@ $row = {
 if ($s -eq 'Premium') { throw 'Authentication_RequestFromNonPremiumTenantOrB2CTenant: Neither tenant is B2C or tenant doesn''t have premium license' }
 if ($s -eq 'Denied')  { throw 'Response status code does not indicate success: 403 (Forbidden). Authorization_RequestDenied' }
 if ($f -like "*authenticationRequirement eq 'singleFactorAuthentication'*") {
+    if ($s -eq 'Slow') { Start-Sleep -Milliseconds 1500; return @{ value = @() } }
     if ($s -eq 'SingleFactor') { return @{ value = @(& $row 'alice@contoso.test' 'AAAA0000-0000-0000-0000-000000000001' 'Browser' '00000003-0000-0000-c000-000000000000') } }
     if ($s -eq 'Paged') { return @{ value = @(); '@odata.nextLink' = 'https://graph.microsoft.com/beta/auditLogs/signIns?$skiptoken=next' } }
     if ($s -eq 'SecondPageFails') {
@@ -173,6 +174,58 @@ return @{ value = @() }
     }
 
     Context 'Judgment' {
+        It 'reports progress after every read: 27 reads, the last one numbered 27/27' {
+            & $script:Mod { $script:SieScenario = 'Clean'; $script:SieUris = [System.Collections.Generic.List[string]]::new() }
+            $lines = [System.Collections.Generic.List[string]]::new()
+            Clear-TPState
+            $r = Invoke-TPCollectAADSignInEvidence -MaxPages 2 -Now ([datetime]'2026-10-26T00:00:00Z') -Progress { param($m) $lines.Add($m) }.GetNewClosure() 3>$null
+            $lines.Count | Should -Be 27
+            $lines[0] | Should -Match '^single-factor sign-ins: 0 event\(s\) \(1/27\)$'
+            $lines[-1] | Should -Match '\(27/27\)$'
+            $lines | Where-Object { $_ -match 'non-interactive' } | Should -Not -BeNullOrEmpty
+            $r.Data.TimeBudget.Reached | Should -BeFalse
+            $r.Data.TimeBudget.ReadsSkipped | Should -Be 0
+            # A progress callback that throws never breaks the collection.
+            Clear-TPState
+            $r2 = Invoke-TPCollectAADSignInEvidence -MaxPages 2 -Now ([datetime]'2026-10-26T00:00:00Z') -Progress { throw 'console gone' } 3>$null
+            $r2.Data.SectionStatus.LegacyAuth | Should -Be 'Collected'
+        }
+        It 'stops at its time budget: reads not made are skipped, the section fails with the reason, and nothing reads as clean' {
+            & $script:Mod { $script:SieScenario = 'Slow'; $script:SieUris = [System.Collections.Generic.List[string]]::new() }
+            Clear-TPState
+            $r = Invoke-TPCollectAADSignInEvidence -MaxPages 2 -Now ([datetime]'2026-10-26T00:00:00Z') -TimeBudgetSeconds 1 3>$null
+            $uris = & $script:Mod { $script:SieUris.ToArray() }
+            @($uris).Count | Should -Be 1 -Because 'only the single-factor read was made before the budget ran out'
+            $r.Success | Should -BeTrue
+            $r.Data.TimeBudget.Reached | Should -BeTrue
+            $r.Data.TimeBudget.ReadsSkipped | Should -Be 26
+            $r.Data.SectionStatus.SingleFactor | Should -Be 'Collected'
+            $r.Data.SectionStatus.LegacyAuth | Should -Be 'Failed'
+            ($r.Data.Errors -join ' ') | Should -Match 'time budget was reached'
+            (Get-TPCoverage)['AAD-SignInEvidence'].Note | Should -Match 'time budget'
+            $legacy = Judge 'LegacyAuthSuccess' 'All' @{ 'AAD-SignInEvidence' = $r }
+            $legacy.State | Should -Be 'Unknown'
+            $legacy.Detail | Should -Match "stopped at the collector's 0 ?\.?\d*-minute time budget"
+            # The read that did finish still answers.
+            (Judge 'SingleFactorSuccess' 'AllUsers' @{ 'AAD-SignInEvidence' = $r }).State | Should -Be 'Effective'
+        }
+        It 'the entry point skips the collector with -SkipSignInEvidence, records the skip, and hands the collector a progress line' {
+            $entry = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Invoke-TPAssessment.ps1') -Raw
+            $entry | Should -Match '\[switch\] \$SkipSignInEvidence'
+            $entry | Should -Match "if \(-not \`$SkipSignInEvidence\) \{\s+Invoke-TPCollectorStep 'Sign-in evidence \(30 days\)'"
+            $entry | Should -Match "@\{ On = \`$SkipSignInEvidence; Flag = '-SkipSignInEvidence'; Keys = @\('AAD-SignInEvidence'\) \}"
+            $entry | Should -Match "Parameters\.ContainsKey\('Progress'\)"
+        }
+        It 'checks the budget between pages, keeping the events already read' {
+            & $script:Mod {
+                $script:SieUris = [System.Collections.Generic.List[string]]::new(); $script:SieScenario = 'Clean'
+                $page = Read-TPSignInEvidencePages -Uri 'https://graph.microsoft.com/beta/auditLogs/signIns?x' -Deadline ([datetime]::UtcNow.AddSeconds(-1))
+                $page.BudgetReached | Should -BeTrue
+                $page.Pages | Should -Be 0
+                $page.Error | Should -Match 'time budget'
+                $script:SieUris.Count | Should -Be 0
+            }
+        }
         It 'is Effective only from a complete read with no bypass, and says what that does not prove' {
             $j = Judge 'LegacyAuthSuccess' 'All' (Evidence)
             $j.State | Should -Be 'Effective'
@@ -297,6 +350,20 @@ return @{ value = @() }
 
         It 'never lists the evidence key as a row dependency, so an unread log cannot change ObservedState' {
             @($script:Def.Controls.Values | Where-Object { @($_.RawDataKeys) -contains 'AAD-SignInEvidence' }).Count | Should -Be 0
+        }
+
+        It 'says the operator skipped the sign-in evidence when -SkipSignInEvidence was recorded' {
+            $finding = @{ ControlId = 'AAD-1.2'; State = 'Satisfied'; Detail = 'MFA required for all users.'; Timestamp = (Get-Date).ToUniversalTime().ToString('o') }
+            $raw = @{ 'AAD-CAPolicies' = @{ Success = $true; Data = @{} } }
+            $cov = @{ 'AAD-SignInEvidence' = @{ Status = 'Skipped'; Note = 'Skipped for this run with -SkipSignInEvidence.' } }
+            $c = & $script:Mod { param($f, $r, $d, $x, $v) Get-TPBaselineCompliance -Findings @($f) -TargetTier Minimum -Definition $d -Exceptions $x -RawData $r -Coverage $v } $finding $raw $script:Def $script:NoExc $cov
+            $row = @($c.Controls | Where-Object { $_.ControlId -eq 'AAD-1.2' })[0]
+            $row.EffectivenessState | Should -Be 'Unknown'
+            $row.EffectivenessDetail | Should -Match 'skipped by the operator'
+            $plain = & $script:Mod { param($f, $r, $d, $x) Get-TPBaselineCompliance -Findings @($f) -TargetTier Minimum -Definition $d -Exceptions $x -RawData $r -Coverage @{} } $finding $raw $script:Def $script:NoExc
+            $before = @($plain.Controls | Where-Object { $_.ControlId -eq 'AAD-1.2' })[0]
+            $row.ObservedState | Should -Be $before.ObservedState -Because 'the evidence key is not a row dependency, so skipping it never changes the observed state'
+            $row.ReasonCode | Should -Be $before.ReasonCode
         }
 
         It 'fills the effectiveness column and leaves the observed state alone' {

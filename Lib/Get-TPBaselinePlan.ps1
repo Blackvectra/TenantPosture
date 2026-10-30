@@ -76,6 +76,7 @@ function Get-TPWorkloadSkipMap {
         [ordered]@{ Flag = 'SkipIntune';        Keys = @('Intune-EndpointSecurity', 'Intune-DeviceCompliance', 'Intune-AppProtection') }
         [ordered]@{ Flag = 'SkipPowerPlatform'; Keys = @('PowerPlatform', 'CopilotStudio') }
         [ordered]@{ Flag = 'SkipDNS';           Keys = @('DNS-EmailRecords') }
+        [ordered]@{ Flag = 'SkipSignInEvidence'; Keys = @('AAD-SignInEvidence') }
     )
 }
 

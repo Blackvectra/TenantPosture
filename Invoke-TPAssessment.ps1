@@ -127,6 +127,10 @@ param(
     [switch] $SkipIntune,
     [switch] $SkipPowerPlatform,
     [switch] $SkipDNS,
+    # Skip the 30-day sign-in log reads (27 filtered beta queries). They only
+    # feed the baseline's effectiveness evidence, never a verdict; skipping is
+    # recorded, so those rows read "skipped by the operator".
+    [switch] $SkipSignInEvidence,
 
     # Run modes
     [switch] $NonInteractive,
@@ -1229,6 +1233,7 @@ if (-not $skipCollection) {
         @{ On = $SkipIntune;        Flag = '-SkipIntune';        Keys = @('Intune-EndpointSecurity', 'Intune-DeviceCompliance', 'Intune-AppProtection') }
         @{ On = $SkipPowerPlatform; Flag = '-SkipPowerPlatform'; Keys = @('PowerPlatform', 'CopilotStudio') }
         @{ On = $SkipDNS;           Flag = '-SkipDNS';           Keys = @('DNS-EmailRecords') }
+        @{ On = $SkipSignInEvidence; Flag = '-SkipSignInEvidence'; Keys = @('AAD-SignInEvidence') }
     )
     foreach ($sf in $skipFlags) {
         if (-not $sf.On) { continue }
@@ -1295,9 +1300,19 @@ if (-not $skipCollection) {
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $threw = $null
         $warn = [System.Collections.Generic.List[object]]::new()
+        # A collector that takes -Progress reports each step on this same line,
+        # so a long one is visibly moving. The collector never writes to the
+        # host itself; it calls this.
+        $progressLine = {
+            param([string] $Message)
+            $m = if ($Message.Length -gt 60) { $Message.Substring(0, 57) + '...' } else { $Message }
+            Write-Host (("`r  [*] {0,-50}{1,6:N0}s  {2}" -f $Label, $sw.Elapsed.TotalSeconds, $m).PadRight(130)) -NoNewline -ForegroundColor DarkGray
+        }.GetNewClosure()   # it runs from inside the module; bind $Label and $sw here
         foreach ($fn in $fns) {
+            $callParams = @{} + $Params
+            if ((Get-Command $fn).Parameters.ContainsKey('Progress') -and -not $callParams.ContainsKey('Progress')) { $callParams['Progress'] = $progressLine }
             try {
-                & $fn @Params -WarningAction SilentlyContinue -WarningVariable w | Out-Null
+                & $fn @callParams -WarningAction SilentlyContinue -WarningVariable w | Out-Null
                 foreach ($x in @($w)) { $warn.Add($x) }
             } catch { $threw = $_.Exception.Message.Split([char]10)[0].Trim() }
         }
@@ -1325,7 +1340,7 @@ if (-not $skipCollection) {
             $detail = $okNote
         }
         if ($detail.Length -gt 70) { $detail = $detail.Substring(0, 67) + '...' }
-        Write-Host ("`r  {0} {1,-50}{2,6:N1}s  {3}" -f $mark, $Label, $sw.Elapsed.TotalSeconds, $detail) -ForegroundColor $color
+        Write-Host (("`r  {0} {1,-50}{2,6:N1}s  {3}" -f $mark, $Label, $sw.Elapsed.TotalSeconds, $detail).PadRight(130)) -ForegroundColor $color
         foreach ($x in ($warn | Select-Object -Unique)) {
             $msg = "$x".Split([char]10)[0].Trim()
             if ($msg.Length -gt 100) { $msg = $msg.Substring(0, 97) + '...' }
@@ -1343,7 +1358,9 @@ if (-not $skipCollection) {
         Invoke-TPCollectorStep 'Guests, stale accounts, OAuth, licenses' 'Invoke-TPCollectAADInventory'
         Invoke-TPCollectorStep 'Application (app-only) permissions'     'Invoke-TPCollectAADAppPermissions'
         Invoke-TPCollectorStep 'Group creation and device settings'     'Invoke-TPCollectAADDirectorySettings'
-        Invoke-TPCollectorStep 'Sign-in evidence (30 days)'             'Invoke-TPCollectAADSignInEvidence'
+        if (-not $SkipSignInEvidence) {
+            Invoke-TPCollectorStep 'Sign-in evidence (30 days)'         'Invoke-TPCollectAADSignInEvidence'
+        }
         if (-not $SkipCAWhatIf) {
             # Microsoft's What If evaluation for a sample of users and the approved
             # break-glass accounts (Maester MT.1033 / MT.1034). Read-only: the
