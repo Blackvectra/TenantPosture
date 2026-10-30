@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[MCP] The MCP server follows the MCP builder best practices.**
+  - **Names.** Tools are named `tenantposture_<name>`. The old names still work in `tools/call` but are no longer
+    listed.
+  - **Annotations.** Every tool is marked read-only, idempotent and closed-world.
+  - **Paging.** The list tools page with `offset` and return `hasMore` and `nextOffset`.
+  - **Markdown.** Every tool takes `response_format: markdown` for a readable layout. Tenant text is escaped, and
+    structured output stays JSON.
+  - **Descriptions and errors.** Tool descriptions say when to use each tool, list outputs declare their row shape,
+    and errors say what to do next.
+  - **Evaluation.** Ten evaluation questions over a fixed fixture are in `tools/mcp-eval/`, and the test suite checks
+    every answer through the real server.
+
 - **[Security] Audit of the Conditional Access, Intune and security review additions.** Seven fixes, each pinned by a
   test:
   - **What If responses.** A What If response with no `value` collection, a result row with no `policyApplies`, or an

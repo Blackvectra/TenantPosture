@@ -16,7 +16,7 @@ client; the client then starts it as a child process when it needs it.
 - **It never writes.** No file, no folder, no report, no exception record. The results
   files are opened read-only.
 - **It never takes a path.** A run is addressed by `(folder, id)` exactly as the web GUI
-  addresses it: `list_runs` returns both, and `Lib/Resolve-TPWebRunPath.ps1` (the same
+  addresses it: `tenantposture_list_runs` returns both, and `Lib/Resolve-TPWebRunPath.ps1` (the same
   guard the GUI uses, `-Kind Results`) is the only place an argument becomes a path.
   Segments are an ASCII whitelist; `..`, separators, absolute paths and a real folder
   named `_flat` are refused.
@@ -89,12 +89,12 @@ The tools keep the tool's distinctions:
   no verdict was reached, and every answer that lists findings says so.
 - A value the results file does not record is reported as not recorded (an older run has
   no maturity label, no baseline view, no coverage), never recomputed or guessed. The one
-  exception is stated in its answer: `get_scope` computes the scope section from the
+  exception is stated in its answer: `tenantposture_get_scope` computes the scope section from the
   results file the way a `-FromResults` republish does, because results files do not
   store it, and names what it used and which control catalog.
-- `compare_runs` never calls a gap that became `NotApplicable` or `Error` resolved; it is
+- `tenantposture_compare_runs` never calls a gap that became `NotApplicable` or `Error` resolved; it is
   `VerdictChanged`.
-- `get_change_impact` returns the accounts a risky change would affect only as far as the
+- `tenantposture_get_change_impact` returns the accounts a risky change would affect only as far as the
   run read them: a block that is `NotRead`, `NotEstablished` or not `Complete` is not a
   list of everyone affected, and `NoneFound` never means nothing can break.
 - Coverage lines are labeled as not scores, and no text the server writes says
@@ -165,25 +165,71 @@ revision specifies for dual-era clients, falls back to `initialize`.
 
 Bounds: a results file larger than 256 MB is not read; long strings are cut with a
 `[truncated: N more characters]` marker; lists are capped with a
-`[truncated: N more items not shown]` entry; list tools return `total`, `returned` and
-`truncated`; an answer over about one million characters is replaced with an error asking
-for a narrower query.
+`[truncated: N more items not shown]` entry; an answer over about one million characters
+is replaced with an error that says how to narrow the query.
+
+## Tool design
+
+The server follows the MCP builder best practices:
+
+- **Names.** Every tool is `tenantposture_<verb>_<noun>`, so it cannot collide with
+  another server's `list_runs`. The names from before the prefix (`list_runs`,
+  `get_finding`, ...) are still accepted by `tools/call`, so an existing client
+  configuration or saved prompt keeps working, but `tools/list` announces only the
+  prefixed names.
+- **Annotations.** Every tool declares `readOnlyHint: true`, `destructiveHint: false`,
+  `idempotentHint: true` and `openWorldHint: false`. They are hints to the client, not
+  the guarantee: the guarantee is the static test that forbids every network, sign-in,
+  tenant, write and process command in the server's files.
+- **Paging.** `tenantposture_list_runs`, `tenantposture_list_findings` and
+  `tenantposture_get_baseline` take `limit` and `offset` and return `total`,
+  `returned`, `offset`, `hasMore` and `nextOffset` (`null` on the last page);
+  `truncated` is kept and equals `hasMore`. Follow `nextOffset` while `hasMore` is true.
+- **Response format.** Every tool takes `response_format`: `json` (the default; the text
+  is the JSON answer, as before) or `markdown` (the same answer laid out as headings,
+  lists and tables for reading, `Mcp/Format-TPMcpMarkdown.ps1`). The Markdown is built
+  from the answer after pseudonymization and capping, and every key and value goes
+  through `ConvertTo-TPMarkdownSafe`, so tenant text can form no link, image, code span,
+  heading or HTML element. `structuredContent` is JSON either way.
+- **Schemas.** Inputs are validated against the declared schema (unknown arguments,
+  types, enums, bounds, required); list outputs declare their row shape.
+- **Errors.** A tool failure says what to do next (call `tenantposture_list_runs` and
+  copy the folder and id; the shape a control ID takes; which filter or offset narrows
+  an answer that is too large) and never echoes the argument or a path.
+
+## Evaluation
+
+`tools/mcp-eval/tenantposture-eval.xml` holds ten questions in the MCP builder's
+evaluation format, each needing several tool calls (the earliest and latest runs of one
+tenant, follow-up calls from one answer to the catalog, paging through 70 findings).
+They are asked against the fixed output folder `tools/mcp-eval/New-TPMcpEvalFixture.ps1`
+builds (three made-up tenants, five runs), so the answers never change.
+`TP.McpServer.Tests.ps1` builds that folder, walks each question's path through the real
+server and fails if an answer stops being true. To run the questions against a model,
+build the fixture and register the server with `-OutputRoot` pointing at it:
+
+```powershell
+$out = ./tools/mcp-eval/New-TPMcpEvalFixture.ps1 -Path ./mcp-eval-work
+claude mcp add tenantposture-eval -- pwsh -NoProfile -NonInteractive -File ./Start-TPMcpServer.ps1 -OutputRoot $out
+```
 
 ## Tools
 
-All tools are read-only (`readOnlyHint: true`, `openWorldHint: false`).
+All tools are read-only (`readOnlyHint: true`, `openWorldHint: false`). Every tool also
+takes `response_format?` (`json` or `markdown`), and the three list tools take
+`offset?` and return the paging fields above.
 
 | Tool | Input | Returns |
 |---|---|---|
-| `list_runs` | `tenant?` (label contains, case-insensitive), `limit?` (default 50, max 200) | `runs[]`: `tenant`, `folder`, `id`, `date` (and `dateSource`), `toolVersion`, `controlCount`, `findingCount`, `baselineRecorded`; `total`, `returned`, `truncated` |
-| `get_run_summary` | `folder`, `id` | `run` (domain, dates, tool version, quick scan, declared EDR or awareness product, baseline version and tier), `maturity` (as recorded, or `recorded: false`), `findingInstances` (by state, by severity), `controls` (worst state per control, open by severity), `baseline` (counts, `evidenceCoverage`, `effectivenessCoverage`), `license` (tier label and flags from the run's SKUs, or `read: false`), `notes` |
-| `list_findings` | `folder`, `id`, `state?`, `severity?`, `workload?` (ID prefix), `controlId?`, `limit?` (default 50, max 200) | `findings[]`: `controlId`, `title`, `state`, `severity`, `workload`, `instance`, short `detail`; `total`, `returned`, `truncated`, `note` |
-| `get_finding` | `folder`, `id`, `controlId` | every instance for the control (state, detail, current and required value, remediation, framework citations, affected objects capped at 50, coverage), `worstState`, `note`; no finding is stated as not a pass |
-| `get_control` | `controlId` | `control` (from `Config/controls.json`), `benchmarks` (`Get-TPBenchmarkMapping`: items, or the reason it is unmapped), `operationalImpact` (`Config/operational-impact.json`, or "Operational impact not documented", never "no impact"), `baseline` (its NRG Security Baseline row, or assessment-only) |
-| `compare_runs` | `folderA`, `idA`, `folderB`, `idB` (A before, B after) | `runA`, `runB`, `changed[]` (before, after, `Improved` / `Regressed` / `VerdictChanged`), `newGaps[]`, `resolvedGaps[]`, `onlyInA[]`, `onlyInB[]`, `unchangedCount`, `notes`. Refused unless both runs carry the same tenant ID (the guard `Publish-TPDeltaReport` applies); two different tenants are compared with `Compare-TPTenantBaseline.ps1`, offline |
-| `get_baseline` | `folder`, `id`, `status?` (`Satisfied`, `Failed`, `NotVerified`, `NotApplicable`, `LicenseBlocked`, `ApprovedException`), `limit?` (default 100, max 200) | the recorded `BaselineCompliance`: version, tier, summary, both coverage lines, `rows[]` (`controlId`, `title`, `tier`, `observedState`, `baselineStatus`, `constraint`, `disposition`, `effectivenessState`, `reasonCode`, `reason`), or `recorded: false` |
-| `get_scope` | `folder`, `id` | `computed`, `basis`, control counts, `buckets` (`CollectionIncomplete`, `NoResult`, `Errors`, `StandardNotApproved`, `SkippedByOperator`, `NotEvaluatedThisMode`, `LicenseBlocked`, `ThirdPartyAttested`, `NoProgrammaticCheck`, `NotApplicableToTenant`, each with its controls and reasons), `coverageIssues`, `limitations` |
-| `get_change_impact` | `folder`, `id`, `list?` (`implementNow`, `needsPlanning`, `couldBreakAccounts`, `licenseDecision`), `controlId?` | the change-impact view the run recorded: `summary`, the four lists (each risky change with `Why`, its `Evidence` blocks naming accounts, each block's `Status` `Named` / `NoneFound` / `NotEstablished` / `NotRead` and `Complete`, `Unseen`, and its `EmergencyAccess` reminder), `emergencyAccess`, `scopeNotice`, `note`; `recorded: false` for a run made before the view existed (not recomputed; republish with `-FromResults`). Account names are pseudonymized like every other identity |
+| `tenantposture_list_runs` | `tenant?` (label contains, case-insensitive), `limit?` (default 50, max 200) | `runs[]`: `tenant`, `folder`, `id`, `date` (and `dateSource`), `toolVersion`, `controlCount`, `findingCount`, `baselineRecorded`; `total`, `returned`, `truncated` |
+| `tenantposture_get_run_summary` | `folder`, `id` | `run` (domain, dates, tool version, quick scan, declared EDR or awareness product, baseline version and tier), `maturity` (as recorded, or `recorded: false`), `findingInstances` (by state, by severity), `controls` (worst state per control, open by severity), `baseline` (counts, `evidenceCoverage`, `effectivenessCoverage`), `license` (tier label and flags from the run's SKUs, or `read: false`), `notes` |
+| `tenantposture_list_findings` | `folder`, `id`, `state?`, `severity?`, `workload?` (ID prefix), `controlId?`, `limit?` (default 50, max 200) | `findings[]`: `controlId`, `title`, `state`, `severity`, `workload`, `instance`, short `detail`; `total`, `returned`, `truncated`, `note` |
+| `tenantposture_get_finding` | `folder`, `id`, `controlId` | every instance for the control (state, detail, current and required value, remediation, framework citations, affected objects capped at 50, coverage), `worstState`, `note`; no finding is stated as not a pass |
+| `tenantposture_get_control` | `controlId` | `control` (from `Config/controls.json`), `benchmarks` (`Get-TPBenchmarkMapping`: items, or the reason it is unmapped), `operationalImpact` (`Config/operational-impact.json`, or "Operational impact not documented", never "no impact"), `baseline` (its NRG Security Baseline row, or assessment-only) |
+| `tenantposture_compare_runs` | `folderA`, `idA`, `folderB`, `idB` (A before, B after) | `runA`, `runB`, `changed[]` (before, after, `Improved` / `Regressed` / `VerdictChanged`), `newGaps[]`, `resolvedGaps[]`, `onlyInA[]`, `onlyInB[]`, `unchangedCount`, `notes`. Refused unless both runs carry the same tenant ID (the guard `Publish-TPDeltaReport` applies); two different tenants are compared with `Compare-TPTenantBaseline.ps1`, offline |
+| `tenantposture_get_baseline` | `folder`, `id`, `status?` (`Satisfied`, `Failed`, `NotVerified`, `NotApplicable`, `LicenseBlocked`, `ApprovedException`), `limit?` (default 100, max 200) | the recorded `BaselineCompliance`: version, tier, summary, both coverage lines, `rows[]` (`controlId`, `title`, `tier`, `observedState`, `baselineStatus`, `constraint`, `disposition`, `effectivenessState`, `reasonCode`, `reason`), or `recorded: false` |
+| `tenantposture_get_scope` | `folder`, `id` | `computed`, `basis`, control counts, `buckets` (`CollectionIncomplete`, `NoResult`, `Errors`, `StandardNotApproved`, `SkippedByOperator`, `NotEvaluatedThisMode`, `LicenseBlocked`, `ThirdPartyAttested`, `NoProgrammaticCheck`, `NotApplicableToTenant`, each with its controls and reasons), `coverageIssues`, `limitations` |
+| `tenantposture_get_change_impact` | `folder`, `id`, `list?` (`implementNow`, `needsPlanning`, `couldBreakAccounts`, `licenseDecision`), `controlId?` | the change-impact view the run recorded: `summary`, the four lists (each risky change with `Why`, its `Evidence` blocks naming accounts, each block's `Status` `Named` / `NoneFound` / `NotEstablished` / `NotRead` and `Complete`, `Unseen`, and its `EmergencyAccess` reminder), `emergencyAccess`, `scopeNotice`, `note`; `recorded: false` for a run made before the view existed (not recomputed; republish with `-FromResults`). Account names are pseudonymized like every other identity |
 
 ## Files
 
@@ -194,5 +240,7 @@ All tools are read-only (`readOnlyHint: true`, `openWorldHint: false`).
 | `Mcp/Invoke-TPMcpTool.ps1` | Tool definitions (input and output schemas), argument validation, the nine tools. |
 | `Mcp/Read-TPMcpRun.ps1` | Bounded results-file reader (`JsonDocument`; only the parts listed above are materialized). |
 | `Mcp/Protect-TPMcpOutput.ps1` | Pseudonymization, format-character stripping, truncation. |
+| `Mcp/Format-TPMcpMarkdown.ps1` | The Markdown layout for `response_format: markdown`. |
+| `tools/mcp-eval/` | The evaluation questions and the fixture they are asked against. |
 | `Lib/Resolve-TPWebRunPath.ps1` | The path guard, shared with the web GUI (`-Kind Results`). |
 | `Lib/Get-TPWebRunIndex.ps1` | The run listing, shared with the web GUI. |

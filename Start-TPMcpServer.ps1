@@ -81,6 +81,7 @@ try {
     . (Join-Path $scriptDir 'Mcp' 'Protect-TPMcpOutput.ps1')
     . (Join-Path $scriptDir 'Mcp' 'Read-TPMcpRun.ps1')
     . (Join-Path $scriptDir 'Mcp' 'Invoke-TPMcpTool.ps1')
+    . (Join-Path $scriptDir 'Mcp' 'Format-TPMcpMarkdown.ps1')
     . (Join-Path $scriptDir 'Mcp' 'Invoke-TPMcpProtocol.ps1')
 } catch {
     [Console]::Error.WriteLine("tenantposture-mcp: could not start: $($_.Exception.Message)")
