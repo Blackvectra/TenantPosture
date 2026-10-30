@@ -208,9 +208,10 @@ added `latestForTenant`, named the earlier and later run in `tenantposture_compa
 pointed `tenantposture_get_control` at the effort class, and say in `response_format`
 that a client which displays `structuredContent` shows JSON.
 Rerun the same day after those changes: 10 of 10, four to six tool calls per question.
-The remaining suggestions (a maturity score in the run listing, a count-by-workload
-option, the effort class inside the change-impact view) save a call each and are not
-built.
+The run listing then gained each run's recorded maturity score and label, so a
+cross-tenant comparison needs no summary call per run. The other suggestions (a
+count-by-workload option, the effort class inside the change-impact view) save a call
+each and are not built.
 
 `tools/mcp-eval/tenantposture-eval.xml` holds ten questions in the MCP builder's
 evaluation format, each needing several tool calls (the earliest and latest runs of one
@@ -234,7 +235,7 @@ takes `response_format?` (`json` or `markdown`), and the three list tools take
 
 | Tool | Input | Returns |
 |---|---|---|
-| `tenantposture_list_runs` | `tenant?` (label contains, case-insensitive), `limit?` (default 50, max 200) | `runs[]`: `tenant`, `folder`, `id`, `date` (and `dateSource`), `toolVersion`, `controlCount`, `findingCount`, `baselineRecorded`; `total`, `returned`, `truncated`; `latestForTenant` marks each tenant label's newest run (by recorded assessment time; by file date only when no run of that tenant records one) |
+| `tenantposture_list_runs` | `tenant?` (label contains, case-insensitive), `limit?` (default 50, max 200) | `runs[]`: `tenant`, `folder`, `id`, `date` (and `dateSource`), `toolVersion`, `controlCount`, `findingCount`, `baselineRecorded`; `total`, `returned`, `truncated`; `latestForTenant` marks each tenant label's newest run (by recorded assessment time; by file date only when no run of that tenant records one); `maturityScore` and `maturityLabel` as the run recorded them (`null` and empty when it recorded none; never recomputed) |
 | `tenantposture_get_run_summary` | `folder`, `id` | `run` (domain, dates, tool version, quick scan, declared EDR or awareness product, baseline version and tier), `maturity` (as recorded, or `recorded: false`), `findingInstances` (by state, by severity), `controls` (worst state per control, open by severity), `baseline` (counts, `evidenceCoverage`, `effectivenessCoverage`), `license` (tier label and flags from the run's SKUs, or `read: false`), `notes` |
 | `tenantposture_list_findings` | `folder`, `id`, `state?`, `severity?`, `workload?` (ID prefix), `controlId?`, `limit?` (default 50, max 200) | `findings[]`: `controlId`, `title`, `state`, `severity`, `workload`, `instance`, short `detail`; `total`, `returned`, `truncated`, `note` |
 | `tenantposture_get_finding` | `folder`, `id`, `controlId` | every instance for the control (state, detail, current and required value, remediation, framework citations, affected objects capped at 50, coverage), `worstState`, `note`; no finding is stated as not a pass; `baseline`: the control's NRG Security Baseline row as the run recorded it (tier, observed state, status, `reasonCode`, `reason`), or `recorded: false` / `inBaseline: false` |
