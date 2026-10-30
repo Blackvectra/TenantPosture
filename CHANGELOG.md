@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **[MCP] Changes from the first evaluation run (9 of 10 answered).**
+  - **`tenantposture_get_finding`.** Returns the control's NRG Security Baseline row, including its reason code. The
+    missed question needed that reason code.
+  - **`tenantposture_get_scope`.** Takes `bucket` and `controlId` filters instead of always listing every control.
+  - **`tenantposture_list_runs`.** Marks each tenant's newest run.
+  - **Clearer descriptions.**
+    - `tenantposture_compare_runs` says which run is earlier.
+    - `tenantposture_get_control` points to the effort class.
+    - `response_format` explains what a client that shows structured output displays.
+
 - **[MCP] The MCP server follows the MCP builder best practices.**
   - **Names.** Tools are named `tenantposture_<name>`. The old names still work in `tools/call` but are no longer
     listed.
