@@ -14,6 +14,7 @@
   - **`-SkipSignInEvidence`.** Skips the collector entirely. The skip is recorded like the other `-Skip*` flags, and
     the effectiveness rows say the operator skipped it. Nothing else in the run changes, because this evidence never
     sets a verdict.
+
 - **[Security] Gitleaks no longer flags the Power Fx reference in the Copilot Studio test fixture.** The Copilot Studio
   tests check that the header value `=Env.cr1_ApiKeyFromKeyVault` (a reference to an environment variable) is not
   reported as a hard-coded key. Gitleaks' `generic-api-key` rule reported that literal twice in history. `.gitleaks.toml`
