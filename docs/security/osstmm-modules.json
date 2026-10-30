@@ -1,0 +1,89 @@
+{
+  "methodology": "OSSTMM 3.02 (ISECOM)",
+  "note": "Status of each OSSTMM 3 test module for TenantPosture's own attack surface, in our words. Module numbers and names follow OSSTMM 3 section 6.2; no text of the manual is reproduced. Statuses: Complete (every task the module asks of this scope is covered by a named check), Partial (some are; Gap says which are not), NotTested (nothing covers it; Gap says why), NotApplicable (the module has no target in this scope; Gap says why). Read by tools/New-TPSecurityTestSummary.ps1 and pinned by Testing/TP.OsstmmAlignment.Tests.ps1.",
+  "scope": {
+    "targets": [
+      "The -Web GUI: Lib/Start-TPWebServer.ps1 on 127.0.0.1, served over the data-only fixture (tools/New-TPWebScanFixture.ps1).",
+      "The MCP server: Start-TPMcpServer.ps1 and Mcp/, JSON-RPC over standard input and output, started by a local AI client.",
+      "The repository and its supply chain: the PowerShell source, the CI workflows, the pinned modules and scanner images."
+    ],
+    "excluded": [
+      "Microsoft 365 tenants: the tool assesses them and never probes them; no scan here targets one.",
+      "POST /api/scan under attack payloads: an accepted request starts a real assessment against the domain in its body. Its input validation is tested by Testing/TP.WebServer.Tests.ps1."
+    ],
+    "index": "Routes enumerated from the server's own Add-PodeRoute registrations (parsed, not guessed), plus ZAP's spider and the requestor seeds in .zap/active-scan.yaml; MCP tools from Get-TPMcpToolDefinitions.",
+    "channels": {
+      "DataNetworks": "Applies: the GUI is an HTTP service on loopback and the MCP server a JSON-RPC process on standard input and output.",
+      "Human": "Not applicable: the tool has no human-operated process to test; operator behavior is outside it.",
+      "Physical": "Not applicable: the tool runs on the operator's workstation, whose physical security is the operator's.",
+      "Wireless": "Not applicable: the tool opens no wireless interface and listens on loopback only.",
+      "Telecommunications": "Not applicable: the tool uses no telephony or telecommunication service."
+    },
+    "vectors": [
+      "A local process or a web page in the operator's browser, to the loopback HTTP server (Host, Origin and Sec-Fetch-Site decide which is let in).",
+      "A local AI client, to the MCP server over standard input and output.",
+      "A results, SCAP, ScubaGear or endpoint result file from another machine, to the parsers that read it.",
+      "A dependency or scanner image, to CI through the pinned versions and digests."
+    ],
+    "testType": "Tandem: the analyst and the target know every detail in advance (OSSTMM 3 section 2.3). The tests are written by the people who wrote the code and run in CI on every change, so they measure the controls thoroughly but never the target's preparedness for an unknown tester."
+  },
+  "modules": [
+    { "Id": "A.1", "Name": "Posture Review", "Status": "Complete",
+      "Evidence": ["SECURITY.md", "docs/security/THREAT-MODEL.md", "CLAUDE.md (Security Requirements)", "this file's scope block"],
+      "Gap": "" },
+    { "Id": "A.2", "Name": "Logistics", "Status": "Complete",
+      "Evidence": ["Fixture data only (tools/New-TPWebScanFixture.ps1)", "POST /api/scan excluded and the output folder compared before and after (tools/Test-TPZapActiveScan.ps1)", "ZAP rule and scan time caps in .zap/active-scan.yaml", "Fuzz seed and iteration count in tools/TPFuzz.ps1"],
+      "Gap": "" },
+    { "Id": "A.3", "Name": "Active Detection Verification", "Status": "NotApplicable",
+      "Evidence": ["Lib/Start-TPWebServer.ps1"],
+      "Gap": "Nothing stands in front of the server to detect or block a test: no rate limiting, no lockout, no intrusion detection. Every test reaches the server directly, so there is no interference to account for." },
+    { "Id": "B.4", "Name": "Visibility Audit", "Status": "Complete",
+      "Evidence": ["One endpoint, bound to 127.0.0.1 in Start-TPWebServer (Add-PodeEndpoint)", "The MCP server opens no socket (Testing/TP.McpServer.Tests.ps1 forbids network commands)"],
+      "Gap": "" },
+    { "Id": "B.5", "Name": "Access Verification", "Status": "Complete",
+      "Evidence": ["Every Add-PodeRoute registration counted by tools/New-TPSecurityTestSummary.ps1", "ZAP baseline and active scans over every route", "Testing/TP.WebServer.Tests.ps1 (routes, methods, the wildcard answer)"],
+      "Gap": "" },
+    { "Id": "B.6", "Name": "Trust Verification", "Status": "Partial",
+      "Evidence": ["Lib/Test-TPWebRequestAllowed.ps1 judged by Testing/TP.WebServer.Tests.ps1 (Host rebinding, forged Origin, cross-site fetch)", "ZAP active scan with request headers as an input vector"],
+      "Gap": "Any process on the operator's own machine is trusted by design: the request policy defends against a web page, not local code. That trust is stated in CLAUDE.md and is not tested as a boundary." },
+    { "Id": "B.7", "Name": "Control Verification", "Status": "Partial",
+      "Evidence": ["Confidentiality: Cache-Control no-store, Cross-Origin-Resource-Policy and the CSP, pinned by Testing/TP.WebServer.Tests.ps1 and checked by ZAP", "Privacy: MCP pseudonymization and the never-returned fields, Testing/TP.McpServer.Tests.ps1", "Integrity: the path guard (Lib/Resolve-TPWebRunPath.ps1) and the fuzzer's inside-the-root check"],
+      "Gap": "Non-repudiation is not provided: the GUI and the MCP server keep no record of who asked for what, so there is nothing to test." },
+    { "Id": "C.8", "Name": "Process Verification", "Status": "Partial",
+      "Evidence": ["Modules installed by exact version and SHA-256 (tools/Install-TPPinnedModule.ps1)", "Scanner images pinned by digest and moved by Dependabot with a 7-day cooldown", "Every accepted scan finding carries its reason (.zap/rules.tsv, tools/injection-baseline.json, .trivyignore.yaml)"],
+      "Gap": "Whether each review recorded in those files was actually done is a human process the checks cannot see." },
+    { "Id": "C.9", "Name": "Configuration Verification", "Status": "Complete",
+      "Evidence": ["PSScriptAnalyzer security rules and InjectionHunter (tools/Invoke-TPSecurityAnalysis.ps1)", "CodeQL and zizmor over the workflows", "Trivy over the OSS Scanner Dockerfile", "The server's headers, binding and policy pinned by Testing/TP.WebServer.Tests.ps1"],
+      "Gap": "" },
+    { "Id": "C.10", "Name": "Property Validation", "Status": "Partial",
+      "Evidence": ["SBOM on release (docs/security/SBOM.md)", "No benchmark or methodology text committed (CIS, OSSTMM): only numbers and our own words"],
+      "Gap": "The licenses of third-party modules are recorded in the SBOM but not checked against a policy by any test." },
+    { "Id": "C.11", "Name": "Segregation Review", "Status": "Partial",
+      "Evidence": ["The MCP reader never returns RawData, Exceptions, TenantId or the operator (Testing/TP.McpServer.Tests.ps1)", "Parsers refuse without echoing input (Testing/TP.Fuzz.Tests.ps1)", "Results written with a protected DACL (Testing/TP.SensitiveFileWriter.Tests.ps1)"],
+      "Gap": "The GUI serves the operator's own reports, which name accounts by design; who may open the GUI is decided by who can reach loopback on that machine." },
+    { "Id": "C.12", "Name": "Exposure Verification", "Status": "Partial",
+      "Evidence": ["Gitleaks and TruffleHog over the history", "ZAP information-disclosure rules", "Fixed error sentences that name no path (Lib/Get-TPWebApiError.ps1)"],
+      "Gap": "Public sources about the tool (the public repository, issues, release notes) are not searched for exposed detail." },
+    { "Id": "C.13", "Name": "Competitive Intelligence Scouting", "Status": "NotApplicable",
+      "Evidence": [],
+      "Gap": "The scope is an application, not an organization: there is no business information about a target owner to scout." },
+    { "Id": "D.14", "Name": "Quarantine Verification", "Status": "Partial",
+      "Evidence": ["The request policy's allow lists (Host, method, content type) and the path guard's ASCII allow list, tested by Testing/TP.WebServer.Tests.ps1 and attacked by ZAP"],
+      "Gap": "Allow lists are tested for requests only; nothing tests what a refused request leaves behind, because the server keeps no state for one." },
+    { "Id": "D.15", "Name": "Privileges Audit", "Status": "Partial",
+      "Evidence": ["Read-only contract: Graph GET only and no write cmdlet in module-loaded files (Testing/TP.ClientRegistry.Tests.ps1, Testing/TP.DistributionLists.Tests.ps1)", "The MCP entry point and Mcp/ statically forbidden from sign-in, tenant, write and process commands"],
+      "Gap": "The GUI and the MCP server run as the operator with the operator's file access; no test tries to escalate from a request to that account's other rights." },
+    { "Id": "D.16", "Name": "Survivability Validation", "Status": "NotTested",
+      "Evidence": [],
+      "Gap": "No denial-of-service or load test is run. The active scan's record that the server answered after its last request is an observation, not a resilience test, and the fuzzer's 10-second case limit covers parser hangs only." },
+    { "Id": "D.17", "Name": "Alert and Log Review", "Status": "NotTested",
+      "Evidence": [],
+      "Gap": "The GUI and the MCP server keep no request log and raise no alert, so no test can be verified from the target's own trail. Each scan's evidence is the scanner's report." }
+  ],
+  "errorTypes": [
+    { "Type": "False Negative", "AppliesTo": "Every scan", "Note": "A rule that finds nothing is not proof that nothing is there; the baseline scan is passive and the active scan tries known payloads only." },
+    { "Type": "Constraint", "AppliesTo": "ZAP active scan", "Note": "Each rule stops at its time cap (.zap/active-scan.yaml), and POST /api/scan is not attacked at all." },
+    { "Type": "Sampling Error", "AppliesTo": "Fuzzer", "Note": "Each run tries a fixed number of seeded cases per parser; other inputs exist. TP_FUZZ_ITERATIONS raises the count for a longer run." },
+    { "Type": "Gray Positive", "AppliesTo": "ZAP active scan", "Note": "The server answers every unknown path and method with the same fixed 404, so a scanner reading only status codes cannot tell a missing route from a refused one." }
+  ]
+}

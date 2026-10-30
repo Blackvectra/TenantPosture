@@ -244,6 +244,16 @@ jobs:
         run: |
           ./tools/Test-TPZapActiveScan.ps1 -ReportPath zap-active/zap-active-report.json -Target 'http://127.0.0.1:8765' -OutputRoot $env:TP_SCAN_OUTPUT -Before "$env:RUNNER_TEMP/output-before.txt"
 
+      - name: Write the security test summary (OSSTMM 3 layout)
+        # The facts a STAR asks for, from docs/security/osstmm-modules.json, the
+        # server's own routes and this scan's report. Not an ISECOM STAR; the
+        # summary says so (docs/security/OSSTMM-ALIGNMENT.md).
+        if: always() && hashFiles('zap-active/zap-active-report.json') != ''
+        shell: pwsh
+        run: |
+          ./tools/New-TPSecurityTestSummary.ps1 -ZapReport zap-active/zap-active-report.json -OutputPath zap-active/zap-active-report.summary.md -RunLabel "$env:GITHUB_SHA ($env:GITHUB_EVENT_NAME)"
+          Get-Content -LiteralPath zap-active/zap-active-report.summary.md -Raw | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
       - name: Upload the ZAP active-scan reports
         if: always() && hashFiles('zap-active/zap-active-report.*') != ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
