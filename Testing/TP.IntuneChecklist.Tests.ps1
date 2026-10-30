@@ -309,6 +309,26 @@ Describe 'Collector reads' {
             } finally { Remove-Item function:Invoke-TPGraphRequest -ErrorAction SilentlyContinue; Clear-TPState }
         }
     }
+    It 'reads the MDM authority from the organization with no $select, v1.0 first, then beta (2026-10-30 live run)' {
+        & $script:Mod {
+            Clear-TPState
+            $script:TPTestUris = [System.Collections.Generic.List[string]]::new()
+            function script:Invoke-TPGraphRequest { param($Method, $Uri, $Headers, $OutputType)
+                $script:TPTestUris.Add($Uri)
+                if ($Uri -match 'organization\?\$select') { throw 'Response status code does not indicate success: BadRequest (Bad Request).' }
+                if ($Uri -match '/v1\.0/organization$') { return @{ value = @(@{ id = 'o1'; displayName = 'Contoso' }) } }
+                if ($Uri -match '/beta/organization$') { return @{ value = @(@{ id = 'o1'; mobileDeviceManagementAuthority = 'intune' }) } }
+                return @{ value = @() }
+            }
+            try {
+                Invoke-TPCollectIntuneDeviceCompliance
+                $d = (Get-TPRawData -Key 'Intune-DeviceCompliance').Data
+                $d.SectionStatus.MdmAuthority | Should -Be 'Collected'
+                $d.MdmAuthority | Should -Be 'intune'
+                @($script:TPTestUris | Where-Object { $_ -match 'organization' -and $_ -match '\$select' }).Count | Should -Be 0
+            } finally { Remove-Item function:Invoke-TPGraphRequest -ErrorAction SilentlyContinue; Clear-TPState }
+        }
+    }
 }
 
 Describe 'Entry point wiring' {

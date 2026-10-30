@@ -490,10 +490,19 @@ function Invoke-TPCollectIntuneDeviceCompliance {
             if (Get-Command Register-TPException -ErrorAction SilentlyContinue) { Register-TPException -Source 'Intune-DeviceCompliance-CleanupRules' -Message $_.Exception.Message }
         }
         try {
-            $org = Invoke-TPGraphRequest -Method GET -Uri 'https://graph.microsoft.com/beta/organization?$select=id,mobileDeviceManagementAuthority' -ErrorAction Stop
-            $first = @(Get-TPObjectField -Item $org -Key 'value' -Default @() | Where-Object { $null -ne $_ } | Select-Object -First 1)
-            $result.Data.MdmAuthority = if ($first.Count) { [string](Get-TPObjectField -Item $first[0] -Key 'mobileDeviceManagementAuthority' -Default '') } else { '' }
-            $result.Data.SectionStatus['MdmAuthority'] = if ($result.Data.MdmAuthority) { 'Collected' } else { 'Failed' }
+            # The organization read with no $select: Graph refused
+            # $select=id,mobileDeviceManagementAuthority on the collection with
+            # HTTP 400 (2026-10-30 live run). v1.0 first, beta when v1.0 does
+            # not return the property; an empty answer stays Failed, never a value.
+            $authority = ''
+            foreach ($ver in 'v1.0', 'beta') {
+                $org = Invoke-TPGraphRequest -Method GET -Uri "https://graph.microsoft.com/$ver/organization" -ErrorAction Stop
+                $first = @(Get-TPObjectField -Item $org -Key 'value' -Default @() | Where-Object { $null -ne $_ } | Select-Object -First 1)
+                if ($first.Count) { $authority = [string](Get-TPObjectField -Item $first[0] -Key 'mobileDeviceManagementAuthority' -Default '') }
+                if ($authority) { break }
+            }
+            $result.Data.MdmAuthority = $authority
+            $result.Data.SectionStatus['MdmAuthority'] = if ($authority) { 'Collected' } else { 'Failed' }
         } catch {
             $result.Data.SectionStatus['MdmAuthority'] = 'Failed'
             if (Get-Command Register-TPException -ErrorAction SilentlyContinue) { Register-TPException -Source 'Intune-DeviceCompliance-MdmAuthority' -Message $_.Exception.Message }

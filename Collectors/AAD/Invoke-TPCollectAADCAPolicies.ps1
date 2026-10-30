@@ -406,10 +406,18 @@ function Get-TPCAReferencedObjects {
             $row.DisplayName = [string](Get-TPObjectField -Item $o -Key 'displayName' -Default '')
             $row.UserPrincipalName = [string](Get-TPObjectField -Item $o -Key 'userPrincipalName' -Default '')
             if ($w.Kind -eq 'Group') {
+                # Graph returns both properties as null on an ordinary group:
+                # Microsoft documents null as the default, with false as the
+                # behavior (isManagementRestricted), and isAssignableToRole is
+                # true only when set at creation. A property RETURNED as null is
+                # therefore false; a property NOT returned stays unknown ($null),
+                # never false (2026-10-30 live run: null-as-unknown left a plain
+                # group "not assessed" on MT.1035).
+                $returned = { param([string] $k) if ($o -is [System.Collections.IDictionary]) { [bool]$o.Contains($k) } else { $null -ne $o.PSObject.Properties[$k] } }
                 $a = Get-TPObjectField -Item $o -Key 'isAssignableToRole' -Default $null
                 $m = Get-TPObjectField -Item $o -Key 'isManagementRestricted' -Default $null
-                $row.IsAssignableToRole = if ($a -is [bool]) { $a } else { $null }
-                $row.IsManagementRestricted = if ($m -is [bool]) { $m } else { $null }
+                $row.IsAssignableToRole = if ($a -is [bool]) { $a } elseif ($null -eq $a -and (& $returned 'isAssignableToRole')) { $false } else { $null }
+                $row.IsManagementRestricted = if ($m -is [bool]) { $m } elseif ($null -eq $m -and (& $returned 'isManagementRestricted')) { $false } else { $null }
             }
         } catch {
             $status = Get-TPNestedProperty -Object $_ -Path 'Exception.Response.StatusCode' -Default $null
