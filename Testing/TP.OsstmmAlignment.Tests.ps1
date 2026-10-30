@@ -66,7 +66,7 @@ Describe 'OSSTMM 3 alignment of the tool''s own testing' {
         $ch = $script:Data.scope.channels
         @($ch.PSObject.Properties.Name) | Should -Be @('DataNetworks', 'Human', 'Physical', 'Wireless', 'Telecommunications')
         $ch.DataNetworks | Should -Match '^Applies'
-        foreach ($n in 'Human', 'Physical', 'Wireless', 'Telecommunications') { $ch.$n | Should -Match '^Not applicable: .{20,}' }
+        foreach ($n in 'Human', 'Physical', 'Wireless', 'Telecommunications') { $ch.PSObject.Properties[$n].Value | Should -Match '^Not applicable: .{20,}' }
     }
 
     It 'the doc''s module counts match the file' {
