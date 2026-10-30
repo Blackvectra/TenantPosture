@@ -923,3 +923,27 @@ Describe 'MCP server: changes from the first evaluation run' {
         $tools['tenantposture_get_run_summary']['inputSchema']['properties']['response_format']['description'] | Should -Match 'structuredContent'
     }
 }
+
+Describe 'MCP server: list_runs carries the recorded maturity' {
+    It 'returns each run''s maturity score and label as recorded, and null for a run that recorded none' {
+        $runs = @((& $script:Answer $script:Default.ById[10])['runs'])
+        $flat = $runs | Where-Object { $_['id'] -eq $script:FlatId }
+        $flat['maturityScore'] | Should -Be 61
+        $flat['maturityLabel'] | Should -Be 'Defined (provisional: evidence incomplete)'
+        $later = $runs | Where-Object { $_['id'] -eq $script:LaterId }
+        $later['maturityScore'] | Should -BeNullOrEmpty
+        $later['maturityLabel'] | Should -Be ''
+        # The listing never computes a score the run did not record.
+        $old = $runs | Where-Object { $_['id'] -eq $script:OldId }
+        $old['maturityScore'] | Should -BeNullOrEmpty
+    }
+    It 'answers the evaluation''s lowest-score question from the listing alone' {
+        $evalDir = Join-Path $script:Tmp 'eval-maturity'
+        $out = & (Join-Path $script:RepoRoot 'tools' 'mcp-eval' 'New-TPMcpEvalFixture.ps1') -Path $evalDir
+        $raw = @((@(& $script:Init) + @(& $script:Call 1 'tenantposture_list_runs')) | & $script:Pwsh -NoProfile -NonInteractive -File $script:Entry -OutputRoot $out 2>$null)
+        $resp = $raw | ForEach-Object { $_ | ConvertFrom-Json -AsHashtable -Depth 64 } | Where-Object { $_['id'] -eq 1 }
+        $latest = @((& $script:Answer $resp)['runs'] | Where-Object { $_['latestForTenant'] })
+        $latest.Count | Should -Be 3
+        ($latest | Sort-Object { $_['maturityScore'] } | Select-Object -First 1)['tenant'] | Should -Be 'fabrikam.example'
+    }
+}

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **[MCP] `tenantposture_list_runs` returns each run's maturity score and label** as the run recorded them (`null` when
+  it recorded none, never recomputed), so tenants can be compared from the listing alone.
+
 - **[MCP] Changes from the first evaluation run (9 of 10 answered).**
   - **`tenantposture_get_finding`.** Returns the control's NRG Security Baseline row, including its reason code. The
     missed question needed that reason code.

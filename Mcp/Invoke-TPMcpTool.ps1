@@ -95,14 +95,14 @@ function Get-TPMcpToolDefinitions {
     }
     $item = { param($Props) [ordered]@{ type = 'array'; items = [ordered]@{ type = 'object'; properties = $Props } } }
 
-    $runRow = & $item ([ordered]@{ tenant = $str; folder = $str; id = $str; date = $str; dateSource = $str; toolVersion = $str; controlCount = [ordered]@{ type = @('integer', 'null') }; findingCount = [ordered]@{ type = @('integer', 'null') }; baselineRecorded = $bool; readable = $bool; latestForTenant = $bool })
+    $runRow = & $item ([ordered]@{ tenant = $str; folder = $str; id = $str; date = $str; dateSource = $str; toolVersion = $str; controlCount = [ordered]@{ type = @('integer', 'null') }; findingCount = [ordered]@{ type = @('integer', 'null') }; baselineRecorded = $bool; readable = $bool; latestForTenant = $bool; maturityScore = [ordered]@{ type = @('number', 'null') }; maturityLabel = $str })
     $findingRow = & $item ([ordered]@{ controlId = $str; title = $str; state = $str; severity = $str; workload = $str; instance = $str; detail = $str })
     $baselineRow = & $item ([ordered]@{ controlId = $str; title = $str; tier = $str; observedState = $str; baselineStatus = $str; constraint = $str; disposition = $str; effectivenessState = $str; reasonCode = $str; reason = $str })
     $changeRow = & $item ([ordered]@{ controlId = $str; title = $str; severity = $str; before = $str; after = $str; direction = $str })
 
     return @(
         (& $tool 'tenantposture_list_runs' 'List assessment runs' ('Lists the TenantPosture assessment runs saved on this computer, newest first. Call this first: every other run tool takes the folder and id it returns. ' +
-            'Each run carries its tenant label, assessment date, tool version, control count and latestForTenant (true on each tenant''s newest run). Use tenant to narrow by name (for example tenant="contoso"); page with limit and offset. Incident-response outputs are never listed.') `
+            'Each run carries its tenant label, assessment date, tool version, control count, the maturity score and label as the run recorded them (maturityScore is null when the run recorded none; never recomputed), and latestForTenant (true on each tenant''s newest run). Compare tenants'' latest scores here without one summary call per run. Use tenant to narrow by name (for example tenant="contoso"); page with limit and offset. Incident-response outputs are never listed.') `
             ([ordered]@{
                 tenant = [ordered]@{ type = 'string'; description = 'Optional: only runs whose tenant label contains this text (case-insensitive), e.g. "contoso".'; maxLength = 253 }
                 limit  = [ordered]@{ type = 'integer'; description = 'Maximum runs to return (default 50, at most 200).'; minimum = 1; maximum = 200 }
@@ -383,10 +383,16 @@ function Invoke-TPMcpListRuns {
                     ControlCount = $ids.Count
                     FindingCount = @($run.Findings).Count
                     Baseline     = ($null -ne $run.BaselineCompliance)
+                    # As the run recorded it (Metadata.Maturity); a run without it has no score here.
+                    MaturityScore = $(
+                        $sc = Get-TPNestedProperty -Object $run.Metadata -Path 'Maturity.Score' -Default $null
+                        $d = 0.0
+                        if ($null -ne $sc -and $sc -isnot [bool] -and [double]::TryParse([string]$sc, [System.Globalization.NumberStyles]::Float, [cultureinfo]::InvariantCulture, [ref]$d)) { $d } else { $null })
+                    MaturityLabel = [string](Get-TPNestedProperty -Object $run.Metadata -Path 'Maturity.Label' -Default '')
                 }
             } catch {
                 [Console]::Error.WriteLine("tenantposture-mcp: a results file was not read for the listing: $($_.Exception.Message)")
-                $summary = [ordered]@{ Skip = $false; Date = [string](Get-TPObjectField -Item $r -Key 'timestamp' -Default ''); DateSource = 'file write time'; ToolVersion = ''; ControlCount = $null; FindingCount = $null; Baseline = $false; Unreadable = $true }
+                $summary = [ordered]@{ Skip = $false; Date = [string](Get-TPObjectField -Item $r -Key 'timestamp' -Default ''); DateSource = 'file write time'; ToolVersion = ''; ControlCount = $null; FindingCount = $null; Baseline = $false; MaturityScore = $null; MaturityLabel = ''; Unreadable = $true }
             }
             $Ctx.SummaryCache[$stamp] = $summary
         }
@@ -401,6 +407,8 @@ function Invoke-TPMcpListRuns {
             controlCount     = $summary.ControlCount
             findingCount     = $summary.FindingCount
             baselineRecorded = [bool]$summary.Baseline
+            maturityScore    = $summary.MaturityScore
+            maturityLabel    = $summary.MaturityLabel
             readable         = -not [bool](Get-TPObjectField -Item $summary -Key 'Unreadable' -Default $false)
             latestForTenant  = $false
         })
