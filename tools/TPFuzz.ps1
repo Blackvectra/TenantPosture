@@ -38,7 +38,7 @@ function Get-TPFuzzTokens {
         [string][char]0, [string][char]0x1F, [string][char]0x7F, [string][char]0x202E, [string][char]0x200B, [string][char]0xFEFF,
         [string][char]0x2028, [string][char]0x0085, [string][char]0x2019, [string][char]0x201B, [string][char]0xFFFF,
         [string][char]0xD800, [string][char]0xDC00, "`r`n", "`n", "`t", '%00', '%2e%2e%2f', '..', '../', '..\', '/', '\\?\', 'C:\', '~',
-        '$(Get-Process)', '`', '|', '*', '_flat', 'IR-Triage', 'x-email-results.json', '=cmd|calc', '@SUM(1)', '[x](https://evil.example)', '![i](https://evil.example)',
+        '$(Get-Process)', '`', '|', '*', '_flat', 'IR-Triage', 'x-email-results.json', '=cmd|calc', '@SUM(1)', '[x](evil.example/p)', '![i](evil.example/i.png)',
         '<script>alert(1)</script>', '<img src=x onerror=alert(1)>', 'javascript:alert(1)', '\u0000', '\ud800', '"jsonrpc":"2.0"', '"id":', '"method":"tools/call"'
     )
 }
