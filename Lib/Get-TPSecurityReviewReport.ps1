@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 #
 # Get-TPSecurityReviewReport.ps1
-# Dependencies: Get-TPObjectField, Get-TPRunScope, Test-TPDomainName, ConvertTo-TPUtcDateTime
+# Dependencies: Get-TPObjectField, Get-TPNestedProperty, Get-TPRunScope, Test-TPDomainName, ConvertTo-TPUtcDateTime
 # TenantPosture — NRG Technology Services / NextLayerSec LLC
 # Author: Matthew Levorson
 #
@@ -129,6 +129,9 @@ function Get-TPSecurityReviewReport {
     $time = ConvertTo-TPUtcDateTime (Get-TPObjectField -Item $Metadata -Key 'AssessmentTime' -Default $null)
     $client = if ($ClientName) { $ClientName } elseif ($domain) { $domain } else { 'Your organization' }
     $sd = Get-TPObjectField -Item $CAChecklist -Key 'SecurityDefaults' -Default $null
+    # The promise to keep break-glass accounts excluded is made only when an
+    # approved record exists; otherwise the report says they must be found.
+    $eaSource = [string](Get-TPNestedProperty -Object $CAChecklist -Path 'EmergencyAccess.Source' -Default '')
 
     return [ordered]@{
         Available     = $true
@@ -150,7 +153,7 @@ function Get-TPSecurityReviewReport {
             Purpose = "This report reviews how your Microsoft 365 sign-in protection (Conditional Access) and device management (Intune compliance, app protection, attack surface reduction, Windows LAPS and Microsoft Defender Antivirus) are configured, against $total checks drawn from Microsoft's recommended policies and the open-source Maester test suite. For each it shows whether it was in place, what to do next, and what could not be checked."
             NotThis = 'It is a point-in-time review of configuration, not a security audit, a penetration test or a determination that your organization is or is not compliant with any standard. A check in place means the setting was there when it was read; it does not mean every account or device is protected.'
             Scope   = 'Covered: Conditional Access policies and their exclusions, a simulated sign-in for a sample of accounts, Intune compliance policies for Windows, iOS, Android and macOS, app protection for iOS and Android, attack surface reduction rules, Windows LAPS and Defender Antivirus policy values. Not covered: your network equipment, unmanaged devices beyond what app protection controls, third-party security products, and the rest of the Microsoft 365 assessment, which is reported separately.'
-            Changes = 'Every change listed here should be tested before it is enforced. Conditional Access changes can lock people out: we stage them in report-only mode first and keep your emergency access accounts excluded.'
+            Changes = $(if ($eaSource -eq 'ApprovedRecord') { 'Every change listed here should be tested before it is enforced. Conditional Access changes can lock people out: we stage them in report-only mode first and keep your recorded emergency access accounts excluded.' } else { 'Every change listed here should be tested before it is enforced. Conditional Access changes can lock people out: we stage them in report-only mode first. No emergency access (break-glass) accounts are on record for this review, so they must be identified and excluded before any policy is turned on.' })
             SecurityDefaults = $(if ($sd -eq $true) { 'Security Defaults is on in this tenant. It gives a basic level of sign-in protection, and while it is on Conditional Access policies cannot be turned on: moving to the recommended policies means turning it off once they are ready.' } else { '' })
         }
     }

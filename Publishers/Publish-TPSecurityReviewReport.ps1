@@ -112,7 +112,7 @@ function Publish-TPSecurityReviewReport {
         } else {
             $body += '<div class="tp-table-wrap"><table class="tp-table"><thead><tr><th>Check</th><th>Why it matters</th><th>' + (Esc $(if ($k -eq 'NotChecked') { 'Why it was not checked' } else { 'What to do' })) + '</th></tr></thead><tbody>'
             foreach ($it in $items) {
-                $sev = if ($it.Severity -and $k -eq 'NextSteps') { ' ' + (New-TPThemePill -Status $sevTone[[string]$it.Severity] -Text $it.Severity) } else { '' }
+                $sev = if ($it.Severity -and $k -eq 'NextSteps') { ' ' + (New-TPThemePill -Status ($sevTone[[string]$it.Severity] ?? 'Neutral') -Text $it.Severity) } else { '' }
                 $body += '<tr class="tp-review-row"><td>' + (Esc $it.Title) + $sev + '<div class="tp-small tp-muted">' + (Esc "$($it.TopicTitle) · $($it.Reference)") + '</div></td><td class="tp-small">' + (Esc $it.Why) + '</td><td class="tp-small">' + (Esc $it.Action) + '</td></tr>'
             }
             $body += '</tbody></table></div>'

@@ -414,7 +414,11 @@ function Get-TPCAReferencedObjects {
         } catch {
             $status = Get-TPNestedProperty -Object $_ -Path 'Exception.Response.StatusCode' -Default $null
             $text = "$($_.Exception.Message) $([string](Get-TPNestedProperty -Object $_ -Path 'ErrorDetails.Message' -Default ''))"
-            if ([string]$status -in @('NotFound', '404') -or $text -match '\b404\b|Request_ResourceNotFound|ResourceNotFound|does not exist') {
+            # The status code decides when there is one; the message text only
+            # when no status was returned, so another error whose text happens
+            # to say "does not exist" is never reported as a deleted object.
+            $notFound = if ($null -ne $status -and [string]$status) { [string]$status -in @('NotFound', '404') } else { $text -match '\b404\b|Request_ResourceNotFound|ResourceNotFound|does not exist' }
+            if ($notFound) {
                 $row.Exists = $false
             } else {
                 $unread++

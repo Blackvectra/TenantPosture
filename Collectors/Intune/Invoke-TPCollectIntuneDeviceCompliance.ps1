@@ -474,8 +474,9 @@ function Invoke-TPCollectIntuneDeviceCompliance {
             if (Get-Command Register-TPException -ErrorAction SilentlyContinue) { Register-TPException -Source 'Intune-DeviceCompliance-TenantSettings' -Message $_.Exception.Message }
         }
         try {
-            $cr = Invoke-TPGraphRequest -Method GET -Uri 'https://graph.microsoft.com/beta/deviceManagement/managedDeviceCleanupRules' -ErrorAction Stop
-            $rules = @(Get-TPObjectField -Item $cr -Key 'value' -Default @() | Where-Object { $null -ne $_ })
+            # Every page, and a response with no value collection fails the
+            # section (Get-TPGraphAllPages), never an empty list of rules.
+            $rules = @(Get-TPGraphAllPages -Uri 'https://graph.microsoft.com/beta/deviceManagement/managedDeviceCleanupRules' | Where-Object { $null -ne $_ })
             $result.Data.CleanupRules = @($rules | ForEach-Object {
                 [ordered]@{
                     DisplayName = [string](Get-TPObjectField -Item $_ -Key 'displayName' -Default '')

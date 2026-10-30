@@ -92,6 +92,37 @@ Describe 'The client security review model' {
     }
 }
 
+Describe 'Security audit fixes' {
+    It 'promises to keep emergency access accounts excluded only when an approved record exists' {
+        $withRecord = $script:Ca.Clone(); $withRecord.EmergencyAccess = @{ Source = 'ApprovedRecord'; Users = 1; Groups = 0 }
+        $m1 = Get-TPSecurityReviewReport -CAChecklist $withRecord -IntuneChecklist $script:Ic -Metadata $script:Meta
+        $m1.Statements.Changes | Should -Match 'keep your recorded emergency access accounts excluded'
+        $withoutRecord = $script:Ca.Clone(); $withoutRecord.EmergencyAccess = @{ Source = 'None'; Users = 0; Groups = 0 }
+        foreach ($ca in $withoutRecord, $script:Ca) {
+            $m = Get-TPSecurityReviewReport -CAChecklist $ca -IntuneChecklist $script:Ic -Metadata $script:Meta
+            $m.Statements.Changes | Should -Not -Match 'keep your'
+            $m.Statements.Changes | Should -Match 'must be identified and excluded before any policy is turned on'
+        }
+    }
+    It 'carries only the emergency access source label through Read-TPRunRecord, never the accounts' {
+        $ca = $script:Ca.Clone(); $ca.EmergencyAccess = @{ Source = 'ApprovedRecord'; Users = 1; Groups = 0; Ids = @('99999999-9999-9999-9999-999999999999') }
+        $path = Join-Path $script:Tmp 'contoso-20261029-090000-results.json'
+        @{ Metadata = $script:Meta; Findings = @(); CAChecklist = $ca; IntuneChecklist = $script:Ic } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $path -Encoding UTF8
+        $rec = Read-TPRunRecord -Path $path -IncludeChecklists
+        $rec.CAChecklist.EmergencyAccess.Source | Should -Be 'ApprovedRecord'
+        ($rec | ConvertTo-Json -Depth 20) | Should -Not -Match '99999999-9999'
+        $ca.EmergencyAccess.Source = '<b>forged</b>'
+        @{ Metadata = $script:Meta; Findings = @(); CAChecklist = $ca } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $path -Encoding UTF8
+        (Read-TPRunRecord -Path $path -IncludeChecklists).CAChecklist.EmergencyAccess.Source | Should -Be ''
+    }
+    It 'renders a severity it does not know instead of failing the whole review' {
+        $odd = @{ Available = $true; Rows = @(@{ Id = 'MT.1007'; Kind = 'Presence'; Title = 'T'; Why = 'W'; Severity = 'Critical'; Status = 'Fail'; Recommended = 'R' }) }
+        $m = Get-TPSecurityReviewReport -CAChecklist $odd -IntuneChecklist $null -Metadata $script:Meta
+        $f = Publish-TPSecurityReviewReport -Model $m -OutputPath (Join-Path $script:Tmp 'odd-security-review.html')
+        Test-Path -LiteralPath $f.Html | Should -BeTrue
+    }
+}
+
 Describe 'The client security review page' {
     BeforeAll {
         $script:Hostile = @{ Available = $true; Rows = @(@{ Id = 'MT.1007'; Kind = 'Presence'; Title = '<img src=x onerror=alert(1)>'; Why = '<script>alert(1)</script>'; Severity = 'High'; Status = 'Fail'; Recommended = 'x' }) }
