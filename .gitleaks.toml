@@ -39,3 +39,17 @@ description = "detect-secrets baseline file (hashed_secret fields are SHA1 diges
 paths = [
   '''^\.secrets\.baseline$''',
 ]
+
+[[allowlists]]
+description = "Power Fx environment-variable reference in a Copilot Studio test fixture (the value is a reference, not a key)"
+# Testing/TP.CopilotStudio.Tests.ps1 feeds the PPL-4.6 credential detector an
+# HTTP header whose value is the Power Fx expression
+# `=Env.cr1_ApiKeyFromKeyVault` and asserts the tool does NOT call it a
+# hard-coded credential. The generic-api-key rule reads `x-api-key: =Env...`
+# as a key. Only that exact literal is allowed (matched against the whole
+# finding), so a real key anywhere, that file included, still fires; a path
+# condition here suppressed every finding in the file.
+regexTarget = "match"
+regexes = [
+  '''\Ax-api-key: =Env\.cr1_ApiKeyFromKeyVault\W?\z''',
+]
