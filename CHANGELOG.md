@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **[Assessment] Two collector fixes from the 2026-10-30 live run.**
+  - **MDM authority.** The Intune checklist read `organization?$select=mobileDeviceManagementAuthority`, which Graph
+    v1.0 refused with a 400, so the MDM authority row was never assessed. The collector now reads the organization
+    without `$select`, from v1.0 first and then beta, and marks the section failed only when neither returns it.
+  - **Role-assignable groups (MT.1035).** Graph returns `isAssignableToRole` and `isManagementRestricted` as null on
+    an ordinary group, and Microsoft documents null as false. The collector read null as unknown, so every excluded
+    group left MT.1035 not assessed. A property returned as null is now false. A property that was not returned at
+    all is still unknown.
+
 - **[Assessment] SCAP results view (`-ScapResults`, `New-TPScapView.ps1`).** Endpoint STIG and CIS scan results from
   DISA SCC or OpenSCAP (XCCDF 1.1/1.2 or ARF) now appear beside the Microsoft 365 assessment as a separate, unscored
   view.
