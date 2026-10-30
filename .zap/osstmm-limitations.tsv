@@ -1,0 +1,16 @@
+# OSSTMM 3 limitation type of each ZAP rule reviewed in .zap/rules.tsv, for the
+# security test summary (tools/New-TPSecurityTestSummary.ps1). Format:
+# <rule id> TAB <Vulnerability|Weakness|Concern|Exposure|Anomaly|None> TAB <why that type>.
+# Types follow OSSTMM 3 section 1.4: a Weakness is a flaw in an interaction
+# control (authentication, indemnification, resilience, subjugation,
+# continuity), a Concern a flaw in a process control (non-repudiation,
+# confidentiality, privacy, integrity, alarm), an Exposure gives visibility of
+# a target or asset. None marks an informational rule that reports a design
+# fact, not a flaw. An alert whose rule is not listed here is counted as an
+# Anomaly: it has not been identified.
+10027	Exposure	Comment words in a public asset are visibility of the code, reviewed as carrying no disclosure.
+10055	Concern	'unsafe-inline' styles on the report routes weaken the integrity control the CSP provides there.
+10106	Concern	Plaintext HTTP on loopback is a confidentiality limitation, accepted because the traffic never leaves the machine.
+10109	None	Describes the application's shape (a script-driven page); not a flaw.
+10049	None	no-store responses are the intended state; not a flaw.
+90004	Concern	No cross-origin isolation is a confidentiality limitation, accepted because CORP and the CSP already confine other origins.

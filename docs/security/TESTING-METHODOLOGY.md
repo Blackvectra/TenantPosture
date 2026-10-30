@@ -6,6 +6,10 @@ Testing Execution Standard (PTES); the OSSTMM vocabulary is noted where it
 differs. The point of the mapping is the gaps as much as the coverage: an
 automated scan is evidence about one phase, never a penetration test.
 
+The same checks are mapped to OSSTMM 3 in `OSSTMM-ALIGNMENT.md`: module by
+module (A.1 to D.17), with what each leaves untested, plus a generated
+security test summary laid out after the facts an OSSTMM STAR asks for.
+
 ## The scans, by PTES phase
 
 | PTES phase | OSSTMM channel / idea | What runs here | Where |

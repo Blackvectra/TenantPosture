@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **[Security] OSSTMM 3 alignment of the tool's own security testing (`docs/security/OSSTMM-ALIGNMENT.md`).** The
+  checks that test TenantPosture itself are now mapped to OSSTMM 3.02.
+  - **Modules.** Each of the 17 test modules (A.1 to D.17) has one status in `docs/security/osstmm-modules.json`,
+    with the evidence that covers it and what it leaves uncovered: 5 complete, 8 partial, 2 not tested and 2 not
+    applicable.
+    - Not tested: Survivability Validation (no denial-of-service test) and Alert and Log Review (the GUI keeps no
+      request log).
+  - **Generated summary.** `tools/New-TPSecurityTestSummary.ps1` writes a summary laid out after the facts an OSSTMM
+    STAR asks for: scope, channels, vectors, test type, porosity counted from the server's own route registrations,
+    the active scan's alerts by limitation type (`.zap/osstmm-limitations.tsv`), completion by module, and the error
+    types that bound the results.
+    - The `zap-active` job writes it on every run.
+    - It says it is not an ISECOM STAR and calculates no rav.
+  - **Licensing.** The manual and ISECOM's playbook are non-commercial, no-derivatives works, so neither is in the
+    repository; only their numbers are cited, in our own words.
+
 - **[Security] Active ZAP scan of the web GUI (`dast.yml` job `zap-active`, `.zap/active-scan.yaml`).** OWASP ZAP's
   active scanner now attacks the real `-Web` server on loopback over the scan fixture, beside the passive baseline.
   - **What it attacks.** It sends injection, path traversal, and header and parameter tampering payloads to every
