@@ -127,6 +127,55 @@ Describe 'Runtime scans: the dynamic scan of the web GUI and the image scan' {
         }
     }
 
+    Context 'The active scan' {
+
+        BeforeAll {
+            $script:Plan = Get-Content -LiteralPath (Join-Path $script:RepoRoot '.zap/active-scan.yaml') -Raw
+            $script:Judge = Join-Path $script:RepoRoot 'tools/Test-TPZapActiveScan.ps1'
+        }
+
+        It 'runs the plan in the pinned image on host networking, silently, and judges the report with the gate script' {
+            $script:Dast | Should -Match '(?m)^  zap-active:'
+            $script:Dast | Should -Match 'docker run --rm --network host -e TP_ZAP_OUT=/zap/wrk [^\n]*"\$\{image\}" \\\s+zap\.sh -cmd -silent -autorun /zap/wrk/active-scan\.yaml'
+            $script:Dast | Should -Match '\./tools/Test-TPZapActiveScan\.ps1 -ReportPath zap-active/zap-active-report\.json'
+            $script:Dast | Should -Match "if: always\(\) && hashFiles\('zap-active/zap-active-report\.\*'\) != ''"
+        }
+
+        It 'never scans POST /api/scan, which starts a real assessment, and still scans its status route' {
+            $script:Plan | Should -Match "excludePaths:\s+- 'http://127\\\.0\\\.0\\\.1:8765/api/scan\(\\\?\.\*\)\?'"
+            $exclude = 'http://127\.0\.0\.1:8765/api/scan(\?.*)?'
+            # ZAP anchors an exclusion to the whole URL.
+            'http://127.0.0.1:8765/api/scan' | Should -Match "^$exclude$"
+            'http://127.0.0.1:8765/api/scan/000000000000/status' | Should -Not -Match "^$exclude$"
+            $script:Plan | Should -Match 'requestor'
+            $script:Plan | Should -Match '/api/scan/000000000000/status'
+        }
+
+        It 'records the output folder before the scan and fails if it gained anything' {
+            $script:Dast | Should -Match 'find "\$TP_SCAN_OUTPUT" \| sort > "\$RUNNER_TEMP/output-before\.txt"'
+            $script:Dast | Should -Match '-Before "\$env:RUNNER_TEMP/output-before\.txt"'
+        }
+
+        It 'the gate passes only reviewed IGNORE rules, and fails an unreviewed alert, a missing site, a missing report and a new file' {
+            $root = Join-Path $TestDrive 'out'
+            $null = New-Item -ItemType Directory -Force -Path $root
+            $before = Join-Path $TestDrive 'before.txt'
+            Set-Content -LiteralPath $before -Value ((Get-Item -LiteralPath $root).FullName)
+            $rules = Join-Path $TestDrive 'rules.tsv'
+            Set-Content -LiteralPath $rules -Value ("10027`tIGNORE`tReviewed reason long enough for the test, which only reads the action column.", "40012`tWARN`tListed but not accepted: a WARN line never passes a finding through the gate.")
+            $target = 'http' + '://127.0.0.1:8765'
+            $report = { param($Ids, [string] $Site = $target) $p = Join-Path $TestDrive 'r.json'; @{ site = @(@{ '@name' = $Site; alerts = @($Ids | ForEach-Object { @{ pluginid = $_; name = "Rule $_"; riskdesc = 'Medium (High)'; instances = @(@{ method = 'GET'; uri = "$target/" }) } }) }) } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $p; $p }
+            $judge = { param($ReportPath) $null = & pwsh -NoProfile -File $script:Judge -ReportPath $ReportPath -RulesPath $rules -Target $target -OutputRoot $root -Before $before; $LASTEXITCODE }
+            & $judge (& $report @('10027')) | Should -Be 0
+            & $judge (& $report @('10027', '40012')) | Should -Be 1 -Because 'a WARN line is listed, not accepted'
+            & $judge (& $report @('40018')) | Should -Be 1
+            & $judge (& $report @() 'http://other:1') | Should -Be 1 -Because 'a scan that reached nothing is not clean'
+            & $judge (Join-Path $TestDrive 'missing.json') | Should -Be 1
+            $null = New-Item -ItemType Directory -Path (Join-Path $root 'evil.example')
+            & $judge (& $report @('10027')) | Should -Be 1 -Because 'a new folder means a request started an assessment'
+        }
+    }
+
     Context 'The image scan' {
 
         It 'scans the built image from an archive for HIGH and CRITICAL vulnerabilities, fails on any, and uploads the SARIF' {

@@ -168,3 +168,91 @@ jobs:
         if: always()
         run: |
           if [ -f "$RUNNER_TEMP/web.pid" ]; then kill "$(cat "$RUNNER_TEMP/web.pid")" 2>/dev/null || true; fi
+
+  zap-active:
+    # The active scan: ZAP's attack payloads (injection, path traversal,
+    # header and parameter tampering) against every route the server serves
+    # over the same fixture, from the plan in .zap/active-scan.yaml. POST
+    # /api/scan is excluded there: an accepted request starts a real
+    # assessment. tools/Test-TPZapActiveScan.ps1 judges the report against the
+    # same reviewed rules as the baseline and fails if the output folder
+    # gained anything during the scan.
+    name: Active scan of the web GUI (ZAP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read  # read the repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Pode (pinned, hash-verified)
+        shell: pwsh
+        run: |
+          ./tools/Install-TPPinnedModule.ps1 -Name Pode -Destination "$env:RUNNER_TEMP/tp-modules" -ExportToGitHubEnv
+
+      - name: Build the scan fixture
+        shell: pwsh
+        run: |
+          $out = ./tools/New-TPWebScanFixture.ps1 -Path "$env:RUNNER_TEMP/scan"
+          "TP_SCAN_OUTPUT=$out" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Start the web GUI on loopback
+        run: |
+          set -euo pipefail
+          nohup pwsh -NoProfile -Command '. ./Lib/Start-TPWebServer.ps1; Start-TPWebServer -Port 8765 -ScriptDir (Get-Location).Path -OutputRoot $env:TP_SCAN_OUTPUT -NoBrowser' > "$RUNNER_TEMP/web.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/web.pid"
+          for _ in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8765/; then break; fi
+            sleep 1
+          done
+          if ! curl -fsS -o /dev/null http://127.0.0.1:8765/; then
+            cat "$RUNNER_TEMP/web.log"
+            echo "::error title=The web GUI did not start::Nothing answered on 127.0.0.1:8765 within 60 seconds; the server log is above."
+            exit 1
+          fi
+          if ! curl -fsS http://127.0.0.1:8765/api/runs | grep -q SCANTENANT; then
+            echo "::error title=Fixture not served::/api/runs did not list the fixture run, so the report routes would not be scanned."
+            exit 1
+          fi
+          find "$TP_SCAN_OUTPUT" | sort > "$RUNNER_TEMP/output-before.txt"
+
+      - name: Active scan with ZAP
+        run: |
+          set -euo pipefail
+          image="$(awk '/^FROM /{print $2}' .github/scanners/zap/Dockerfile)"
+          echo "ZAP image: ${image}"
+          mkdir -p zap-active
+          cp .zap/active-scan.yaml zap-active/active-scan.yaml
+          chmod 777 zap-active
+          # -silent: the rules are the pinned image's own (no add-on download).
+          # The plan's own exit code is not the verdict; the report is.
+          set +e
+          docker run --rm --network host -e TP_ZAP_OUT=/zap/wrk -v "${PWD}/zap-active:/zap/wrk:rw" "${image}" \
+            zap.sh -cmd -silent -autorun /zap/wrk/active-scan.yaml
+          rc=$?
+          set -e
+          echo "zap.sh -autorun exited ${rc}"
+          if [ -f zap-active/zap-active-report.md ]; then
+            { echo "## ZAP active scan"; echo; cat zap-active/zap-active-report.md; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Judge the active scan
+        shell: pwsh
+        run: |
+          ./tools/Test-TPZapActiveScan.ps1 -ReportPath zap-active/zap-active-report.json -Target 'http://127.0.0.1:8765' -OutputRoot $env:TP_SCAN_OUTPUT -Before "$env:RUNNER_TEMP/output-before.txt"
+
+      - name: Upload the ZAP active-scan reports
+        if: always() && hashFiles('zap-active/zap-active-report.*') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: zap-active-reports
+          path: zap-active/zap-active-report.*
+          if-no-files-found: warn
+
+      - name: Stop the web GUI
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/web.pid" ]; then kill "$(cat "$RUNNER_TEMP/web.pid")" 2>/dev/null || true; fi
