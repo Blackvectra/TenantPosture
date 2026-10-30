@@ -77,7 +77,12 @@ function Read-TPMcpRunFile {
     $options.MaxDepth = 256
     $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
     try {
-        $doc = [System.Text.Json.JsonDocument]::Parse($stream, $options)
+        # The parser's own message quotes the file around the fault, RawData
+        # included, and the server writes a fault to standard error, which a
+        # client may log: refuse with a fixed sentence (found by TP.Fuzz).
+        $doc = $null
+        try { $doc = [System.Text.Json.JsonDocument]::Parse($stream, $options) }
+        catch { throw 'The results file is not valid JSON.' }
         try {
             $root = $doc.RootElement
             if ($root.ValueKind -ne [System.Text.Json.JsonValueKind]::Object) { throw 'The file is not an assessment results file.' }

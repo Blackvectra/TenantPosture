@@ -11,6 +11,10 @@
     - It never crashes on a field the input left out, and never hangs.
     - An allowed path stays inside the output folder.
     - Escaped text forms no markup, and a generated PowerShell literal parses back to its input.
+  - **Found and fixed: the MCP reader quoted a malformed results file.** `Read-TPMcpRunFile` let the JSON parser's
+    message escape, and that message quotes the file around the fault, RawData included. The client already got a
+    fixed sentence, but the server wrote the message to standard error, which an AI client may log. The reader now
+    refuses with "The results file is not valid JSON.", as `Read-TPRunRecord` already did.
   - **Reproducible.** The seed is fixed (`TP_FUZZ_SEED`), and a failure prints the seed, the iteration and the input
     as base64. `TP_FUZZ_ITERATIONS` lengthens a local run.
 

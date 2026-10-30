@@ -106,6 +106,13 @@ Describe 'Fuzzing: readers of untrusted files' {
         $bad | Should -BeNullOrEmpty
     }
 
+    It 'Read-TPMcpRunFile refuses a malformed literal without quoting the file (found by the fuzzer, seeds 1-3 at 1500)' {
+        # System.Text.Json's message quotes the text around the fault; the
+        # server writes a fault to standard error, which a client may log.
+        $p = & $script:Put 'mcp-literal.json' ($script:ResultsSeed -replace '"Success":true', '"Success":tr')
+        { Read-TPMcpRunFile -Path $p } | Should -Throw -ExpectedMessage 'The results file is not valid JSON.'
+    }
+
     It 'Read-TPScapResultFile never throws and never reads a DTD, on every mutated XCCDF file' {
         $xccdf = @"
 <?xml version="1.0" encoding="UTF-8"?>
