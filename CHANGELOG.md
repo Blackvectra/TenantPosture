@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **[Security] Gitleaks no longer flags the Power Fx reference in the Copilot Studio test fixture.** The Copilot Studio
+  tests check that the header value `=Env.cr1_ApiKeyFromKeyVault` (a reference to an environment variable) is not
+  reported as a hard-coded key. Gitleaks' `generic-api-key` rule reported that literal twice in history. `.gitleaks.toml`
+  now allows exactly that literal. A real key anywhere, including the same file, is still reported, and a test of this
+  was run locally against Gitleaks 8.30.1.
+
 - **[MCP] `tenantposture_list_runs` returns each run's maturity score and label** as the run recorded them (`null` when
   it recorded none, never recomputed), so tenants can be compared from the listing alone.
 
