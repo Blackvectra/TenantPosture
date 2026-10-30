@@ -199,6 +199,19 @@ The server follows the MCP builder best practices:
 
 ## Evaluation
 
+First model run (2026-10-30, Sonnet through the Claude Code CLI with the builder's
+evaluation prompt, one fresh session per question, only this server's tools): 9 of 10.
+The miss followed the scope bucket name instead of the baseline reason code, so
+`tenantposture_get_finding` now carries the control's baseline row and
+`tenantposture_get_scope` takes `controlId` and `bucket` filters; the model's other notes
+added `latestForTenant`, named the earlier and later run in `tenantposture_compare_runs`,
+pointed `tenantposture_get_control` at the effort class, and say in `response_format`
+that a client which displays `structuredContent` shows JSON.
+Rerun the same day after those changes: 10 of 10, four to six tool calls per question.
+The remaining suggestions (a maturity score in the run listing, a count-by-workload
+option, the effort class inside the change-impact view) save a call each and are not
+built.
+
 `tools/mcp-eval/tenantposture-eval.xml` holds ten questions in the MCP builder's
 evaluation format, each needing several tool calls (the earliest and latest runs of one
 tenant, follow-up calls from one answer to the catalog, paging through 70 findings).
@@ -221,14 +234,14 @@ takes `response_format?` (`json` or `markdown`), and the three list tools take
 
 | Tool | Input | Returns |
 |---|---|---|
-| `tenantposture_list_runs` | `tenant?` (label contains, case-insensitive), `limit?` (default 50, max 200) | `runs[]`: `tenant`, `folder`, `id`, `date` (and `dateSource`), `toolVersion`, `controlCount`, `findingCount`, `baselineRecorded`; `total`, `returned`, `truncated` |
+| `tenantposture_list_runs` | `tenant?` (label contains, case-insensitive), `limit?` (default 50, max 200) | `runs[]`: `tenant`, `folder`, `id`, `date` (and `dateSource`), `toolVersion`, `controlCount`, `findingCount`, `baselineRecorded`; `total`, `returned`, `truncated`; `latestForTenant` marks each tenant label's newest run (by recorded assessment time; by file date only when no run of that tenant records one) |
 | `tenantposture_get_run_summary` | `folder`, `id` | `run` (domain, dates, tool version, quick scan, declared EDR or awareness product, baseline version and tier), `maturity` (as recorded, or `recorded: false`), `findingInstances` (by state, by severity), `controls` (worst state per control, open by severity), `baseline` (counts, `evidenceCoverage`, `effectivenessCoverage`), `license` (tier label and flags from the run's SKUs, or `read: false`), `notes` |
 | `tenantposture_list_findings` | `folder`, `id`, `state?`, `severity?`, `workload?` (ID prefix), `controlId?`, `limit?` (default 50, max 200) | `findings[]`: `controlId`, `title`, `state`, `severity`, `workload`, `instance`, short `detail`; `total`, `returned`, `truncated`, `note` |
-| `tenantposture_get_finding` | `folder`, `id`, `controlId` | every instance for the control (state, detail, current and required value, remediation, framework citations, affected objects capped at 50, coverage), `worstState`, `note`; no finding is stated as not a pass |
+| `tenantposture_get_finding` | `folder`, `id`, `controlId` | every instance for the control (state, detail, current and required value, remediation, framework citations, affected objects capped at 50, coverage), `worstState`, `note`; no finding is stated as not a pass; `baseline`: the control's NRG Security Baseline row as the run recorded it (tier, observed state, status, `reasonCode`, `reason`), or `recorded: false` / `inBaseline: false` |
 | `tenantposture_get_control` | `controlId` | `control` (from `Config/controls.json`), `benchmarks` (`Get-TPBenchmarkMapping`: items, or the reason it is unmapped), `operationalImpact` (`Config/operational-impact.json`, or "Operational impact not documented", never "no impact"), `baseline` (its NRG Security Baseline row, or assessment-only) |
-| `tenantposture_compare_runs` | `folderA`, `idA`, `folderB`, `idB` (A before, B after) | `runA`, `runB`, `changed[]` (before, after, `Improved` / `Regressed` / `VerdictChanged`), `newGaps[]`, `resolvedGaps[]`, `onlyInA[]`, `onlyInB[]`, `unchangedCount`, `notes`. Refused unless both runs carry the same tenant ID (the guard `Publish-TPDeltaReport` applies); two different tenants are compared with `Compare-TPTenantBaseline.ps1`, offline |
+| `tenantposture_compare_runs` | `folderA`, `idA` (the earlier run), `folderB`, `idB` (the later run) | `runA`, `runB`, `changed[]` (before, after, `Improved` / `Regressed` / `VerdictChanged`), `newGaps[]`, `resolvedGaps[]`, `onlyInA[]`, `onlyInB[]`, `unchangedCount`, `notes`. Refused unless both runs carry the same tenant ID (the guard `Publish-TPDeltaReport` applies); two different tenants are compared with `Compare-TPTenantBaseline.ps1`, offline |
 | `tenantposture_get_baseline` | `folder`, `id`, `status?` (`Satisfied`, `Failed`, `NotVerified`, `NotApplicable`, `LicenseBlocked`, `ApprovedException`), `limit?` (default 100, max 200) | the recorded `BaselineCompliance`: version, tier, summary, both coverage lines, `rows[]` (`controlId`, `title`, `tier`, `observedState`, `baselineStatus`, `constraint`, `disposition`, `effectivenessState`, `reasonCode`, `reason`), or `recorded: false` |
-| `tenantposture_get_scope` | `folder`, `id` | `computed`, `basis`, control counts, `buckets` (`CollectionIncomplete`, `NoResult`, `Errors`, `StandardNotApproved`, `SkippedByOperator`, `NotEvaluatedThisMode`, `LicenseBlocked`, `ThirdPartyAttested`, `NoProgrammaticCheck`, `NotApplicableToTenant`, each with its controls and reasons), `coverageIssues`, `limitations` |
+| `tenantposture_get_scope` | `folder`, `id`, `bucket?` (one bucket's controls), `controlId?` (why this one control reached no verdict) | `computed`, `basis`, control counts, `buckets` (`CollectionIncomplete`, `NoResult`, `Errors`, `StandardNotApproved`, `SkippedByOperator`, `NotEvaluatedThisMode`, `LicenseBlocked`, `ThirdPartyAttested`, `NoProgrammaticCheck`, `NotApplicableToTenant`, each with its controls and reasons), `coverageIssues`, `limitations`; every bucket keeps its `count` under a filter, and `filter` says what was narrowed |
 | `tenantposture_get_change_impact` | `folder`, `id`, `list?` (`implementNow`, `needsPlanning`, `couldBreakAccounts`, `licenseDecision`), `controlId?` | the change-impact view the run recorded: `summary`, the four lists (each risky change with `Why`, its `Evidence` blocks naming accounts, each block's `Status` `Named` / `NoneFound` / `NotEstablished` / `NotRead` and `Complete`, `Unseen`, and its `EmergencyAccess` reminder), `emergencyAccess`, `scopeNotice`, `note`; `recorded: false` for a run made before the view existed (not recomputed; republish with `-FromResults`). Account names are pseudonymized like every other identity |
 
 ## Files

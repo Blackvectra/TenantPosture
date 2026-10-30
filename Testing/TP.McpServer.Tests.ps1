@@ -861,3 +861,65 @@ Describe 'MCP server: the evaluation questions hold (tools/mcp-eval)' {
         (@((& $script:EA 8)['rows']) | Where-Object { $_['controlId'] -eq 'EXO-1.1' })['reasonCode'] | Should -Be $script:EvalAnswers[8]
     }
 }
+
+Describe 'MCP server: changes from the first evaluation run' {
+    BeforeAll {
+        $flat = @{ folder = '_flat'; id = $script:FlatId }
+        $script:Ev = & $script:Serve (@(& $script:Init) + @(
+            (& $script:Request 2 'tools/list' $null)
+            (& $script:Call 70 'tenantposture_get_finding' ($flat + @{ controlId = 'EXO-1.1' }))
+            (& $script:Call 71 'tenantposture_get_finding' ($flat + @{ controlId = 'AAD-1.2' }))
+            (& $script:Call 72 'tenantposture_get_finding' ($flat + @{ controlId = 'PVW-1.1' }))
+            (& $script:Call 73 'tenantposture_get_scope' ($flat + @{ controlId = 'EXO-1.1' }))
+            (& $script:Call 74 'tenantposture_get_scope' ($flat + @{ bucket = 'CollectionIncomplete' }))
+            (& $script:Call 75 'tenantposture_get_scope' $flat)
+            (& $script:Call 76 'tenantposture_list_runs' @{ tenant = 'contoso.example' })
+            (& $script:Call 77 'tenantposture_get_finding' @{ folder = $script:Folder; id = $script:LaterId; controlId = 'AAD-1.2' })
+        ))
+    }
+    It 'get_finding carries the control''s baseline row, so the reason code is one call away' {
+        $exo = & $script:Answer $script:Ev.ById[70]
+        $exo['baseline']['inBaseline'] | Should -BeTrue
+        $exo['baseline']['reasonCode'] | Should -Be 'CollectorUnavailable'
+        $exo['baseline']['observedState'] | Should -Be 'NotVerified'
+        (& $script:Answer $script:Ev.ById[71])['baseline']['reasonCode'] | Should -Be 'ControlFailed'
+        $none = & $script:Answer $script:Ev.ById[72]
+        @($none['instances']).Count | Should -Be 0
+        $none['baseline']['inBaseline'] | Should -BeFalse
+        # A run with no baseline view says so instead of inventing a row.
+        (& $script:Answer $script:Ev.ById[77])['baseline']['recorded'] | Should -BeFalse
+    }
+    It 'get_scope narrows to one control or one bucket and keeps every bucket''s count' {
+        $all = & $script:Answer $script:Ev.ById[75]
+        $one = & $script:Answer $script:Ev.ById[73]
+        $bkt = & $script:Answer $script:Ev.ById[74]
+        foreach ($k in @($all['buckets'].Keys)) {
+            $one['buckets'][$k]['count'] | Should -Be $all['buckets'][$k]['count']
+            $bkt['buckets'][$k]['count'] | Should -Be $all['buckets'][$k]['count']
+        }
+        $listed = @($one['buckets'].Values | ForEach-Object { $_['controls'] } | ForEach-Object { $_['controlId'] })
+        $listed | Should -Be @('EXO-1.1')
+        @($one['buckets']['CollectionIncomplete']['controls'])[0]['controlId'] | Should -Be 'EXO-1.1'
+        $one['filter']['note'] | Should -Match 'why the run reached no verdict'
+        foreach ($k in @($bkt['buckets'].Keys | Where-Object { $_ -ne 'CollectionIncomplete' })) {
+            $bkt['buckets'][$k]['listed'] | Should -BeFalse
+            @($bkt['buckets'][$k]['controls']).Count | Should -Be 0
+        }
+        ($script:Ev.ById[73]['result']['content'][0]['text']).Length | Should -BeLessThan ($script:Ev.ById[75]['result']['content'][0]['text']).Length
+    }
+    It 'list_runs marks each tenant''s newest run' {
+        $runs = @((& $script:Answer $script:Ev.ById[76])['runs'])
+        ($runs | Where-Object { $_['id'] -eq $script:LaterId })['latestForTenant'] | Should -BeTrue
+        ($runs | Where-Object { $_['id'] -eq $script:OldId })['latestForTenant'] | Should -BeFalse
+    }
+    It 'the descriptions say which run is earlier, where the effort class is, and what a client shows for markdown' {
+        $tools = @{}; foreach ($t in @($script:Ev.ById[2]['result']['tools'])) { $tools[$t['name']] = $t }
+        $tools['tenantposture_compare_runs']['inputSchema']['properties']['folderA']['description'] | Should -Match 'EARLIER'
+        $tools['tenantposture_compare_runs']['inputSchema']['properties']['idB']['description'] | Should -Match 'LATER'
+        $tools['tenantposture_get_control']['description'] | Should -Match 'operationalImpact\.Effort'
+        $tools['tenantposture_get_finding']['description'] | Should -Match 'reasonCode'
+        $tools['tenantposture_get_scope']['inputSchema']['properties'].Contains('bucket') | Should -BeTrue
+        $tools['tenantposture_list_runs']['description'] | Should -Match 'latestForTenant'
+        $tools['tenantposture_get_run_summary']['inputSchema']['properties']['response_format']['description'] | Should -Match 'structuredContent'
+    }
+}
