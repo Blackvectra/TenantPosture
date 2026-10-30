@@ -831,4 +831,4 @@ You may use, modify and redistribute it under that license, including commercial
 
 ---
 
-*TenantPosture v4.14.3 · 253 posture controls + EMAIL/SIGNIN IR heuristics · 507 exported functions · full Pester suite (141 suites) gating CI*
+*TenantPosture v4.14.3 · 253 posture controls + EMAIL/SIGNIN IR heuristics · 509 exported functions · full Pester suite (142 suites) gating CI*
