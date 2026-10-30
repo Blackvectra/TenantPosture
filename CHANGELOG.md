@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **[Assessment] SCAP results view (`-ScapResults`, `New-TPScapView.ps1`).** Endpoint STIG and CIS scan results from
+  DISA SCC or OpenSCAP (XCCDF 1.1/1.2 or ARF) now appear beside the Microsoft 365 assessment as a separate, unscored
+  view.
+  - **Per benchmark.** Each rule shows how many current hosts passed or failed it, with the failing hosts named and
+    the CAT I/II/III severity.
+  - **Never a pass by default.** Manual checks and scanner errors are never counted as a pass.
+  - **Older or repeated results.** Results older than 30 days are listed but not counted. When a host has several
+    results, the newest is used and the rest are listed as superseded.
+  - **Stated limits.** The page says the results were imported and not verified, cover only the hosts in the files,
+    and are not a compliance determination.
+  - **Safe reading.** The reader refuses DTDs (XXE), resolves nothing external, caps file size, and keeps no IP
+    addresses, MAC addresses or user names.
+  - **Output.** It writes `<base>-scap.html` / `.md` and `ScapView` in the results JSON.
+
 - **[Assessment] The sign-in evidence collector shows its progress, stops at a time budget, and can be skipped.** It
   makes 27 filtered reads of 30 days of the sign-in log. On the first live run the console sat on "Sign-in evidence
   (30 days)" for 15 minutes with no output.
