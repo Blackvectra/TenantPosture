@@ -538,6 +538,29 @@ Describe 'The What If collector' {
 }
 
 Describe 'The referenced-object read' {
+    It 'reads a group property returned as null as false, and one not returned as unknown (2026-10-30 live run)' {
+        & $script:Mod {
+            function script:Invoke-TPGraphRequest { param($Method, $Uri, $Headers, $OutputType)
+                # The live shape: an ordinary group comes back with both properties present and null.
+                if ($Uri -match '/groups/55555555') { return @{ id = '55555555-5555-5555-5555-555555555555'; displayName = 'Conditional Access: User risk remediation'; isAssignableToRole = $null; isManagementRestricted = $null } }
+                # A response that does not carry the properties at all.
+                if ($Uri -match '/groups/66666666') { return @{ id = '66666666-6666-6666-6666-666666666666'; displayName = 'Older shape' } }
+                throw 'unexpected'
+            }
+            try {
+                $pols = @(@{ Conditions = @{ Users = @{ IncludeUsers = @('All'); ExcludeUsers = @(); IncludeGroups = @(); ExcludeGroups = @('55555555-5555-5555-5555-555555555555', '66666666-6666-6666-6666-666666666666'); IncludeRoles = @(); ExcludeRoles = @() } } })
+                $r = Get-TPCAReferencedObjects -Policies $pols
+                $plain = $r.Objects | Where-Object { $_.Id -like '5555*' }
+                $plain.IsAssignableToRole | Should -BeFalse
+                $plain.IsAssignableToRole | Should -Not -BeNullOrEmpty
+                $plain.IsManagementRestricted | Should -BeFalse
+                $plain.IsManagementRestricted | Should -Not -BeNullOrEmpty
+                $older = $r.Objects | Where-Object { $_.Id -like '6666*' }
+                $older.IsAssignableToRole | Should -BeNullOrEmpty
+                $older.IsManagementRestricted | Should -BeNullOrEmpty
+            } finally { Remove-Item function:Invoke-TPGraphRequest -ErrorAction SilentlyContinue }
+        }
+    }
     It 'files a 404 as a deleted object, any other error as unread, and reads group protection from beta' {
         & $script:Mod {
             function script:Invoke-TPGraphRequest { param($Method, $Uri, $Headers, $OutputType)
