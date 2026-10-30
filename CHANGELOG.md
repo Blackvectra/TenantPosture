@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[Testing] Parser fuzzing (`TP.Fuzz.Tests.ps1`, `tools/TPFuzz.ps1`).** A deterministic mutation fuzzer now
+  checks every parser that reads untrusted input, and the escapers that write tenant text into a deliverable.
+  - **Parsers covered:** results JSON (`Read-TPRunRecord`, the MCP reader), MCP JSON-RPC lines, SCAP and ScubaGear
+    files, endpoint result files, DoH TXT data and web path segments.
+  - **Contracts checked on every case:**
+    - It answers, or refuses with a fixed sentence that never echoes the input.
+    - It never crashes on a field the input left out, and never hangs.
+    - An allowed path stays inside the output folder.
+    - Escaped text forms no markup, and a generated PowerShell literal parses back to its input.
+  - **Reproducible.** The seed is fixed (`TP_FUZZ_SEED`), and a failure prints the seed, the iteration and the input
+    as base64. `TP_FUZZ_ITERATIONS` lengthens a local run.
+
 - **[Assessment] Two collector fixes from the 2026-10-30 live run.**
   - **MDM authority.** The Intune checklist read `organization?$select=mobileDeviceManagementAuthority`, which Graph
     v1.0 refused with a 400, so the MDM authority row was never assessed. The collector now reads the organization
