@@ -1,0 +1,50 @@
+<!--
+  Evaluation questions for the TenantPosture MCP server (Start-TPMcpServer.ps1).
+  Ask them against the fixed output folder tools/mcp-eval/New-TPMcpEvalFixture.ps1
+  builds; the answers never change. Each needs several tool calls, and
+  TP.McpServer.Tests.ps1 walks every question's path through the real server
+  and fails if an answer here stops being true. Answers are compared as exact
+  strings, so each question states the form it wants.
+-->
+<evaluation>
+  <qa_pair>
+    <question>Between Contoso's earliest and most recent saved assessments, exactly one security control went from an open problem to a pass. Which control was it? Answer with the control ID only.</question>
+    <answer>DEF-2.1</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In Contoso's most recent assessment, how many distinct controls rated Critical are still open (either a gap or only partly in place)? Answer with a number only.</question>
+    <answer>2</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Looking only at each tenant's most recent saved assessment, which tenant recorded the lowest maturity score? Answer with the tenant label exactly as the run listing shows it.</question>
+    <answer>fabrikam.example</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In the Fabrikam assessment, one check failed to run at all instead of producing a verdict. What license does the tool's control catalog say that control requires? Answer with the license requirement text exactly as the catalog gives it.</question>
+    <answer>Included (M365 Business Standard+)</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In Contoso's most recent assessment, on how many of its email domains did the sender policy (SPF) check fail? Answer with a number only.</question>
+    <answer>2</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In Contoso's most recent assessment, how many required rows of the NRG Security Baseline could not be verified? Answer with a number only.</question>
+    <answer>3</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>The Northwind assessment from 2025 has many findings. Which workload had the most open findings (gaps or partial)? Answer with the workload's control ID prefix only, for example AAD.</question>
+    <answer>EXO</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Contoso's most recent assessment names one change that could lock people out. How many accounts does the run's data show that change would affect? Answer with a number only.</question>
+    <answer>3</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In Contoso's earliest saved assessment, the NRG Security Baseline could not verify the mailbox audit logging control. What reason code did it record? Answer with the reason code only.</question>
+    <answer>CollectorUnavailable</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Contoso's most recent assessment names one change that could lock people out. What effort class does the tool's catalog give for remediating that control? Answer with the effort class exactly as the catalog gives it.</question>
+    <answer>Project</answer>
+  </qa_pair>
+</evaluation>

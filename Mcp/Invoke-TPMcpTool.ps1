@@ -15,7 +15,7 @@
 # Graph scopes / cmdlets used: none. No network, no sign-in, no file write.
 #
 # Rules every tool keeps (docs/TP-MCP-SERVER.md):
-#   * A run is addressed by (folder, id) exactly as list_runs returned them; no
+#   * A run is addressed by (folder, id) exactly as tenantposture_list_runs returned them; no
 #     argument is ever a path.
 #   * NotApplicable, Error and "no finding" are never a pass; a value the
 #     results file does not record is reported as not recorded, never
@@ -52,8 +52,8 @@ function Get-TPMcpToolDefinitions {
     [OutputType([object[]])]
     param()
 
-    $folder = [ordered]@{ type = 'string'; description = 'The run''s folder exactly as list_runs returned it (a tenant folder name, or _flat for the output folder itself).'; maxLength = 255 }
-    $id     = [ordered]@{ type = 'string'; description = 'The run''s id exactly as list_runs returned it.'; maxLength = 255 }
+    $folder = [ordered]@{ type = 'string'; description = 'The run''s folder exactly as tenantposture_list_runs returned it (a tenant folder name, or _flat for the output folder itself).'; maxLength = 255 }
+    $id     = [ordered]@{ type = 'string'; description = 'The run''s id exactly as tenantposture_list_runs returned it, e.g. CONTOSO-20261016-100000.'; maxLength = 255 }
     $cid    = [ordered]@{ type = 'string'; description = 'A control ID such as AAD-1.1, EXO-7.2 or DEV-8.3.'; maxLength = 32 }
     $obj    = [ordered]@{ type = 'object' }
     $arr    = [ordered]@{ type = 'array' }
@@ -62,32 +62,60 @@ function Get-TPMcpToolDefinitions {
     $bool   = [ordered]@{ type = 'boolean' }
     $ro     = [ordered]@{ readOnlyHint = $true; destructiveHint = $false; idempotentHint = $true; openWorldHint = $false }
     $states = @('Satisfied', 'Partial', 'Gap', 'NotApplicable', 'Error')
+    $fmt    = [ordered]@{ type = 'string'; enum = @('json', 'markdown'); description = 'Optional: json (default) returns the answer as JSON text; markdown returns the same answer as readable Markdown. Structured output is JSON either way.' }
 
+    # Every tool takes response_format; a tool with a limit also takes offset
+    # and returns the paging fields (total, returned, offset, hasMore,
+    # nextOffset). Every tool is read-only, idempotent and closed-world: it
+    # reads saved results files on this computer and nothing else.
     $tool = {
         param([string] $Name, [string] $Title, [string] $Description, $Properties, [string[]] $Required, $Output, [string[]] $OutputRequired)
+        $inProps = [ordered]@{}
+        foreach ($k in @($Properties.Keys)) { $inProps[$k] = $Properties[$k] }
+        $outProps = [ordered]@{}
+        foreach ($k in @($Output.Keys)) { $outProps[$k] = $Output[$k] }
+        $outRequired = [System.Collections.Generic.List[string]]::new()
+        foreach ($r in @($OutputRequired)) { $outRequired.Add($r) }
+        if ($inProps.Contains('limit')) {
+            $inProps['offset'] = [ordered]@{ type = 'integer'; description = 'Paging: how many matching items to skip (default 0). Pass the nextOffset of the previous answer to get the next page.'; minimum = 0; maximum = 100000 }
+            $outProps['offset']     = [ordered]@{ type = 'integer'; description = 'The offset this page starts at.' }
+            $outProps['hasMore']    = [ordered]@{ type = 'boolean'; description = 'True when more matching items follow this page.' }
+            $outProps['nextOffset'] = [ordered]@{ type = @('integer', 'null'); description = 'The offset of the next page, or null on the last page.' }
+            foreach ($r in 'offset', 'hasMore', 'nextOffset') { $outRequired.Add($r) }
+        }
+        $inProps['response_format'] = $fmt
         [ordered]@{
             name         = $Name
             title        = $Title
             description  = $Description
-            inputSchema  = [ordered]@{ type = 'object'; properties = $Properties; required = @($Required); additionalProperties = $false }
-            outputSchema = [ordered]@{ type = 'object'; properties = $Output; required = @($OutputRequired) }
+            inputSchema  = [ordered]@{ type = 'object'; properties = $inProps; required = @($Required); additionalProperties = $false }
+            outputSchema = [ordered]@{ type = 'object'; properties = $outProps; required = @($outRequired) }
             annotations  = $ro
         }
     }
+    $item = { param($Props) [ordered]@{ type = 'array'; items = [ordered]@{ type = 'object'; properties = $Props } } }
+
+    $runRow = & $item ([ordered]@{ tenant = $str; folder = $str; id = $str; date = $str; dateSource = $str; toolVersion = $str; controlCount = [ordered]@{ type = @('integer', 'null') }; findingCount = [ordered]@{ type = @('integer', 'null') }; baselineRecorded = $bool; readable = $bool })
+    $findingRow = & $item ([ordered]@{ controlId = $str; title = $str; state = $str; severity = $str; workload = $str; instance = $str; detail = $str })
+    $baselineRow = & $item ([ordered]@{ controlId = $str; title = $str; tier = $str; observedState = $str; baselineStatus = $str; constraint = $str; disposition = $str; effectivenessState = $str; reasonCode = $str; reason = $str })
+    $changeRow = & $item ([ordered]@{ controlId = $str; title = $str; severity = $str; before = $str; after = $str; direction = $str })
 
     return @(
-        (& $tool 'list_runs' 'List assessment runs' 'Lists the TenantPosture assessment runs saved under the output folder, newest first: tenant label, folder and id (the address every other tool takes), assessment date, tool version and control count. Incident-response outputs are never listed.' `
+        (& $tool 'tenantposture_list_runs' 'List assessment runs' ('Lists the TenantPosture assessment runs saved on this computer, newest first. Call this first: every other run tool takes the folder and id it returns. ' +
+            'Each run carries its tenant label, assessment date, tool version and control count. Use tenant to narrow by name (for example tenant="contoso"); page with limit and offset. Incident-response outputs are never listed.') `
             ([ordered]@{
-                tenant = [ordered]@{ type = 'string'; description = 'Optional: only runs whose tenant label contains this text (case-insensitive).'; maxLength = 253 }
+                tenant = [ordered]@{ type = 'string'; description = 'Optional: only runs whose tenant label contains this text (case-insensitive), e.g. "contoso".'; maxLength = 253 }
                 limit  = [ordered]@{ type = 'integer'; description = 'Maximum runs to return (default 50, at most 200).'; minimum = 1; maximum = 200 }
             }) @() `
-            ([ordered]@{ runs = $arr; total = $int; returned = $int; truncated = $bool; note = $str }) @('runs', 'total', 'returned', 'truncated'))
+            ([ordered]@{ runs = $runRow; total = $int; returned = $int; truncated = $bool; note = $str }) @('runs', 'total', 'returned', 'truncated'))
 
-        (& $tool 'get_run_summary' 'Summarize one run' 'Summarizes one assessment run: metadata, the maturity label and score as the run recorded them, finding counts by state and severity, worst state per control, the NRG Security Baseline version, tier and its evidence and effectiveness coverage lines, and the license profile read from the run''s subscribed SKUs.' `
+        (& $tool 'tenantposture_get_run_summary' 'Summarize one run' ('Summarizes one assessment run: its metadata, the maturity label and score exactly as the run recorded them, finding counts by state and severity, open controls by severity, the NRG Security Baseline version, tier and coverage lines, and the license profile. ' +
+            'Use it for "how did this tenant do" questions; use tenantposture_list_findings for the individual findings.') `
             ([ordered]@{ folder = $folder; id = $id }) @('folder', 'id') `
             ([ordered]@{ run = $obj; maturity = $obj; findingInstances = $obj; controls = $obj; baseline = $obj; license = $obj; notes = $arr }) @('run', 'maturity', 'findingInstances', 'controls', 'baseline', 'license', 'notes'))
 
-        (& $tool 'list_findings' 'List findings of one run' 'Lists the findings of one run with a short detail, optionally filtered by state, severity, workload or control ID. A control can have several findings (one per DNS domain, for example).' `
+        (& $tool 'tenantposture_list_findings' 'List findings of one run' ('Lists the findings of one run with a shortened detail, optionally filtered by state, severity, workload or control ID (for example state="Gap", severity="Critical", workload="AAD"). ' +
+            'A control can have several findings, one per DNS domain for example. Page with limit and offset; use tenantposture_get_finding for one control in full.') `
             ([ordered]@{
                 folder    = $folder
                 id        = $id
@@ -97,34 +125,40 @@ function Get-TPMcpToolDefinitions {
                 controlId = $cid
                 limit     = [ordered]@{ type = 'integer'; description = 'Maximum findings to return (default 50, at most 200).'; minimum = 1; maximum = 200 }
             }) @('folder', 'id') `
-            ([ordered]@{ findings = $arr; total = $int; returned = $int; truncated = $bool; note = $str }) @('findings', 'total', 'returned', 'truncated', 'note'))
+            ([ordered]@{ findings = $findingRow; total = $int; returned = $int; truncated = $bool; note = $str }) @('findings', 'total', 'returned', 'truncated', 'note'))
 
-        (& $tool 'get_finding' 'Get the findings for one control' 'Returns every finding one run recorded for one control: state, detail, current and required value, remediation, framework citations and affected objects (capped).' `
+        (& $tool 'tenantposture_get_finding' 'Get the findings for one control' ('Returns every finding one run recorded for one control, in full: state, detail, current and required value, remediation, framework citations and affected objects (capped). ' +
+            'A control with no finding in the run is reported as not evaluated, never as a pass.') `
             ([ordered]@{ folder = $folder; id = $id; controlId = $cid }) @('folder', 'id', 'controlId') `
             ([ordered]@{ controlId = $str; instances = $arr; worstState = $str; note = $str }) @('controlId', 'instances', 'note'))
 
-        (& $tool 'get_control' 'Describe one control' 'Describes one control from the tool''s catalog (no run needed): definition, license requirement, framework references, configuration benchmark mapping, operational impact of remediating it, and its NRG Security Baseline row if it has one.' `
+        (& $tool 'tenantposture_get_control' 'Describe one control' ('Describes one control from the tool''s catalog; no run is needed. Returns its definition, license requirement, framework references (NIST, CIS, SCuBA and others), configuration benchmark mapping, the operational impact of remediating it, and its NRG Security Baseline row if it has one. ' +
+            'Use it to explain what a control checks or what fixing it changes.') `
             ([ordered]@{ controlId = $cid }) @('controlId') `
             ([ordered]@{ control = $obj; benchmarks = $obj; operationalImpact = $obj; baseline = $obj }) @('control', 'benchmarks', 'operationalImpact', 'baseline'))
 
-        (& $tool 'compare_runs' 'Compare two runs of one tenant' 'Compares two runs of the SAME tenant (A before, B after): controls whose worst state changed, new and resolved gaps, and controls present in only one run. Refuses two different tenants; that comparison is Compare-TPTenantBaseline.ps1, run offline.' `
+        (& $tool 'tenantposture_compare_runs' 'Compare two runs of one tenant' ('Compares two runs of the SAME tenant, A before and B after: controls whose worst state changed (Improved, Regressed or VerdictChanged), new gaps, resolved gaps, and controls present in only one run. ' +
+            'Refuses two different tenants; that comparison is Compare-TPTenantBaseline.ps1, run offline.') `
             ([ordered]@{ folderA = $folder; idA = $id; folderB = $folder; idB = $id }) @('folderA', 'idA', 'folderB', 'idB') `
-            ([ordered]@{ runA = $obj; runB = $obj; changed = $arr; newGaps = $arr; resolvedGaps = $arr; onlyInA = $arr; onlyInB = $arr; unchangedCount = $int; notes = $arr }) @('runA', 'runB', 'changed', 'newGaps', 'resolvedGaps', 'onlyInA', 'onlyInB', 'unchangedCount', 'notes'))
+            ([ordered]@{ runA = $obj; runB = $obj; changed = $changeRow; newGaps = $changeRow; resolvedGaps = $changeRow; onlyInA = $arr; onlyInB = $arr; unchangedCount = $int; notes = $arr }) @('runA', 'runB', 'changed', 'newGaps', 'resolvedGaps', 'onlyInA', 'onlyInB', 'unchangedCount', 'notes'))
 
-        (& $tool 'get_baseline' 'Get the baseline rows of one run' 'Returns the NRG Security Baseline rows the run recorded (BaselineCompliance): per required control the tier, observed state, display status, reason code and reason. Optionally filtered by status.' `
+        (& $tool 'tenantposture_get_baseline' 'Get the baseline rows of one run' ('Returns the NRG Security Baseline rows the run recorded: per required control its tier, observed state, display status, reason code and reason, plus the evidence and effectiveness coverage lines. ' +
+            'Optionally filtered by status (for example status="NotVerified"); page with limit and offset.') `
             ([ordered]@{
                 folder = $folder
                 id     = $id
                 status = [ordered]@{ type = 'string'; enum = @('Satisfied', 'Failed', 'NotVerified', 'NotApplicable', 'LicenseBlocked', 'ApprovedException'); description = 'Optional filter on the row''s display status (BaselineStatus).' }
                 limit  = [ordered]@{ type = 'integer'; description = 'Maximum rows to return (default 100, at most 200).'; minimum = 1; maximum = 200 }
             }) @('folder', 'id') `
-            ([ordered]@{ recorded = $bool; baselineVersion = $str; targetTier = $str; summary = $obj; evidenceCoverage = $obj; effectivenessCoverage = $obj; rows = $arr; total = $int; returned = $int; truncated = $bool; note = $str }) @('recorded', 'rows', 'note'))
+            ([ordered]@{ recorded = $bool; baselineVersion = $str; targetTier = $str; summary = $obj; evidenceCoverage = $obj; effectivenessCoverage = $obj; rows = $baselineRow; total = $int; returned = $int; truncated = $bool; note = $str }) @('recorded', 'rows', 'note'))
 
-        (& $tool 'get_scope' 'What one run did not assess' 'Lists which controls the run did not reach a verdict on and why (collection incomplete, license blocked, skipped by the operator, no automated check, no result), with the plain-language limitations. Computed from the results file the way a -FromResults republish does; the answer says so.' `
+        (& $tool 'tenantposture_get_scope' 'What one run did not assess' ('Lists the controls a run reached no verdict on and why: collection incomplete, license blocked, skipped by the operator, no automated check, no result. Includes the plain-language limitations. ' +
+            'Use it before calling a tenant clean: a control missing from the findings is not a pass. Computed from the results file the way a -FromResults republish does, and the answer says so.') `
             ([ordered]@{ folder = $folder; id = $id }) @('folder', 'id') `
             ([ordered]@{ computed = $bool; basis = $str; totalControls = $int; scoredControls = $int; unscoredControls = $int; buckets = $obj; coverageIssues = $arr; limitations = $arr }) @('computed', 'basis', 'buckets', 'limitations'))
 
-        (& $tool 'get_change_impact' 'What fixing each open item would break' 'Returns the change-impact view the run recorded: its open findings sorted into implementNow (licensed and invisible to users), needsPlanning (someone will notice), couldBreakAccounts (can lock a person, an administrator, a device or a mailbox out) and licenseDecision, and for each risky change the accounts the run''s data shows would be affected, how complete that evidence is, what the tool cannot see, and the emergency-access accounts to exclude. Optionally one list, or one control.' `
+        (& $tool 'tenantposture_get_change_impact' 'What fixing each open item would break' ('Returns the change-impact view the run recorded. It sorts the open findings into implementNow (licensed and invisible to users), needsPlanning (someone will notice), couldBreakAccounts (can lock a person, administrator, device or mailbox out) and licenseDecision. ' +
+            'For each risky change it lists the accounts the run''s data shows would be affected, how complete that evidence is, what the tool cannot see, and the emergency-access accounts to exclude. Optionally one list, or one control.') `
             ([ordered]@{
                 folder    = $folder
                 id        = $id
@@ -133,6 +167,38 @@ function Get-TPMcpToolDefinitions {
             }) @('folder', 'id') `
             ([ordered]@{ recorded = $bool; summary = $obj; implementNow = $arr; needsPlanning = $arr; couldBreakAccounts = $arr; licenseDecision = $arr; emergencyAccess = $obj; scopeNotice = $str; note = $str }) @('recorded', 'note'))
     )
+}
+
+# The names the server answered to before the tenantposture_ prefix. A client
+# configured with them keeps working; tools/list announces only the new names.
+function Get-TPMcpLegacyToolNames {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param()
+    $map = @{}
+    foreach ($n in 'list_runs', 'get_run_summary', 'list_findings', 'get_finding', 'get_control', 'compare_runs', 'get_baseline', 'get_scope', 'get_change_impact') { $map[$n] = "tenantposture_$n" }
+    return $map
+}
+
+# One page of a filtered list: the paging fields every paged tool returns.
+function Get-TPMcpPage {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Items,
+        [Parameter(Mandatory)] [int] $Offset,
+        [Parameter(Mandatory)] [int] $Limit
+    )
+    $total = $Items.Count
+    $page = @(if ($Offset -lt $total) { $Items[$Offset..([math]::Min($total, $Offset + $Limit) - 1)] })
+    $next = $Offset + $page.Count
+    return [ordered]@{
+        Items      = $page
+        Total      = $total
+        Returned   = $page.Count
+        Offset     = $Offset
+        HasMore    = ($next -lt $total)
+        NextOffset = $(if ($next -lt $total) { $next } else { $null })
+    }
 }
 
 # ── Shared helpers ───────────────────────────────────────────────────────────
@@ -146,8 +212,8 @@ function Get-TPMcpRunByAddress {
         [Parameter()] [AllowNull()] [AllowEmptyString()] [string] $Id
     )
     $found = Resolve-TPWebRunPath -OutputRoot $Ctx.OutputRoot -Folder $Folder -Id $Id -Kind Results
-    if ($found.Status -eq 'BadRequest') { Stop-TPMcpTool -Message 'folder and id must be the values list_runs returned (letters, digits, dot, underscore and hyphen only).' }
-    if ($found.Status -ne 'Ok') { Stop-TPMcpTool -Message 'No assessment run with that folder and id. Call list_runs for the runs that exist.' }
+    if ($found.Status -eq 'BadRequest') { Stop-TPMcpTool -Message 'folder and id must be the values tenantposture_list_runs returned (letters, digits, dot, underscore and hyphen only). Call tenantposture_list_runs and copy them exactly.' }
+    if ($found.Status -ne 'Ok') { Stop-TPMcpTool -Message 'No assessment run with that folder and id. Call tenantposture_list_runs for the runs that exist, then pass its folder and id exactly.' }
     try {
         $run = Get-TPMcpRun -Path $found.Path -Cache $Ctx.RunCache
     } catch {
@@ -239,6 +305,14 @@ function Get-TPMcpIntArg {
     return $n
 }
 
+function Get-TPMcpOffsetArg {
+    [CmdletBinding()]
+    [OutputType([int])]
+    param([Parameter()] [AllowNull()] [object] $Value)
+    if ($null -eq $Value) { return 0 }
+    return [int][math]::Max(0, [math]::Min(100000, [long]$Value))
+}
+
 # ── Tools ────────────────────────────────────────────────────────────────────
 
 function Invoke-TPMcpListRuns {
@@ -246,10 +320,10 @@ function Invoke-TPMcpListRuns {
     param([Parameter(Mandatory)] [hashtable] $Ctx, [Parameter(Mandatory)] [hashtable] $Arguments)
 
     $limit  = Get-TPMcpIntArg -Value $Arguments['limit'] -Default 50 -Max 200
+    $offset = Get-TPMcpOffsetArg -Value $Arguments['offset']
     $filter = [string]($Arguments['tenant'] ?? '')
     $rows = @(Get-TPWebRunList -OutputRoot $Ctx.OutputRoot -ClientsFile $Ctx.ClientsFile -MetadataCache $Ctx.MetaCache)
     $out = [System.Collections.Generic.List[object]]::new()
-    $total = 0
     foreach ($r in $rows) {
         $label = [string](Get-TPObjectField -Item $r -Key 'tenant' -Default '')
         if ($filter -and $label.IndexOf($filter, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
@@ -283,8 +357,6 @@ function Invoke-TPMcpListRuns {
             $Ctx.SummaryCache[$stamp] = $summary
         }
         if ($summary.Skip) { continue }
-        $total++
-        if ($out.Count -ge $limit) { continue }
         $out.Add([ordered]@{
             tenant           = $label
             folder           = $folderSeg
@@ -298,12 +370,16 @@ function Invoke-TPMcpListRuns {
             readable         = -not [bool](Get-TPObjectField -Item $summary -Key 'Unreadable' -Default $false)
         })
     }
+    $page = Get-TPMcpPage -Items $out.ToArray() -Offset $offset -Limit $limit
     return [ordered]@{
-        runs      = $out.ToArray()
-        total     = $total
-        returned  = $out.Count
-        truncated = ($total -gt $out.Count)
-        note      = 'The tenant label is for display: pass folder and id, exactly as given, to the other tools.'
+        runs       = $page.Items
+        total      = $page.Total
+        returned   = $page.Returned
+        offset     = $page.Offset
+        hasMore    = $page.HasMore
+        nextOffset = $page.NextOffset
+        truncated  = $page.HasMore
+        note       = 'The tenant label is for display: pass folder and id, exactly as given, to the other tools.'
     }
 }
 
@@ -398,9 +474,10 @@ function Invoke-TPMcpListFindings {
 
     $run = Get-TPMcpRunByAddress -Ctx $Ctx -Folder $Arguments['folder'] -Id $Arguments['id']
     $limit = Get-TPMcpIntArg -Value $Arguments['limit'] -Default 50 -Max 200
+    $offset = Get-TPMcpOffsetArg -Value $Arguments['offset']
     $state = [string]($Arguments['state'] ?? ''); $sev = [string]($Arguments['severity'] ?? '')
     $wl = [string]($Arguments['workload'] ?? ''); $cid = [string]($Arguments['controlId'] ?? '')
-    if ($cid -and -not (Test-TPMcpControlId -Value $cid)) { Stop-TPMcpTool -Message 'controlId must look like AAD-1.1.' }
+    if ($cid -and -not (Test-TPMcpControlId -Value $cid)) { Stop-TPMcpTool -Message 'controlId must look like AAD-1.1 (workload prefix, a hyphen, then the number). tenantposture_list_findings lists the control IDs a run recorded.' }
 
     $rows = [System.Collections.Generic.List[object]]::new()
     $total = 0
@@ -413,8 +490,6 @@ function Invoke-TPMcpListFindings {
         if ($sev -and $fv -ne $sev) { continue }
         if ($wl -and $fw -ne $wl.ToUpperInvariant()) { continue }
         if ($cid -and $fid -ne $cid) { continue }
-        $total++
-        if ($rows.Count -ge $limit) { continue }
         $rows.Add([ordered]@{
             controlId = $fid
             title     = [string](Get-TPObjectField -Item $f -Key 'Title' -Default '')
@@ -425,12 +500,16 @@ function Invoke-TPMcpListFindings {
             detail    = [string](Get-TPObjectField -Item $f -Key 'Detail' -Default '')
         })
     }
+    $page = Get-TPMcpPage -Items $rows.ToArray() -Offset $offset -Limit $limit
     return [ordered]@{
-        findings  = $rows.ToArray()
-        total     = $total
-        returned  = $rows.Count
-        truncated = ($total -gt $rows.Count)
-        note      = (Get-TPMcpNotPassNote) + ' Detail is shortened here; get_finding returns it in full.'
+        findings   = $page.Items
+        total      = $page.Total
+        returned   = $page.Returned
+        offset     = $page.Offset
+        hasMore    = $page.HasMore
+        nextOffset = $page.NextOffset
+        truncated  = $page.HasMore
+        note       = (Get-TPMcpNotPassNote) + ' Detail is shortened here; tenantposture_get_finding returns it in full.'
     }
 }
 
@@ -439,7 +518,7 @@ function Invoke-TPMcpGetFinding {
     param([Parameter(Mandatory)] [hashtable] $Ctx, [Parameter(Mandatory)] [hashtable] $Arguments)
 
     $cid = [string]$Arguments['controlId']
-    if (-not (Test-TPMcpControlId -Value $cid)) { Stop-TPMcpTool -Message 'controlId must look like AAD-1.1.' }
+    if (-not (Test-TPMcpControlId -Value $cid)) { Stop-TPMcpTool -Message 'controlId must look like AAD-1.1 (workload prefix, a hyphen, then the number). tenantposture_list_findings lists the control IDs a run recorded.' }
     $run = Get-TPMcpRunByAddress -Ctx $Ctx -Folder $Arguments['folder'] -Id $Arguments['id']
     $fields = 'ControlId', 'State', 'Severity', 'Category', 'Title', 'Instance', 'Detail', 'CurrentValue', 'RequiredValue', 'Remediation', 'FrameworkIds', 'AffectedObjects', 'Coverage', 'Timestamp'
     $instances = [System.Collections.Generic.List[object]]::new()
@@ -471,7 +550,7 @@ function Invoke-TPMcpGetControl {
     param([Parameter(Mandatory)] [hashtable] $Ctx, [Parameter(Mandatory)] [hashtable] $Arguments)
 
     $cid = [string]$Arguments['controlId']
-    if (-not (Test-TPMcpControlId -Value $cid)) { Stop-TPMcpTool -Message 'controlId must look like AAD-1.1.' }
+    if (-not (Test-TPMcpControlId -Value $cid)) { Stop-TPMcpTool -Message 'controlId must look like AAD-1.1 (workload prefix, a hyphen, then the number). tenantposture_list_findings lists the control IDs a run recorded.' }
     $def = @(Get-TPControlDefinitions) | Where-Object { [string](Get-TPObjectField -Item $_ -Key 'ControlId' -Default '') -ceq $cid } | Select-Object -First 1
     if ($null -eq $def) { Stop-TPMcpTool -Message 'That control ID is not in this tool''s control catalog (Config/controls.json). Endpoint DEV-* checks are defined in Config/device-controls.json and are not described here.' }
 
@@ -593,6 +672,7 @@ function Invoke-TPMcpGetBaseline {
         return [ordered]@{ recorded = $false; rows = @(); note = 'The results file records no NRG Security Baseline view (older run, or the view was not resolved). It is not recomputed here.' }
     }
     $limit = Get-TPMcpIntArg -Value $Arguments['limit'] -Default 100 -Max 200
+    $offset = Get-TPMcpOffsetArg -Value $Arguments['offset']
     $status = [string]($Arguments['status'] ?? '')
     $rows = [System.Collections.Generic.List[object]]::new()
     $total = 0
@@ -600,8 +680,6 @@ function Invoke-TPMcpGetBaseline {
         if ($null -eq $r) { continue }
         $bs = [string](Get-TPObjectField -Item $r -Key 'BaselineStatus' -Default '')
         if ($status -and $bs -ne $status) { continue }
-        $total++
-        if ($rows.Count -ge $limit) { continue }
         $rows.Add([ordered]@{
             controlId          = [string](Get-TPObjectField -Item $r -Key 'ControlId' -Default '')
             title              = [string](Get-TPObjectField -Item $r -Key 'Title' -Default '')
@@ -620,6 +698,7 @@ function Invoke-TPMcpGetBaseline {
     foreach ($k in 'RequiredControls', 'Satisfied', 'Failed', 'NotVerified', 'NotApplicable', 'LicenseBlocked', 'ApprovedException') { $summary[$k] = Get-TPObjectField -Item $sum -Key $k -Default $null }
     $ev  = Get-TPMcpField -Item $bc -Key 'EvidenceCoverage'
     $eff = Get-TPMcpField -Item $bc -Key 'EffectivenessCoverage'
+    $page = Get-TPMcpPage -Items $rows.ToArray() -Offset $offset -Limit $limit
     return [ordered]@{
         recorded              = $true
         baselineVersion       = [string](Get-TPObjectField -Item $bc -Key 'BaselineVersion' -Default '')
@@ -627,10 +706,13 @@ function Invoke-TPMcpGetBaseline {
         summary               = $summary
         evidenceCoverage      = $(if ($null -ne $ev)  { $ev }  else { [ordered]@{ recorded = $false } })
         effectivenessCoverage = $(if ($null -ne $eff) { $eff } else { [ordered]@{ recorded = $false } })
-        rows                  = $rows.ToArray()
-        total                 = $total
-        returned              = $rows.Count
-        truncated             = ($total -gt $rows.Count)
+        rows                  = $page.Items
+        total                 = $page.Total
+        returned              = $page.Returned
+        offset                = $page.Offset
+        hasMore               = $page.HasMore
+        nextOffset            = $page.NextOffset
+        truncated             = $page.HasMore
         note                  = 'Rows as the run recorded them. NotVerified, NotApplicable and LicenseBlocked are not passes; an ApprovedException is a disposition beside the observed state, never a change to it. Coverage lines are not scores.'
     }
 }
@@ -645,7 +727,7 @@ function Invoke-TPMcpGetChangeImpact {
         return [ordered]@{ recorded = $false; note = 'The results file records no change-impact view (a run made before this tool version, or the view failed). It is not recomputed here; republish the run with Invoke-TPAssessment.ps1 -FromResults to add it.' }
     }
     $cidArg = [string]($Arguments['controlId'] ?? '')
-    if ($cidArg -and -not (Test-TPMcpControlId -Value $cidArg)) { Stop-TPMcpTool -Message 'controlId must look like AAD-1.1.' }
+    if ($cidArg -and -not (Test-TPMcpControlId -Value $cidArg)) { Stop-TPMcpTool -Message 'controlId must look like AAD-1.1 (workload prefix, a hyphen, then the number). tenantposture_list_findings lists the control IDs a run recorded.' }
     $names = [ordered]@{ implementNow = 'ImplementNow'; needsPlanning = 'NeedsPlanning'; couldBreakAccounts = 'CouldBreakAccounts'; licenseDecision = 'LicenseDecision' }
     $want = [string]($Arguments['list'] ?? '')
     $out = [ordered]@{ recorded = $true; summary = (Get-TPMcpField -Item $ci -Key 'Summary') }
@@ -772,16 +854,18 @@ function Invoke-TPMcpTool {
         [Parameter(Mandatory)] [hashtable] $Arguments
     )
     $impl = @{
-        list_runs       = 'Invoke-TPMcpListRuns'
-        get_run_summary = 'Invoke-TPMcpRunSummary'
-        list_findings   = 'Invoke-TPMcpListFindings'
-        get_finding     = 'Invoke-TPMcpGetFinding'
-        get_control     = 'Invoke-TPMcpGetControl'
-        compare_runs    = 'Invoke-TPMcpCompareRuns'
-        get_baseline    = 'Invoke-TPMcpGetBaseline'
-        get_scope       = 'Invoke-TPMcpGetScope'
-        get_change_impact = 'Invoke-TPMcpGetChangeImpact'
+        tenantposture_list_runs         = 'Invoke-TPMcpListRuns'
+        tenantposture_get_run_summary   = 'Invoke-TPMcpRunSummary'
+        tenantposture_list_findings     = 'Invoke-TPMcpListFindings'
+        tenantposture_get_finding       = 'Invoke-TPMcpGetFinding'
+        tenantposture_get_control       = 'Invoke-TPMcpGetControl'
+        tenantposture_compare_runs      = 'Invoke-TPMcpCompareRuns'
+        tenantposture_get_baseline      = 'Invoke-TPMcpGetBaseline'
+        tenantposture_get_scope         = 'Invoke-TPMcpGetScope'
+        tenantposture_get_change_impact = 'Invoke-TPMcpGetChangeImpact'
     }
+    $legacy = Get-TPMcpLegacyToolNames
+    if ($legacy.ContainsKey($Name)) { $Name = $legacy[$Name] }
     $def = @(Get-TPMcpToolDefinitions) | Where-Object { $_['name'] -ceq $Name } | Select-Object -First 1
     if ($null -eq $def -or -not $impl.ContainsKey($Name)) { throw [System.ArgumentException]::new('Unknown tool.') }
     $bad = Test-TPMcpArguments -Schema $def['inputSchema'] -Arguments $Arguments
@@ -790,8 +874,8 @@ function Invoke-TPMcpTool {
 
     # Every value leaves through the same filter. Catalog text (get_control) is
     # the tool's own and is not pseudonymized; run data is.
-    $state = if ($Name -eq 'get_control') { $null } else { $Ctx.Pseudo }
-    $maxLen = switch ($Name) { 'list_findings' { 300 } 'list_runs' { 300 } 'get_baseline' { 600 } 'get_scope' { 600 } default { 4000 } }
-    $maxItems = switch ($Name) { 'get_finding' { 50 } 'get_control' { 100 } default { 250 } }
+    $state = if ($Name -eq 'tenantposture_get_control') { $null } else { $Ctx.Pseudo }
+    $maxLen = switch ($Name) { 'tenantposture_list_findings' { 300 } 'tenantposture_list_runs' { 300 } 'tenantposture_get_baseline' { 600 } 'tenantposture_get_scope' { 600 } default { 4000 } }
+    $maxItems = switch ($Name) { 'tenantposture_get_finding' { 50 } 'tenantposture_get_control' { 100 } default { 250 } }
     return (Protect-TPMcpValue -Value $result -State $state -MaxLength $maxLen -MaxItems $maxItems -MaxDepth 10)
 }

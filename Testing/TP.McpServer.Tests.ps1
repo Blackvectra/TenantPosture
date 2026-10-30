@@ -209,23 +209,23 @@ BeforeAll {
     $script:AllCalls = @(& $script:Init) + @(
         (& $script:Request 1 'ping' $null)
         (& $script:Request 2 'tools/list' $null)
-        (& $script:Call 10 'list_runs')
-        (& $script:Call 11 'get_run_summary' @{ folder = '_flat'; id = $script:FlatId })
-        (& $script:Call 12 'list_findings' @{ folder = '_flat'; id = $script:FlatId })
-        (& $script:Call 13 'get_finding' @{ folder = '_flat'; id = $script:FlatId; controlId = 'AAD-1.2' })
-        (& $script:Call 14 'get_control' @{ controlId = 'AAD-1.1' })
-        (& $script:Call 15 'compare_runs' @{ folderA = '_flat'; idA = $script:FlatId; folderB = $f; idB = $script:LaterId })
-        (& $script:Call 16 'get_baseline' @{ folder = '_flat'; id = $script:FlatId })
-        (& $script:Call 17 'get_scope' @{ folder = '_flat'; id = $script:FlatId })
-        (& $script:Call 18 'get_finding' @{ folder = '_flat'; id = $script:FlatId; controlId = 'DNS-1.1' })
-        (& $script:Call 19 'get_finding' @{ folder = '_flat'; id = $script:FlatId; controlId = 'PVW-1.1' })
-        (& $script:Call 20 'list_findings' @{ folder = '_flat'; id = $script:FlatId; state = 'Gap' })
-        (& $script:Call 21 'list_findings' @{ folder = '_flat'; id = $script:FlatId; limit = 2 })
-        (& $script:Call 22 'get_baseline' @{ folder = '_flat'; id = $script:FlatId; status = 'Failed' })
-        (& $script:Call 23 'list_runs' @{ tenant = 'fabrikam' })
-        (& $script:Call 24 'get_change_impact' @{ folder = '_flat'; id = $script:FlatId })
-        (& $script:Call 25 'get_change_impact' @{ folder = $f; id = $script:LaterId })
-        (& $script:Call 26 'get_change_impact' @{ folder = '_flat'; id = $script:FlatId; list = 'couldBreakAccounts'; controlId = 'AAD-1.2' })
+        (& $script:Call 10 'tenantposture_list_runs')
+        (& $script:Call 11 'tenantposture_get_run_summary' @{ folder = '_flat'; id = $script:FlatId })
+        (& $script:Call 12 'tenantposture_list_findings' @{ folder = '_flat'; id = $script:FlatId })
+        (& $script:Call 13 'tenantposture_get_finding' @{ folder = '_flat'; id = $script:FlatId; controlId = 'AAD-1.2' })
+        (& $script:Call 14 'tenantposture_get_control' @{ controlId = 'AAD-1.1' })
+        (& $script:Call 15 'tenantposture_compare_runs' @{ folderA = '_flat'; idA = $script:FlatId; folderB = $f; idB = $script:LaterId })
+        (& $script:Call 16 'tenantposture_get_baseline' @{ folder = '_flat'; id = $script:FlatId })
+        (& $script:Call 17 'tenantposture_get_scope' @{ folder = '_flat'; id = $script:FlatId })
+        (& $script:Call 18 'tenantposture_get_finding' @{ folder = '_flat'; id = $script:FlatId; controlId = 'DNS-1.1' })
+        (& $script:Call 19 'tenantposture_get_finding' @{ folder = '_flat'; id = $script:FlatId; controlId = 'PVW-1.1' })
+        (& $script:Call 20 'tenantposture_list_findings' @{ folder = '_flat'; id = $script:FlatId; state = 'Gap' })
+        (& $script:Call 21 'tenantposture_list_findings' @{ folder = '_flat'; id = $script:FlatId; limit = 2 })
+        (& $script:Call 22 'tenantposture_get_baseline' @{ folder = '_flat'; id = $script:FlatId; status = 'Failed' })
+        (& $script:Call 23 'tenantposture_list_runs' @{ tenant = 'fabrikam' })
+        (& $script:Call 24 'tenantposture_get_change_impact' @{ folder = '_flat'; id = $script:FlatId })
+        (& $script:Call 25 'tenantposture_get_change_impact' @{ folder = $f; id = $script:LaterId })
+        (& $script:Call 26 'tenantposture_get_change_impact' @{ folder = '_flat'; id = $script:FlatId; list = 'couldBreakAccounts'; controlId = 'AAD-1.2' })
     )
     $script:Default = & $script:Serve $script:AllCalls
     $script:WithIds = & $script:Serve $script:AllCalls @('-IncludeIdentities')
@@ -262,7 +262,7 @@ Describe 'MCP server: protocol over a real child process' {
 
     It 'lists the nine read-only tools with input and output schemas' {
         $tools = @($script:Default.ById[2]['result']['tools'])
-        @($tools | ForEach-Object { $_['name'] }) | Should -Be @('list_runs', 'get_run_summary', 'list_findings', 'get_finding', 'get_control', 'compare_runs', 'get_baseline', 'get_scope', 'get_change_impact')
+        @($tools | ForEach-Object { $_['name'] }) | Should -Be @('tenantposture_list_runs', 'tenantposture_get_run_summary', 'tenantposture_list_findings', 'tenantposture_get_finding', 'tenantposture_get_control', 'tenantposture_compare_runs', 'tenantposture_get_baseline', 'tenantposture_get_scope', 'tenantposture_get_change_impact')
         foreach ($t in $tools) {
             $t['inputSchema']['type'] | Should -Be 'object'
             $t['inputSchema']['additionalProperties'] | Should -BeFalse
@@ -276,7 +276,7 @@ Describe 'MCP server: protocol over a real child process' {
 
     It 'every tool answers without isError, and structuredContent matches the text and its output schema' {
         $tools = @{}; foreach ($t in @($script:Default.ById[2]['result']['tools'])) { $tools[$t['name']] = $t }
-        $calls = @{ 10 = 'list_runs'; 11 = 'get_run_summary'; 12 = 'list_findings'; 13 = 'get_finding'; 14 = 'get_control'; 15 = 'compare_runs'; 16 = 'get_baseline'; 17 = 'get_scope'; 24 = 'get_change_impact'; 25 = 'get_change_impact' }
+        $calls = @{ 10 = 'tenantposture_list_runs'; 11 = 'tenantposture_get_run_summary'; 12 = 'tenantposture_list_findings'; 13 = 'tenantposture_get_finding'; 14 = 'tenantposture_get_control'; 15 = 'tenantposture_compare_runs'; 16 = 'tenantposture_get_baseline'; 17 = 'tenantposture_get_scope'; 24 = 'tenantposture_get_change_impact'; 25 = 'tenantposture_get_change_impact' }
         foreach ($id in $calls.Keys) {
             $res = $script:Default.ById[$id]['result']
             $res.Contains('isError') | Should -BeFalse -Because "$($calls[$id]) should succeed: $($res['content'][0]['text'])"
@@ -328,7 +328,7 @@ Describe 'MCP server: protocol over a real child process' {
         $a.ById[0]['result']['protocolVersion'] | Should -Be '2025-06-18'
         $b = & $script:Serve @((& $script:Init '1999-01-01'))
         $b.ById[0]['result']['protocolVersion'] | Should -Be '2025-11-25'
-        $c = & $script:Serve (@((& $script:Init '2024-11-05')) + @((& $script:Request 2 'tools/list' $null), (& $script:Call 3 'list_runs')))
+        $c = & $script:Serve (@((& $script:Init '2024-11-05')) + @((& $script:Request 2 'tools/list' $null), (& $script:Call 3 'tenantposture_list_runs')))
         $c.ById[0]['result']['protocolVersion'] | Should -Be '2024-11-05'
         foreach ($t in @($c.ById[2]['result']['tools'])) { $t.Contains('outputSchema') | Should -BeFalse }
         $c.ById[3]['result'].Contains('structuredContent') | Should -BeFalse
@@ -337,18 +337,18 @@ Describe 'MCP server: protocol over a real child process' {
 
     It 'a tool failure is isError content, not a protocol error, and names no path' {
         $s = & $script:Serve (@(& $script:Init) + @(
-            (& $script:Call 40 'get_run_summary' @{ folder = '_flat'; id = 'NOSUCH-20200101-000000' })
-            (& $script:Call 41 'list_findings' @{ folder = '_flat' })
-            (& $script:Call 42 'list_findings' @{ folder = '_flat'; id = $script:FlatId; limit = 0 })
-            (& $script:Call 43 'list_findings' @{ folder = '_flat'; id = $script:FlatId; state = 'Compliant' })
-            (& $script:Call 44 'get_finding' @{ folder = '_flat'; id = $script:FlatId; controlId = 'not an id' })
+            (& $script:Call 40 'tenantposture_get_run_summary' @{ folder = '_flat'; id = 'NOSUCH-20200101-000000' })
+            (& $script:Call 41 'tenantposture_list_findings' @{ folder = '_flat' })
+            (& $script:Call 42 'tenantposture_list_findings' @{ folder = '_flat'; id = $script:FlatId; limit = 0 })
+            (& $script:Call 43 'tenantposture_list_findings' @{ folder = '_flat'; id = $script:FlatId; state = 'Compliant' })
+            (& $script:Call 44 'tenantposture_get_finding' @{ folder = '_flat'; id = $script:FlatId; controlId = 'not an id' })
         ))
         foreach ($i in 40..44) {
             $s.ById[$i]['result']['isError'] | Should -BeTrue
             $s.ById[$i]['result'].Contains('structuredContent') | Should -BeFalse
             $s.ById[$i]['result']['content'][0]['text'] | Should -Not -Match ([regex]::Escape($script:Tmp))
         }
-        $s.ById[40]['result']['content'][0]['text'] | Should -Match 'list_runs'
+        $s.ById[40]['result']['content'][0]['text'] | Should -Match 'tenantposture_list_runs'
         $s.ById[41]['result']['content'][0]['text'] | Should -Match 'Missing required argument: id'
     }
 }
@@ -431,7 +431,7 @@ Describe 'MCP server: the tools' {
         foreach ($file in $script:McpFiles) { . $file }
         function Get-TPControlOperationalImpact { param($ControlId, $Catalog) return $null }
         $ctx = @{ OutputRoot = $script:Out; Pseudo = $null; Benchmarks = $null; StateRank = @{ Gap = 5; Error = 4; Partial = 3; NotApplicable = 2; Satisfied = 1 }; ToolVersion = 'test' }
-        $a = Invoke-TPMcpTool -Ctx $ctx -Name 'get_control' -Arguments @{ controlId = 'AAD-1.1' }
+        $a = Invoke-TPMcpTool -Ctx $ctx -Name 'tenantposture_get_control' -Arguments @{ controlId = 'AAD-1.1' }
         $a['operationalImpact']['documented'] | Should -BeFalse
         $a['operationalImpact']['note'] | Should -Match 'Operational impact not documented'
         $a['operationalImpact']['note'] | Should -Match 'not "no impact"'
@@ -455,8 +455,8 @@ Describe 'MCP server: the tools' {
 
     It 'compare_runs refuses two tenants, and a run with no tenant ID, and points to Compare-TPTenantBaseline.ps1' {
         $s = & $script:Serve (@(& $script:Init) + @(
-            (& $script:Call 50 'compare_runs' @{ folderA = '_flat'; idA = $script:FlatId; folderB = 'fabrikam.example'; idB = 'FABRIKAM-20261020-100000' })
-            (& $script:Call 51 'compare_runs' @{ folderA = $script:Folder; idA = $script:OldId; folderB = '_flat'; idB = $script:FlatId })
+            (& $script:Call 50 'tenantposture_compare_runs' @{ folderA = '_flat'; idA = $script:FlatId; folderB = 'fabrikam.example'; idB = 'FABRIKAM-20261020-100000' })
+            (& $script:Call 51 'tenantposture_compare_runs' @{ folderA = $script:Folder; idA = $script:OldId; folderB = '_flat'; idB = $script:FlatId })
         ))
         foreach ($i in 50, 51) {
             $s.ById[$i]['result']['isError'] | Should -BeTrue
@@ -549,15 +549,15 @@ Describe 'MCP server: paths and what is never served' {
 
     BeforeAll {
         $script:Refused = & $script:Serve (@(& $script:Init) + @(
-            (& $script:Call 60 'get_run_summary' @{ folder = '..'; id = $script:FlatId })
-            (& $script:Call 61 'get_run_summary' @{ folder = '_flat'; id = '../output/x' })
-            (& $script:Call 62 'get_run_summary' @{ folder = '/etc'; id = 'passwd' })
-            (& $script:Call 63 'get_run_summary' @{ folder = 'C:\Windows'; id = 'x' })
-            (& $script:Call 64 'get_run_summary' @{ folder = 'jane.doe_contoso.example'; id = '20261016-100000-email' })
-            (& $script:Call 65 'get_run_summary' @{ folder = 'IR-Triage'; id = 'TRIAGE-20261016-100000' })
-            (& $script:Call 66 'get_run_summary' @{ folder = 'sneaky.example'; id = 'SNEAKY-20261016-100000' })
-            (& $script:Call 67 'get_run_summary' @{ folder = '_flat'; id = $script:FlatFolderId })
-            (& $script:Call 68 'get_run_summary' @{ folder = 'contoso.example'; id = "$($script:LaterId)`n" })
+            (& $script:Call 60 'tenantposture_get_run_summary' @{ folder = '..'; id = $script:FlatId })
+            (& $script:Call 61 'tenantposture_get_run_summary' @{ folder = '_flat'; id = '../output/x' })
+            (& $script:Call 62 'tenantposture_get_run_summary' @{ folder = '/etc'; id = 'passwd' })
+            (& $script:Call 63 'tenantposture_get_run_summary' @{ folder = 'C:\Windows'; id = 'x' })
+            (& $script:Call 64 'tenantposture_get_run_summary' @{ folder = 'jane.doe_contoso.example'; id = '20261016-100000-email' })
+            (& $script:Call 65 'tenantposture_get_run_summary' @{ folder = 'IR-Triage'; id = 'TRIAGE-20261016-100000' })
+            (& $script:Call 66 'tenantposture_get_run_summary' @{ folder = 'sneaky.example'; id = 'SNEAKY-20261016-100000' })
+            (& $script:Call 67 'tenantposture_get_run_summary' @{ folder = '_flat'; id = $script:FlatFolderId })
+            (& $script:Call 68 'tenantposture_get_run_summary' @{ folder = 'contoso.example'; id = "$($script:LaterId)`n" })
         ))
     }
 
@@ -597,11 +597,11 @@ Describe 'MCP server: an older results file under StrictMode' {
     It 'every run tool answers for a file without the newer fields, and says what is not recorded' {
         $f = $script:Folder; $id = $script:OldId
         $s = & $script:Serve (@(& $script:Init) + @(
-            (& $script:Call 70 'get_run_summary' @{ folder = $f; id = $id })
-            (& $script:Call 71 'list_findings' @{ folder = $f; id = $id })
-            (& $script:Call 72 'get_finding' @{ folder = $f; id = $id; controlId = 'EXO-1.1' })
-            (& $script:Call 73 'get_baseline' @{ folder = $f; id = $id })
-            (& $script:Call 74 'get_scope' @{ folder = $f; id = $id })
+            (& $script:Call 70 'tenantposture_get_run_summary' @{ folder = $f; id = $id })
+            (& $script:Call 71 'tenantposture_list_findings' @{ folder = $f; id = $id })
+            (& $script:Call 72 'tenantposture_get_finding' @{ folder = $f; id = $id; controlId = 'EXO-1.1' })
+            (& $script:Call 73 'tenantposture_get_baseline' @{ folder = $f; id = $id })
+            (& $script:Call 74 'tenantposture_get_scope' @{ folder = $f; id = $id })
         ))
         foreach ($i in 70..74) { $s.ById[$i]['result'].Contains('isError') | Should -BeFalse -Because ($s.ById[$i]['result']['content'][0]['text']) }
         $sum = & $script:Answer $s.ById[70]
@@ -623,6 +623,7 @@ Describe 'MCP server: read-only and off the module' {
         @{ File = 'Mcp/Read-TPMcpRun.ps1' }
         @{ File = 'Mcp/Invoke-TPMcpTool.ps1' }
         @{ File = 'Mcp/Invoke-TPMcpProtocol.ps1' }
+        @{ File = 'Mcp/Format-TPMcpMarkdown.ps1' }
     ) {
         $tokens = $null; $errs = $null
         $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $script:RepoRoot $File), [ref]$tokens, [ref]$errs)
@@ -688,5 +689,175 @@ Describe 'MCP server: get_change_impact' {
         $a.Contains('implementNow') | Should -BeFalse
         @($a['couldBreakAccounts']).Count | Should -Be 1
         $a['couldBreakAccounts'][0]['ControlId'] | Should -Be 'AAD-1.2'
+    }
+}
+
+Describe 'MCP server: best practices (tool design, paging, response format)' {
+    BeforeAll {
+        $flat = @{ folder = '_flat'; id = $script:FlatId }
+        $script:Bp = & $script:Serve (@(& $script:Init) + @(
+            (& $script:Request 2 'tools/list' $null)
+            (& $script:Call 60 'tenantposture_list_findings' ($flat + @{ limit = 3; offset = 0 }))
+            (& $script:Call 61 'tenantposture_list_findings' ($flat + @{ limit = 3; offset = 3 }))
+            (& $script:Call 62 'tenantposture_list_findings' ($flat + @{ limit = 3; offset = 6 }))
+            (& $script:Call 63 'tenantposture_list_findings' ($flat + @{ limit = 3; offset = 50 }))
+            (& $script:Call 64 'tenantposture_get_finding' ($flat + @{ controlId = 'AAD-1.2'; response_format = 'markdown' }))
+            (& $script:Call 65 'list_runs')
+            (& $script:Call 66 'tenantposture_list_runs')
+            (& $script:Call 67 'tenantposture_list_findings' ($flat + @{ offset = -1 }))
+            (& $script:Call 68 'tenantposture_list_findings' ($flat + @{ response_format = 'html' }))
+            (& $script:Call 69 'tenantposture_get_baseline' ($flat + @{ limit = 2; response_format = 'markdown' }))
+        ))
+    }
+    It 'every tool is prefixed, titled, described and annotated as read-only, idempotent and closed-world' {
+        foreach ($t in @($script:Bp.ById[2]['result']['tools'])) {
+            $t['name'] | Should -Match '\Atenantposture_[a-z_]+\z'
+            $t['title'] | Should -Not -BeNullOrEmpty
+            $t['description'].Length | Should -BeGreaterThan 120 -Because "$($t['name']) needs a description that says when to use it"
+            $a = $t['annotations']
+            $a['readOnlyHint'] | Should -BeTrue; $a['destructiveHint'] | Should -BeFalse
+            $a['idempotentHint'] | Should -BeTrue; $a['openWorldHint'] | Should -BeFalse
+            @($t['inputSchema']['properties']['response_format']['enum']) | Should -Be @('json', 'markdown')
+            if ($t['inputSchema']['properties'].Contains('limit')) {
+                $t['inputSchema']['properties'].Contains('offset') | Should -BeTrue
+                foreach ($k in 'offset', 'hasMore', 'nextOffset') { @($t['outputSchema']['required']) | Should -Contain $k }
+            }
+        }
+    }
+    It 'pages with offset: the pages cover every finding once, and the last page says so' {
+        $pages = 60..62 | ForEach-Object { & $script:Answer $script:Bp.ById[$_] }
+        $pages[0]['total'] | Should -Be 7
+        $pages[0]['hasMore'] | Should -BeTrue; $pages[0]['nextOffset'] | Should -Be 3
+        $pages[1]['offset'] | Should -Be 3; $pages[1]['nextOffset'] | Should -Be 6
+        $pages[2]['hasMore'] | Should -BeFalse; $pages[2]['nextOffset'] | Should -BeNullOrEmpty
+        $keys = @($pages | ForEach-Object { $_['findings'] } | ForEach-Object { "$($_['controlId'])|$($_['instance'])|$($_['state'])" })
+        $keys.Count | Should -Be 7
+        @($keys | Sort-Object -Unique).Count | Should -Be 7
+        $past = & $script:Answer $script:Bp.ById[63]
+        $past['returned'] | Should -Be 0; $past['hasMore'] | Should -BeFalse
+    }
+    It 'response_format markdown lays the same answer out as Markdown, pseudonymized, with structured output still JSON' {
+        $r = $script:Bp.ById[64]['result']
+        $r.Contains('isError') | Should -BeFalse
+        $md = $r['content'][0]['text']
+        $md | Should -Match '\A# Get the findings for one control'
+        $md | Should -Not -Match ([regex]::Escape($script:Upn))
+        $md | Should -Not -Match ([regex]::Escape($script:Display))
+        $r['structuredContent']['controlId'] | Should -Be 'AAD-1.2'
+        $b = $script:Bp.ById[69]['result']['content'][0]['text']
+        $b | Should -Match '\| controlId \|'
+        $b | Should -Match 'nextOffset'
+    }
+    It 'answers to the names it had before the prefix, with the same answer' {
+        (& $script:Answer $script:Bp.ById[65] | ConvertTo-Json -Depth 20 -Compress) | Should -Be (& $script:Answer $script:Bp.ById[66] | ConvertTo-Json -Depth 20 -Compress)
+    }
+    It 'refuses a negative offset and an unknown format with an actionable message' {
+        $script:Bp.ById[67]['result']['isError'] | Should -BeTrue
+        $script:Bp.ById[67]['result']['content'][0]['text'] | Should -Match 'offset must be at least 0'
+        $script:Bp.ById[68]['result']['content'][0]['text'] | Should -Match 'json, markdown'
+    }
+    It 'the Markdown layout escapes tenant text: no link, image, HTML or heading can form' {
+        Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force 3>$null
+        . (Join-Path $script:RepoRoot 'Mcp' 'Format-TPMcpMarkdown.ps1')
+        $hostile = [ordered]@{
+            note = '[click](https://evil.example) <img src=x onerror=alert(1)> `code`'
+            rows = @([ordered]@{ name = '# heading | pipe'; detail = '![img](https://evil.example/x.png)' })
+            nested = [ordered]@{ inner = '<script>alert(1)</script>' }
+        }
+        $md = ConvertTo-TPMcpMarkdown -Title 'Test <b>title</b>' -Value $hostile
+        # Escaped forms (\[ \] \< ) are inert; only an unescaped one could form markup.
+        $md | Should -Not -Match '(?<!\\)\]\((?=https)'
+        $md | Should -Not -Match '(?<!\\)<(img|script|b>)'
+        $md | Should -Not -Match '(?m)^#+ #'
+        @($md -split "`n" | Where-Object { $_ -match '^\| ' -and $_ -notmatch '^\| name' -and $_ -notmatch '^\|---' }) | ForEach-Object { ([regex]::Matches($_, '(?<!\\)\|')).Count | Should -Be 3 }
+    }
+}
+
+Describe 'MCP server: the evaluation questions hold (tools/mcp-eval)' {
+    BeforeAll {
+        $evalDir = Join-Path $script:Tmp 'eval'
+        $script:EvalOut = & (Join-Path $script:RepoRoot 'tools' 'mcp-eval' 'New-TPMcpEvalFixture.ps1') -Path $evalDir
+        [xml]$x = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'tools' 'mcp-eval' 'tenantposture-eval.xml') -Raw
+        $script:EvalAnswers = @($x.evaluation.qa_pair | ForEach-Object { $_.answer.Trim() })
+        $script:EvalServe = {
+            param([string[]] $Lines)
+            $raw = @($Lines | & $script:Pwsh -NoProfile -NonInteractive -File $script:Entry -OutputRoot $script:EvalOut 2>$null)
+            $byId = @{}
+            foreach ($l in $raw) { $o = $l | ConvertFrom-Json -AsHashtable -Depth 64; if ($null -ne $o['id']) { $byId[[int]$o['id']] = $o } }
+            $byId
+        }
+        $c = @{ folder = 'contoso.example' }
+        $first = $c + @{ id = 'CONTOSO-20260902-090000' }
+        $latest = $c + @{ id = 'CONTOSO-20261028-090000' }
+        $calls = @(& $script:Init) + @(
+            (& $script:Call 1 'tenantposture_list_runs')
+            (& $script:Call 2 'tenantposture_compare_runs' @{ folderA = 'contoso.example'; idA = 'CONTOSO-20260902-090000'; folderB = 'contoso.example'; idB = 'CONTOSO-20261028-090000' })
+            (& $script:Call 3 'tenantposture_get_run_summary' $latest)
+            (& $script:Call 4 'tenantposture_list_findings' @{ folder = 'fabrikam.example'; id = 'FABRIKAM-20261015-140000'; state = 'Error' })
+            (& $script:Call 5 'tenantposture_list_findings' ($latest + @{ controlId = 'DNS-1.1'; state = 'Gap' }))
+            (& $script:Call 6 'tenantposture_get_baseline' ($latest + @{ status = 'NotVerified' }))
+            (& $script:Call 7 'tenantposture_get_change_impact' ($latest + @{ list = 'couldBreakAccounts' }))
+            (& $script:Call 8 'tenantposture_get_baseline' $first)
+            (& $script:Call 9 'tenantposture_get_run_summary' @{ folder = 'fabrikam.example'; id = 'FABRIKAM-20261015-140000' })
+            (& $script:Call 10 'tenantposture_get_run_summary' @{ folder = '_flat'; id = 'NORTHWIND-20250612-080000' })
+        ) + @(0..3 | ForEach-Object { & $script:Call (20 + $_) 'tenantposture_list_findings' @{ folder = '_flat'; id = 'NORTHWIND-20250612-080000'; limit = 20; offset = (20 * $_) } })
+        $script:E = & $script:EvalServe $calls
+        $script:EA = { param([int] $Id) & $script:Answer $script:E[$Id] }
+    }
+    It 'has ten questions, each with one answer' {
+        $script:EvalAnswers.Count | Should -Be 10
+        foreach ($a in $script:EvalAnswers) { $a | Should -Not -BeNullOrEmpty }
+    }
+    It 'Q1: the one control resolved between the earliest and latest Contoso runs' {
+        $runs = @((& $script:EA 1)['runs'] | Where-Object { $_['tenant'] -eq 'contoso.example' } | Sort-Object { $_['date'] })
+        $runs[0]['id'] | Should -Be 'CONTOSO-20260902-090000'; $runs[-1]['id'] | Should -Be 'CONTOSO-20261028-090000'
+        @((& $script:EA 2)['resolvedGaps'] | ForEach-Object { $_['controlId'] }) | Should -Be @($script:EvalAnswers[0])
+    }
+    It 'Q2: open Critical controls in the latest Contoso run' {
+        [string](& $script:EA 3)['controls']['openBySeverity']['Critical'] | Should -Be $script:EvalAnswers[1]
+    }
+    It 'Q3: the tenant whose latest run recorded the lowest maturity score' {
+        $latestByTenant = @{}
+        foreach ($r in @((& $script:EA 1)['runs'])) { if (-not $latestByTenant.ContainsKey($r['tenant']) -or $r['date'] -gt $latestByTenant[$r['tenant']]['date']) { $latestByTenant[$r['tenant']] = $r } }
+        $latestByTenant.Count | Should -Be 3
+        $scores = @{ 'contoso.example' = (& $script:EA 3)['maturity']['Score']; 'fabrikam.example' = (& $script:EA 9)['maturity']['Score']; 'northwind.onmicrosoft.com' = (& $script:EA 10)['maturity']['Score'] }
+        @($latestByTenant.Keys | Sort-Object) | Should -Be @($scores.Keys | Sort-Object)
+        ($scores.GetEnumerator() | Sort-Object Value | Select-Object -First 1).Key | Should -Be $script:EvalAnswers[2]
+    }
+    It 'Q4 and Q10: the follow-up calls the first answers lead to' {
+        $err = @((& $script:EA 4)['findings'])
+        $err.Count | Should -Be 1
+        $cb = @((& $script:EA 7)['couldBreakAccounts'])
+        $cb.Count | Should -Be 1
+        $follow = & $script:EvalServe (@(& $script:Init) + @(
+            (& $script:Call 1 'tenantposture_get_control' @{ controlId = $err[0]['controlId'] })
+            (& $script:Call 2 'tenantposture_get_control' @{ controlId = $cb[0]['ControlId'] })
+        ))
+        (& $script:Answer $follow[1])['control']['LicenseRequirement'] | Should -Be $script:EvalAnswers[3]
+        (& $script:Answer $follow[2])['operationalImpact']['Effort'] | Should -Be $script:EvalAnswers[9]
+    }
+    It 'Q5: SPF failures on Contoso''s domains in the latest run' {
+        [string](& $script:EA 5)['total'] | Should -Be $script:EvalAnswers[4]
+    }
+    It 'Q6: baseline rows not verified in the latest Contoso run' {
+        [string](& $script:EA 6)['total'] | Should -Be $script:EvalAnswers[5]
+    }
+    It 'Q7: the workload with the most open findings in the Northwind run needs every page' {
+        $pages = 20..23 | ForEach-Object { & $script:EA $_ }
+        $pages[0]['total'] | Should -Be 70
+        $pages[3]['hasMore'] | Should -BeFalse
+        $open = @($pages | ForEach-Object { $_['findings'] } | Where-Object { $_['state'] -in @('Gap', 'Partial') })
+        $byWorkload = $open | Group-Object { $_['workload'] } | Sort-Object Count -Descending
+        $byWorkload[0].Name | Should -Be $script:EvalAnswers[6]
+        # The first page alone points elsewhere: the question cannot be answered without paging.
+        ($pages[0]['findings'] | Where-Object { $_['state'] -eq 'Gap' } | Group-Object { $_['workload'] } | Sort-Object Count -Descending | Select-Object -First 1).Name | Should -Not -Be $script:EvalAnswers[6]
+    }
+    It 'Q8: accounts the lock-out change would affect' {
+        $ev = (& $script:EA 7)['couldBreakAccounts'][0]['Evidence'][0]
+        [string]$ev['Count'] | Should -Be $script:EvalAnswers[7]
+        @($ev['Accounts']).Count | Should -Be ([int]$script:EvalAnswers[7])
+    }
+    It 'Q9: the reason code for mailbox audit logging in the earliest Contoso run' {
+        (@((& $script:EA 8)['rows']) | Where-Object { $_['controlId'] -eq 'EXO-1.1' })['reasonCode'] | Should -Be $script:EvalAnswers[8]
     }
 }
