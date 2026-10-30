@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[Security] Active ZAP scan of the web GUI (`dast.yml` job `zap-active`, `.zap/active-scan.yaml`).** OWASP ZAP's
+  active scanner now attacks the real `-Web` server on loopback over the scan fixture, beside the passive baseline.
+  - **What it attacks.** It sends injection, path traversal, and header and parameter tampering payloads to every
+    route. The URL path and request headers are input vectors, because the routes take their input from the path and
+    the request policy judges Host, Origin and Sec-Fetch-Site.
+  - **Gate.** `tools/Test-TPZapActiveScan.ps1` fails the job on any of these:
+    - an alert whose rule is not reviewed IGNORE in `.zap/rules.tsv`;
+    - a scan that reached nothing;
+    - any new entry in the output folder.
+  - **Excluded.** `POST /api/scan` is not attacked, because an accepted request starts a real assessment.
+  - **New reviewed rule.** 10106 (HTTP Only Site): the server binds to loopback only.
+
 - **[Testing] Parser fuzzing (`TP.Fuzz.Tests.ps1`, `tools/TPFuzz.ps1`).** A deterministic mutation fuzzer now
   checks every parser that reads untrusted input, and the escapers that write tenant text into a deliverable.
   - **Parsers covered:** results JSON (`Read-TPRunRecord`, the MCP reader), MCP JSON-RPC lines, SCAP and ScubaGear

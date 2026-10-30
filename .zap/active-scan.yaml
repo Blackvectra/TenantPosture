@@ -1,0 +1,112 @@
+# ZAP Automation Framework plan for the ACTIVE scan of the -Web GUI
+# (.github/workflows/dast.yml, job zap-active). The baseline job only reads
+# what the server says; this one sends ZAP's attack payloads (injection,
+# path traversal, header and parameter tampering) at every route the server
+# serves over the data-only fixture, then reports every alert.
+#
+# Gate: tools/Test-TPZapActiveScan.ps1 reads the JSON report and fails on any
+# alert whose rule is not reviewed IGNORE in .zap/rules.tsv (the same file and
+# the same review rule as the baseline scan), and on a scan that reached
+# nothing. The job also fails if the output folder gained an entry, which
+# would mean a request started an assessment.
+#
+# Excluded: POST /api/scan. An accepted request starts a real assessment in a
+# child process (sign-in included) against the domain in its body, so a
+# scanner trying values would launch assessments; its validation is pinned
+# by Testing/TP.WebServer.Tests.ps1 instead. Its status route,
+# /api/scan/<id>/status, is scanned. ${TP_ZAP_OUT} is the report folder.
+
+env:
+  contexts:
+    - name: tp-web
+      urls:
+        - http://127.0.0.1:8765/
+      includePaths:
+        - 'http://127\.0\.0\.1:8765.*'
+      excludePaths:
+        - 'http://127\.0\.0\.1:8765/api/scan(\?.*)?'
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 10
+      scanOnlyInScope: true
+
+  # The routes app.js builds at run time from /api/runs, which the traditional
+  # spider cannot see. The fixture's run ids are fixed.
+  - type: requestor
+    requests:
+      - url: http://127.0.0.1:8765/
+      - url: http://127.0.0.1:8765/static/app.js
+      - url: http://127.0.0.1:8765/static/app.css
+      - url: http://127.0.0.1:8765/api/runs
+      - url: http://127.0.0.1:8765/api/clients
+      - url: http://127.0.0.1:8765/api/runs/_flat/SCANTENANT-20261016-110000/report
+      - url: http://127.0.0.1:8765/api/runs/contoso.example/CONTOSO-20261016-100000/report
+      - url: http://127.0.0.1:8765/site/_flat/SCANTENANT-20261016-110000/index.html
+      - url: http://127.0.0.1:8765/site/_flat/SCANTENANT-20261016-110000/AAD.html
+      - url: http://127.0.0.1:8765/site/_flat/SCANTENANT-20261016-110000/ActionPlan.csv
+      - url: http://127.0.0.1:8765/api/scan/000000000000/status
+      - url: http://127.0.0.1:8765/api/runs?tenant=contoso.example
+
+  - type: spider
+    parameters:
+      context: tp-web
+      maxDuration: 2
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+
+  # Input vectors are set by their own job (ZAP 2.15+), before the scan.
+  - type: activeScan-config
+    # Most of this server's input is in the URL path (/api/runs/<folder>/<id>/report,
+    # /site/<folder>/<id>/<page>), which ZAP does not attack by default; with
+    # query parameters alone the first run sent 785 requests and never touched
+    # the path guard. Headers are attacked too: Host, Origin and Sec-Fetch-Site
+    # are what the request policy judges.
+    inputVectors:
+      urlQueryStringAndDataDrivenNodes:
+        enabled: true
+        addParam: true
+      postData:
+        enabled: true
+      urlPath: true
+      httpHeaders:
+        enabled: true
+        allRequests: true
+      cookieData:
+        enabled: true
+
+  - type: activeScan
+    parameters:
+      context: tp-web
+      maxRuleDurationInMins: 2
+      maxScanDurationInMins: 20
+      threadPerHost: 4
+    policyDefinition:
+      defaultStrength: medium
+      defaultThreshold: medium
+
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: ${TP_ZAP_OUT}
+      reportFile: zap-active-report
+      reportTitle: TenantPosture web GUI active scan
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: ${TP_ZAP_OUT}
+      reportFile: zap-active-report
+      reportTitle: TenantPosture web GUI active scan
+  - type: report
+    parameters:
+      template: traditional-md
+      reportDir: ${TP_ZAP_OUT}
+      reportFile: zap-active-report
+      reportTitle: TenantPosture web GUI active scan
