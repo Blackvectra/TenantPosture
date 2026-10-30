@@ -114,13 +114,21 @@ function Read-TPSignInEvidencePages {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $Uri,
-        [ValidateRange(1, 100)] [int] $MaxPages = 5
+        [ValidateRange(1, 100)] [int] $MaxPages = 5,
+        # The collector's time budget: no page is requested after it. A page
+        # already requested is not interrupted (Graph gives no way to).
+        [datetime] $Deadline = [datetime]::MaxValue
     )
     $events = [System.Collections.Generic.List[object]]::new()
     $next = $Uri; $pages = 0
-    $err = ''
+    $err = ''; $budget = $false
     try {
         while ($next -and $pages -lt $MaxPages) {
+            if ([datetime]::UtcNow -ge $Deadline) {
+                $budget = $true
+                $err = 'The collector''s time budget was reached before this read finished.'
+                break
+            }
             $resp = Invoke-TPGraphRequest -Method GET -Uri $next -ErrorAction Stop
             $raw = $null
             if ($resp -is [System.Collections.IDictionary]) {
@@ -141,7 +149,7 @@ function Read-TPSignInEvidencePages {
         $err = $_.Exception.Message
         if (-not $err) { $err = 'The sign-in read failed.' }
     }
-    [ordered]@{ Events = $events.ToArray(); Truncated = [bool]$next; Pages = $pages; Error = $err }
+    [ordered]@{ Events = $events.ToArray(); Truncated = [bool]$next; Pages = $pages; Error = $err; BudgetReached = $budget }
 }
 
 function Test-TPSignInPremiumError {
@@ -157,8 +165,22 @@ function Invoke-TPCollectAADSignInEvidence {
     param(
         [ValidateRange(1, 30)] [int] $WindowDays = $script:TPSignInEvidenceWindowDays,
         [ValidateRange(1, 100)] [int] $MaxPages = 5,
-        [datetime] $Now = [datetime]::UtcNow
+        [datetime] $Now = [datetime]::UtcNow,
+        # The whole collector's time budget. Each of the 27 reads is a
+        # server-side filter over 30 days of the beta sign-in log, and on a
+        # busy tenant they can run for many minutes; when the budget runs out
+        # the reads not yet made are skipped and their sections are Failed
+        # with the reason, so effectiveness reads Unknown, never Effective.
+        [ValidateRange(1, 7200)] [int] $TimeBudgetSeconds = 600,
+        # Called with one short line after each read, so the console can show
+        # the collector moving. Collectors never write to the host themselves.
+        [AllowNull()] [scriptblock] $Progress
     )
+    $clock = [System.Diagnostics.Stopwatch]::StartNew()
+    $deadline = [datetime]::UtcNow.AddSeconds($TimeBudgetSeconds)
+    $say = { param([string] $m) if ($null -ne $Progress) { try { & $Progress $m } catch { Write-Verbose "Progress callback failed: $($_.Exception.Message)" } } }
+    $totalReads = 1 + (2 * @($script:TPLegacyClientApps).Count)
+    $readsDone = 0; $readsSkipped = 0; $budgetReached = $false
 
     $end   = $Now.ToUniversalTime()
     $start = $end.AddDays(-$WindowDays)
@@ -183,6 +205,7 @@ function Invoke-TPCollectAADSignInEvidence {
                 SingleFactor = [ordered]@{ Truncated = $false; Events = @() }
             }
             Errors            = @()
+            TimeBudget        = [ordered]@{ Seconds = $TimeBudgetSeconds; Reached = $false; ReadsTotal = $totalReads; ReadsSkipped = 0; ElapsedSeconds = 0 }
         }
     }
     $base = 'https://graph.microsoft.com/beta/auditLogs/signIns?$top=1000&$filter='
@@ -192,7 +215,10 @@ function Invoke-TPCollectAADSignInEvidence {
         # ── Single-factor interactive successes (read first: a licensing
         #    refusal here is the same answer for both reads) ──────────────
         $f = "createdDateTime ge $since and status/errorCode eq 0 and authenticationRequirement eq 'singleFactorAuthentication'"
-        $r = Read-TPSignInEvidencePages -Uri ($base + [uri]::EscapeDataString($f)) -MaxPages $MaxPages
+        $r = Read-TPSignInEvidencePages -Uri ($base + [uri]::EscapeDataString($f)) -MaxPages $MaxPages -Deadline $deadline
+        $readsDone++
+        if ($r.BudgetReached) { $budgetReached = $true }
+        & $say ("single-factor sign-ins: {0} event(s) ({1}/{2})" -f @($r.Events).Count, $readsDone, $totalReads)
         $result.Data.Sections.SingleFactor.Events    = @($r.Events)
         $result.Data.Sections.SingleFactor.Truncated = [bool]$r.Truncated
         if (-not $r.Error) {
@@ -219,8 +245,17 @@ function Invoke-TPCollectAADSignInEvidence {
             foreach ($app in $script:TPLegacyClientApps) {
                 $q = $app.Replace("'", "''")
                 foreach ($kind in @('', " and signInEventTypes/any(t: t eq 'nonInteractiveUser')")) {
+                    if ($budgetReached -or [datetime]::UtcNow -ge $deadline) {
+                        # Out of time: this read is not made. The section is
+                        # Failed below, so nothing reads the gap as clean.
+                        $budgetReached = $true; $readsSkipped++; $failed = $true
+                        continue
+                    }
                     $f = "createdDateTime ge $since and status/errorCode eq 0 and clientAppUsed eq '$q'$kind"
-                    $r = Read-TPSignInEvidencePages -Uri ($base + [uri]::EscapeDataString($f)) -MaxPages $MaxPages
+                    $r = Read-TPSignInEvidencePages -Uri ($base + [uri]::EscapeDataString($f)) -MaxPages $MaxPages -Deadline $deadline
+                    $readsDone++
+                    if ($r.BudgetReached) { $budgetReached = $true }
+                    & $say ("legacy {0}{1}: {2} event(s) ({3}/{4})" -f $app, $(if ($kind) { ', non-interactive' } else { '' }), @($r.Events).Count, $readsDone, $totalReads)
                     foreach ($e in @($r.Events)) { $legacy.Add($e) }
                     if ($r.Truncated) { $truncated = $true }
                     if ($r.Error) {
@@ -229,6 +264,7 @@ function Invoke-TPCollectAADSignInEvidence {
                     }
                 }
             }
+            if ($readsSkipped -gt 0) { & $note "LegacyAuth: $readsSkipped of $($totalReads - 1) read(s) not made: the collector's $([math]::Round($TimeBudgetSeconds / 60, 1))-minute time budget was reached." }
             $result.Data.Sections.LegacyAuth.Events    = $legacy.ToArray()
             $result.Data.Sections.LegacyAuth.Truncated = $truncated
             $result.Data.SectionStatus.LegacyAuth = if ($failed) { 'Failed' } else { 'Collected' }
@@ -239,6 +275,10 @@ function Invoke-TPCollectAADSignInEvidence {
     } catch {
         & $note "Sign-in evidence collection failed: $($_.Exception.Message)"
     }
+    $clock.Stop()
+    $result.Data.TimeBudget.Reached        = $budgetReached
+    $result.Data.TimeBudget.ReadsSkipped   = $readsSkipped
+    $result.Data.TimeBudget.ElapsedSeconds = [math]::Round($clock.Elapsed.TotalSeconds, 1)
 
     if (Get-Command Set-TPRawData -ErrorAction SilentlyContinue) {
         Set-TPRawData -Key 'AAD-SignInEvidence' -Data $result
@@ -250,6 +290,7 @@ function Invoke-TPCollectAADSignInEvidence {
                   elseif ($statuses -contains 'Failed') { if ($statuses -contains 'Collected') { 'Partial' } else { 'Failed' } }
                   else { 'Collected' }
         $covNote = if (-not $result.Data.Available) { 'Sign-in logs need Microsoft Entra ID P1 or P2 to read through Graph' }
+                   elseif ($result.Data.TimeBudget.Reached) { "$($result.Data.WindowDays)-day window; stopped at the $([math]::Round($TimeBudgetSeconds / 60, 1))-minute time budget ($($result.Data.TimeBudget.ReadsSkipped) read(s) not made); legacy $($result.Data.SectionStatus.LegacyAuth), single-factor $($result.Data.SectionStatus.SingleFactor)" }
                    else { "$($result.Data.WindowDays)-day window; legacy $($result.Data.SectionStatus.LegacyAuth), single-factor $($result.Data.SectionStatus.SingleFactor)" }
         Register-TPCoverage -Family 'AAD-SignInEvidence' -Status $status -Note $covNote
     }

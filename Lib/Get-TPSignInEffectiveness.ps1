@@ -157,6 +157,12 @@ function Get-TPSignInEffectiveness {
         return & $out 'Ineffective' "$($events.Count) successful $label by $($byUser.Count) account(s) in $window`: $($named -join '; ')$more.$partial$asideNote"
     }
     if ($status -ne 'Collected') {
+        # A read the collector's time budget stopped is named as such, so the
+        # operator knows a longer budget (or a quieter hour) would answer it.
+        if ((Get-TPNestedProperty -Object $data -Path 'TimeBudget.Reached' -Default $false) -eq $true) {
+            $mins = [math]::Round([double](Get-TPNestedProperty -Object $data -Path 'TimeBudget.Seconds' -Default 0) / 60, 1)
+            return & $out 'Unknown' "The sign-in read for $label stopped at the collector's $mins-minute time budget before every read was made, so the absence of a bypass is not established.$asideNote"
+        }
         return & $out 'Unknown' "The sign-in read for $label did not complete, so the absence of a bypass is not established.$asideNote"
     }
     if ($truncated) {
