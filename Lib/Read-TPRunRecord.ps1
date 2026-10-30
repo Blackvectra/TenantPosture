@@ -152,6 +152,10 @@ function Read-TPRunRecord {
                         Rows            = $rows
                         SecurityDefaults = (Get-TPObjectField -Item $full -Key 'SecurityDefaults' -Default $null)
                         MaesterReference = [string](Get-TPObjectField -Item $full -Key 'MaesterReference' -Default '')
+                        # Only the source label, from a closed set; never the accounts.
+                        EmergencyAccess  = [ordered]@{ Source = $(
+                            $eaSrc = [string](Get-TPNestedProperty -Object $full -Path 'EmergencyAccess.Source' -Default '')
+                            if ($eaSrc -cin @('ApprovedRecord', 'None')) { $eaSrc } else { '' }) }
                     }
                 }
             }

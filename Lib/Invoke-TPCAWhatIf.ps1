@@ -59,23 +59,51 @@ function Invoke-TPCAWhatIfEvaluation {
     $resp = Invoke-MgGraphRequest -Method POST -Uri 'https://graph.microsoft.com/v1.0/identity/conditionalAccess/evaluate' `
         -Body $json -ContentType 'application/json' -OutputType HashTable -ErrorAction Stop
 
+    # A response this function cannot read is a failed evaluation, never "no
+    # policy applies": MT.1034 passes on an empty list, so an unread shape
+    # (no value collection, a row without policyApplies, a next page this
+    # action is not documented to return) throws and the collector records
+    # the sign-in as not read.
+    $hasField = {
+        param($Item, [string] $Key)
+        if ($null -eq $Item) { return $false }
+        if ($Item -is [System.Collections.IDictionary]) { return [bool]$Item.Contains($Key) }
+        return ($null -ne $Item.PSObject.Properties[$Key])
+    }
+    if (-not (& $hasField $resp 'value')) { throw 'The What If evaluation returned no value collection; the result was not read.' }
+    if ($null -ne (Get-TPObjectField -Item $resp -Key '@odata.nextLink' -Default $null)) { throw 'The What If evaluation returned a further page, which this action is not documented to return; the result was not read.' }
+
     $rows = [System.Collections.Generic.List[object]]::new()
     foreach ($r in @(Get-TPObjectField -Item $resp -Key 'value' -Default @())) {
         if ($null -eq $r) { continue }
+        if (-not (& $hasField $r 'policyApplies')) { throw 'A What If result row carried no policyApplies; the result was not read.' }
         # appliedPoliciesOnly asks for the policies that apply; policyApplies is
         # checked again so a response that lists every policy is read right.
         if ((Get-TPObjectField -Item $r -Key 'policyApplies' -Default $false) -ne $true) { continue }
-        $grants = @(Get-TPNestedProperty -Object $r -Path 'grantControls.builtInControls' -Default @() | ForEach-Object { [string]$_ })
+        $grants = @(Get-TPNestedProperty -Object $r -Path 'grantControls.builtInControls' -Default @() | Where-Object { $_ } | ForEach-Object { [string]$_ })
+        $strengthId = [string](Get-TPNestedProperty -Object $r -Path 'grantControls.authenticationStrength.id' -Default '')
         $strength = [string](Get-TPNestedProperty -Object $r -Path 'grantControls.authenticationStrength.requirementsSatisfied' -Default '')
         $op = [string](Get-TPNestedProperty -Object $r -Path 'grantControls.operator' -Default '')
+        # Every way to satisfy the grant, as Get-TPCAGrantAlternatives counts
+        # them: built-in controls, an authentication strength, terms of use and
+        # custom controls. Under OR, MFA is required only when every
+        # alternative is MFA; a compliant device or a custom control beside it
+        # lets a sign-in through without one.
+        $alts = [System.Collections.Generic.List[string]]::new()
+        foreach ($g in $grants) { $alts.Add($g) }
+        if ($strengthId -or $strength) { $alts.Add($(if ($strength -eq 'mfa') { 'mfa' } else { 'authStrength' })) }
+        foreach ($t in @(Get-TPNestedProperty -Object $r -Path 'grantControls.termsOfUse' -Default @() | Where-Object { $_ })) { $alts.Add('termsOfUse') }
+        foreach ($c in @(Get-TPNestedProperty -Object $r -Path 'grantControls.customAuthenticationFactors' -Default @() | Where-Object { $_ })) { $alts.Add('customControl') }
+        $isAnd = ($alts.Count -le 1 -or $op -eq 'AND')
+        $mfaAlts = @($alts | Where-Object { $_ -eq 'mfa' })
+        $requiresMfa = if ($alts.Count -eq 0) { $false } elseif ($isAnd) { $mfaAlts.Count -gt 0 } else { $mfaAlts.Count -eq $alts.Count }
         $rows.Add([ordered]@{
             Id           = [string](Get-TPObjectField -Item $r -Key 'id' -Default '')
             DisplayName  = [string](Get-TPObjectField -Item $r -Key 'displayName' -Default '')
             State        = [string](Get-TPObjectField -Item $r -Key 'state' -Default '')
             Grants       = $grants
             Blocks       = ($grants -contains 'block')
-            # MFA is required only when no alternative can stand in for it.
-            RequiresMfa  = (($grants -contains 'mfa' -or $strength -eq 'mfa') -and ($grants.Count -le 1 -or $op -eq 'AND'))
+            RequiresMfa  = $requiresMfa
         })
     }
     return $rows.ToArray()

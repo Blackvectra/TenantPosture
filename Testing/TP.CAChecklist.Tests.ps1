@@ -250,6 +250,12 @@ Describe 'Hygiene rows' {
         $safe = Get-TPCAChecklist -RawData (& $script:Raw @($p) @{} @(@{ Kind = 'Group'; Id = $gid; Exists = $true; DisplayName = 'CA exclusions'; IsAssignableToRole = $true; IsManagementRestricted = $null })) -EmergencyAccessRecord $script:Ea
         (& $script:Row $safe 'MT.1035').Status | Should -Be 'Pass'
     }
+    It 'MT.1035 never passes a group whose protection settings were not returned (security audit)' {
+        $gid = '33333333-3333-3333-3333-333333333333'
+        $p = & $script:Pol 'Group policy' 'enabled' @{ 'Conditions.Users.ExcludeGroups' = @($gid) }
+        $unknown = Get-TPCAChecklist -RawData (& $script:Raw @($p) @{} @(@{ Kind = 'Group'; Id = $gid; Exists = $true; DisplayName = 'CA exclusions'; IsAssignableToRole = $null; IsManagementRestricted = $null })) -EmergencyAccessRecord $script:Ea
+        (& $script:Row $unknown 'MT.1035').Status | Should -Be 'NotAssessed'
+    }
     It 'MT.1036 does not count an approved emergency-access exclusion, and fails any other exclusion with no fallback' {
         (& $script:Check @((& $script:Pol 'A')) 'MT.1036').Status | Should -Be 'Pass'
         $x = & $script:Pol 'B' 'enabled' @{ 'Conditions.Users.ExcludeUsers' = @($script:BreakGlass, '44444444-4444-4444-4444-444444444444') }
@@ -454,6 +460,42 @@ Describe 'The one POST' {
     }
 }
 
+Describe 'What If responses the tool cannot read (security audit)' {
+    BeforeAll {
+        $script:WhatIfWith = {
+            param($Response)
+            & $script:Mod {
+                param($Response)
+                $script:TPTestResponse = $Response
+                function script:Invoke-MgGraphRequest { param($Method, $Uri, $Body, $ContentType, $OutputType) $script:TPTestResponse }
+                try { @(Invoke-TPCAWhatIfEvaluation -UserId '11111111-1111-1111-1111-111111111111' -ApplicationId '00000002-0000-0ff1-ce00-000000000000' -ClientAppType browser) }
+                finally { Remove-Item function:Invoke-MgGraphRequest -ErrorAction SilentlyContinue }
+            } $Response
+        }
+    }
+    It 'throws on a response with no value collection, never reads it as no policy applying' {
+        { & $script:WhatIfWith @{ error = 'proxy page' } } | Should -Throw '*no value collection*'
+    }
+    It 'throws on a row without policyApplies, and on a further page' {
+        { & $script:WhatIfWith @{ value = @(@{ id = 'a'; state = 'enabled' }) } } | Should -Throw '*policyApplies*'
+        { & $script:WhatIfWith @{ value = @(); '@odata.nextLink' = 'https://graph.microsoft.com/v1.0/next' } } | Should -Throw '*further page*'
+    }
+    It 'reads an empty value collection as no policy applying' {
+        @(& $script:WhatIfWith @{ value = @() }).Count | Should -Be 0
+    }
+    It 'does not credit MFA when a device, a custom control or terms of use stands in for it under OR' {
+        $r = @(& $script:WhatIfWith @{ value = @(
+            @{ id = 'dev'; state = 'enabled'; policyApplies = $true; grantControls = @{ builtInControls = @('compliantDevice'); operator = 'OR'; authenticationStrength = @{ id = 'x'; requirementsSatisfied = 'mfa' } } },
+            @{ id = 'cust'; state = 'enabled'; policyApplies = $true; grantControls = @{ builtInControls = @('mfa'); operator = 'OR'; customAuthenticationFactors = @('Duo') } },
+            @{ id = 'both'; state = 'enabled'; policyApplies = $true; grantControls = @{ builtInControls = @('mfa'); operator = 'OR'; authenticationStrength = @{ id = 'x'; requirementsSatisfied = 'mfa' } } },
+            @{ id = 'and'; state = 'enabled'; policyApplies = $true; grantControls = @{ builtInControls = @('mfa', 'compliantDevice'); operator = 'AND' } }) })
+        ($r | Where-Object Id -eq 'dev').RequiresMfa | Should -BeFalse
+        ($r | Where-Object Id -eq 'cust').RequiresMfa | Should -BeFalse
+        ($r | Where-Object Id -eq 'both').RequiresMfa | Should -BeTrue
+        ($r | Where-Object Id -eq 'and').RequiresMfa | Should -BeTrue
+    }
+}
+
 Describe 'The What If collector' {
     It 'samples enabled members by UPN, never an emergency account, and records each evaluation' {
         & $script:Mod {
@@ -512,6 +554,22 @@ Describe 'The referenced-object read' {
                 ($r.Objects | Where-Object { $_.Id -like '2222*' }).Exists | Should -BeFalse
                 ($r.Objects | Where-Object { $_.Id -like '3333*' }).IsManagementRestricted | Should -BeTrue
                 ($r.Objects | Where-Object Kind -eq 'Role').Exists | Should -BeNullOrEmpty
+                $r.Unread | Should -Be 1
+            } finally { Remove-Item function:Invoke-TPGraphRequest -ErrorAction SilentlyContinue }
+        }
+    }
+    It 'trusts the status code over the message text when deciding an object was deleted (security audit)' {
+        & $script:Mod {
+            function script:Invoke-TPGraphRequest { param($Method, $Uri, $Headers, $OutputType)
+                $resp = [pscustomobject]@{ StatusCode = 'Forbidden' }
+                $ex = [System.Exception]::new('Insufficient privileges: the requested resource does not exist in your view.')
+                $ex | Add-Member -NotePropertyName Response -NotePropertyValue $resp
+                throw $ex
+            }
+            try {
+                $pols = @(@{ Conditions = @{ Users = @{ IncludeUsers = @(); ExcludeUsers = @(); IncludeGroups = @(); ExcludeGroups = @('22222222-2222-2222-2222-222222222222'); IncludeRoles = @(); ExcludeRoles = @() } } })
+                $r = Get-TPCAReferencedObjects -Policies $pols
+                ($r.Objects | Where-Object { $_.Id -like '2222*' }).Exists | Should -Not -Be $false
                 $r.Unread | Should -Be 1
             } finally { Remove-Item function:Invoke-TPGraphRequest -ErrorAction SilentlyContinue }
         }

@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **[Security] Audit of the Conditional Access, Intune and security review additions.** Seven fixes, each pinned by a
+  test:
+  - **What If responses.** A What If response with no `value` collection, a result row with no `policyApplies`, or an
+    undocumented further page is now a failed evaluation (not assessed). Before this, such a response read as "no
+    policy applies", which would pass MT.1034 (emergency access accounts not blocked).
+  - **What If MFA credit.** A simulated sign-in is credited with MFA only when every way to satisfy the grant is MFA.
+    A compliant device, a custom control or terms of use offered as an OR alternative no longer counts.
+  - **MT.1035.** A group read without either protection setting is not assessed. It no longer counts as protected.
+  - **Deleted-object detection.** A referenced object is reported deleted only on a 404 status. The message text is
+    used only when no status code was returned.
+  - **Intune cleanup rules.** They are read with full paging, and a response with no `value` collection fails the
+    section.
+  - **Client security review.** It now promises to keep emergency access accounts excluded only when an approved
+    record exists; otherwise it says they must be identified first. An unknown severity no longer stops the review
+    from being written.
+  - **Conditional Access checklist display.** The double-escaped separator is fixed.
+
 - **[Assessment] App protection checks in the Intune checklist.** 14 more rows by Maester test id (MT.1238-1251)
   for iOS and Android app protection policies: a strong app PIN, organization data kept inside managed apps,
   encryption, minimum OS and app versions, offline access limits, the device threat level, and for Android screen

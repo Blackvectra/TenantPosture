@@ -109,7 +109,7 @@ function Publish-TPCAChecklist {
                     if ($scenario) { $extra += "${scenario}: $([string](Get-TPObjectField -Item $it -Key 'Result' -Default ''))" }
                     $usedBy = @(Get-TPObjectField -Item $it -Key 'UsedBy' -Default @() | Where-Object { $_ })
                     if ($usedBy.Count) { $extra += 'in: ' + ($usedBy -join '; ') }
-                    $detail += '<li>' + (Esc $label) + $(if ($extra.Count) { ' &#8212; ' + (Esc ($extra -join ' &#183; ')) } else { '' }) + '</li>'
+                    $detail += '<li>' + (Esc $label) + $(if ($extra.Count) { ' &#8212; ' + (@($extra | ForEach-Object { Esc $_ }) -join ' &#183; ') } else { '' }) + '</li>'
                 }
                 $detail += '</ul></details>'
             }
