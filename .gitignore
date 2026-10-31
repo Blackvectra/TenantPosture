@@ -24,8 +24,13 @@ Thumbs.db
 .idea/
 *.swp
 
-# Claude Code session metadata (worktrees, settings.local.json, etc.)
-.claude/
+# Claude Code session metadata (worktrees, settings.local.json, etc.) stays
+# ignored. Only reviewed project skills are tracked, each re-included by name:
+# a new skill stays ignored until it is reviewed and listed here.
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/tp-verify/
 
 # Per-tenant monthly delta files. These name a real client and list their live,
 # unremediated findings — a named organization beside its open security gaps is
