@@ -149,6 +149,7 @@ function Set-TPEmergencyAccessApproval {
             if ($approved.ContainsKey($key)) { $ok += [pscustomobject]@{ Principal = $p; Entry = $approved[$key] } }
             elseif ($rejected.ContainsKey($key)) { $no += "$p ($([string](Get-TPObjectField -Item $rejected[$key] -Key 'Verdict' -Default 'not approved')))" }
             elseif ($key -like 'role:*') { $no += "$p (a role is never an emergency-access principal)" }
+            elseif ($key -like 'guests:*') { $no += "$(Get-TPCAPrincipalLabel -Principal $p) (a guest or external-user population is never an emergency-access principal)" }
             else { $no += "$p (not on the approval record)" }
         }
         $label = {

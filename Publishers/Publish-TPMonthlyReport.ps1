@@ -92,18 +92,22 @@ function Publish-TPMonthlyReport {
         }
     }
 
-    # HIPAA citation lookup. Reads Config/controls.json once and indexes by
-    # ControlId, then pulls the first HIPAA-prefixed FrameworkIds entry.
-    # Returns a 2-line cite (e.g. "§164.308(a)(1)(ii)(A)\nRisk Analysis")
-    # or '—' when the ControlId has no HIPAA citation or doesn't exist.
+    # HIPAA citation lookup. controls.json rows carry References.HIPAA (no
+    # FrameworkIds field); Get-TPFrameworkCitations flattens References into
+    # "HIPAA:§164.312(d), §164.308(a)(4)(ii)(B)". Index every control's HIPAA
+    # entry by ControlId; a control with none, or an id not in the catalog,
+    # renders '—'. (Reading $c.FrameworkIds threw under StrictMode and was
+    # swallowed, so every citation rendered '—' on every run.)
     $hipaaIndex = @{}
-    if (Get-Command Get-TPControlDefinitions -ErrorAction SilentlyContinue) {
+    if ((Get-Command Get-TPControlDefinitions -ErrorAction SilentlyContinue) -and
+        (Get-Command Get-TPFrameworkCitations -ErrorAction SilentlyContinue)) {
         try {
             foreach ($c in (Get-TPControlDefinitions)) {
-                if (-not $c.ControlId) { continue }
-                $hipaa = @($c.FrameworkIds | Where-Object { $_ -match '^HIPAA[-:]' })
+                $cid = [string](Get-TPObjectField -Item $c -Key 'ControlId' -Default '')
+                if (-not $cid) { continue }
+                $hipaa = @(Get-TPFrameworkCitations -ControlId $cid | Where-Object { $_ -match '^HIPAA[-:]' })
                 if ($hipaa.Count -gt 0) {
-                    $hipaaIndex[$c.ControlId] = $hipaa[0]
+                    $hipaaIndex[$cid] = $hipaa[0]
                 }
             }
         } catch {
@@ -113,14 +117,12 @@ function Publish-TPMonthlyReport {
     $getHipaaCite = {
         param([string] $cid)
         if (-not $cid -or -not $hipaaIndex.ContainsKey($cid)) { return '&mdash;' }
-        # Citation format in controls.json: "HIPAA:164.308(a)(1)(ii)(A) Risk Analysis"
-        # or "HIPAA-164.312(b)/Audit". Split on first space or slash for the
-        # "§ + section" line and the "label" line.
-        $raw = $hipaaIndex[$cid] -replace '^HIPAA[-:]\s*', ''
-        $sec, $lbl = if ($raw -match '^(\S+?)[\s/]+(.+)$') { $matches[1], $matches[2] } else { $raw, '' }
-        $secEsc = & $hx $sec
-        $lblEsc = & $hx $lbl
-        if ($lblEsc) { "&sect;$secEsc<br>$lblEsc" } else { "&sect;$secEsc" }
+        # Citation shape: "HIPAA:§164.312(d), §164.308(a)(4)(ii)(B)" — one or
+        # more sections, comma-separated. One line per section.
+        $raw   = $hipaaIndex[$cid] -replace '^HIPAA[-:]\s*', ''
+        $parts = @(($raw -split ',\s*') | ForEach-Object { ($_ -replace '^\s*\u00A7\s*', '').Trim() } | Where-Object { $_ })
+        if ($parts.Count -eq 0) { return '&mdash;' }
+        (@($parts | ForEach-Object { '&sect;' + (& $hx $_) }) -join '<br>')
     }
 
     # Status pill renderer for the in-progress / queued / complete tables.
@@ -526,7 +528,9 @@ $licCallout
     # ── Emit HTML + JSON ─────────────────────────────────────────────────────
     $outDir = Split-Path -Parent $OutputPath
     if ($outDir -and -not (Test-Path -LiteralPath $outDir)) {
-        New-Item -ItemType Directory -Force -LiteralPath $outDir | Out-Null
+        # New-Item has no -LiteralPath (the entry point always writes into a new
+        # monthly\ folder, so this branch runs on every real run).
+        $null = [System.IO.Directory]::CreateDirectory($outDir)
     }
     # Publisher self-hardens via Set-TPSensitiveFileContent: the file is
     # pre-created and its ACL applied BEFORE tenant data lands. Writing with a

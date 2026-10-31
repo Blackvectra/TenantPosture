@@ -213,6 +213,51 @@ Describe 'Publish-TPMonthlyReport' {
         }
     }
 
+    Context 'Output folder and HIPAA citations (the two defects the entry-point path exposed)' {
+        It 'creates a missing output subfolder (the entry point always writes into monthly\)' {
+            # New-Item has no -LiteralPath; with it the publisher threw and the entry
+            # point reported "Monthly report publish failed" on every real run.
+            $out = Join-Path $script:tmp 'fresh-subfolder' 'monthly' 'report.html'
+            Test-Path -LiteralPath (Split-Path -Parent $out) | Should -BeFalse
+            Publish-TPMonthlyReport `
+                -Findings $script:findings `
+                -Metadata $script:metadata `
+                -DeltaPath $script:deltaPath `
+                -OutputPath $out | Out-Null
+            Test-Path -LiteralPath $out | Should -BeTrue
+            Test-Path -LiteralPath ($out -replace '\.html$', '.json') | Should -BeTrue
+        }
+
+        It 'renders the HIPAA citation of a cited control from controls.json References.HIPAA, and a dash for an unknown id' {
+            # controls.json carries References.HIPAA and no FrameworkIds; the old
+            # lookup read $c.FrameworkIds, threw under StrictMode, and every
+            # citation rendered as a dash.
+            . (Join-Path $script:RepoRoot 'Lib' 'Get-TPControlDefinitions.ps1')
+            $citeDelta = Join-Path $script:tmp 'cite-delta.psd1'
+            @'
+@{
+    Period='May 2026'; EntityType='HIPAA'; TLP='AMBER'
+    NewlyCompleted  = @( @{ Service='Legacy auth blocked'; ControlId='AAD-1.1' } )
+    MovedToProgress = @( @{ Service='Not a control';      ControlId='ZZZ-9.9' } )
+    AddedToQueue    = @( @{ Service='No control';         ControlId='' } )
+}
+'@ | Out-File -LiteralPath $citeDelta -Encoding utf8
+            $expected = @(Get-TPFrameworkCitations -ControlId 'AAD-1.1' | Where-Object { $_ -match '^HIPAA[-:]' })
+            $expected.Count | Should -BeGreaterThan 0 -Because 'the test needs a control with a HIPAA citation'
+            $section = (($expected[0] -replace '^HIPAA[-:]\s*', '') -split ',\s*')[0] -replace '^\s*§\s*', ''
+            $out = Join-Path $script:tmp 'monthly-cite.html'
+            Publish-TPMonthlyReport `
+                -Findings $script:findings `
+                -Metadata $script:metadata `
+                -DeltaPath $citeDelta `
+                -OutputPath $out | Out-Null
+            $html = Get-Content -LiteralPath $out -Raw
+            $html | Should -Match ('&sect;' + [regex]::Escape($section)) -Because 'the cited control must show its section'
+            ([regex]::Matches($html, '<span class="hsg">&mdash;</span>')).Count | Should -Be 2 -Because 'an unknown id and an empty id render a dash'
+            $html | Should -Not -Match '&sect;&#167;' -Because 'the section sign is printed once'
+        }
+    }
+
     Context 'XSS guard' {
         It 'Escapes HTML in delta Service text to prevent injection' {
             $xssDelta = Join-Path $script:tmp 'xss-delta.psd1'

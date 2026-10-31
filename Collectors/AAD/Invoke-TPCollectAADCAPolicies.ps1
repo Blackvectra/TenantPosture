@@ -70,9 +70,14 @@ function Invoke-TPCollectAADCAPolicies {
                 $projectGuests = { param($path)
                     $o = & $g $path $null
                     if ($null -eq $o) { return $null }
+                    # Members: the tenant ids of an 'enumerated' externalTenants (Graph
+                    # v1.0 conditionalAccessEnumeratedExternalTenants). Coverage needs
+                    # them to tell whether two policies exclude the same organizations;
+                    # without them such exclusions are never treated as the same.
                     @{
                         GuestOrExternalUserTypes      = [string](Get-TPObjectField -Item $o -Key 'guestOrExternalUserTypes' -Default '')
                         ExternalTenantsMembershipKind = [string](Get-TPNestedProperty -Object $o -Path 'externalTenants.membershipKind' -Default '')
+                        ExternalTenantsMembers        = @(@(Get-TPNestedProperty -Object $o -Path 'externalTenants.members' -Default @()) | Where-Object { $_ } | ForEach-Object { [string]$_ })
                     }
                 }
                 @{

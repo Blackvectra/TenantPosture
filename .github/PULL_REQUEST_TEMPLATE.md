@@ -52,6 +52,8 @@ Required for every PR. Tick what applies, explain anything skipped.
 - [ ] `README.md` reflects new flags / behavior if user-facing
 - [ ] `CLAUDE.md` reflects new modules / functions if structural
 - [ ] If this affects the security posture, `SECURITY.md` or `docs/SECURE-DEVELOPMENT.md` updated
+- [ ] Affected docs identified (grep the tracked Markdown for each changed script, parameter, config file, function and control ID) and updated in this PR, with examples checked against the implementation; or: no documentation update needed because <!-- reason -->
+- [ ] Documentation checks run and listed under Test plan (`python3 tools/Test-MarkdownDocs.py`, the doc-accuracy suites in the gate), plus anything left unverified
 
 ## Reviewer notes
 
