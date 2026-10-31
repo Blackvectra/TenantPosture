@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- **[Assessment] Conditional Access coverage now honors guest exclusions and authentication-flow conditions
+  (batch 1, `docs/validation/batch-1-ca-narrowing.md`).** Both were false passes in the shared coverage helper behind
+  AAD-1.1, 1.2, 1.4, 1.5, 2.3, 11.1 and INT-1.2.
+  - **Guest and external-user exclusions (D1).** A policy for All users that excludes guests or external users no
+    longer counts as covering everyone.
+    - **Members:** they keep their credit.
+    - **The excluded guest types:** named as not covered, unless another qualifying policy or a complementary
+      guest policy covers them.
+    - **A complementary guest policy with exclusions of its own:** leaves the control not assessed, never a gap.
+    - **Exclusions limited to listed external organizations:** the organizations are compared, and when they were
+      not recorded the exclusions are never treated as the same.
+    - **Approval record:** a guest population is never approvable as emergency access.
+  - **Authentication flows (D2).** A policy limited to device-code or authentication-transfer sign-ins no longer
+    counts as covering every sign-in. AAD-11.1, which judges the device-code flow itself, is unchanged, and AAD-1.3
+    uses the shared rule instead of its own copy.
+  - **AAD-1.2 keeps a demonstrated gap when MFA registration was not read.** It used to return "not assessed"
+    before judging enforcement, which erased even a tenant with no MFA policy. Registration is now named as not
+    assessed beside the enforcement verdict.
+  - **Collector.** The Conditional Access collector also stores the listed external organizations
+    (`ExternalTenantsMembers`), which come from the same Graph response. No new scope.
+  - **Effect on results.** Tenants with these configurations move from Satisfied to Partial, or to not assessed, on
+    the affected controls. Re-evaluating the 2026-10-30 live run changed no state; AAD-1.2 gained the guest-exclusion
+    shortfall. A `-FromResults` republish does not re-evaluate, so it keeps an older file's verdicts.
+
 - **[Security] OSSTMM 3 alignment of the tool's own security testing (`docs/security/OSSTMM-ALIGNMENT.md`).** The
   checks that test TenantPosture itself are now mapped to OSSTMM 3.02.
   - **Modules.** Each of the 17 test modules (A.1 to D.17) has one status in `docs/security/osstmm-modules.json`,

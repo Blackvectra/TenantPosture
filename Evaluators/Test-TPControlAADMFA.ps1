@@ -161,13 +161,11 @@ function Test-TPControlAADMFA {
         return
     }
 
-    if (-not $mfaRegCollected) {
-        Add-TPFinding -ControlId 'AAD-1.2' -State 'NotApplicable' `
-            -Category 'Identity' -Title 'MFA Required for All Users' `
-            -Detail 'MFA registration details were not collected; cannot compute registration completeness for AAD-1.2.' `
-            -FrameworkIds $cit
-        return
-    }
+    # Registration only qualifies the verdict; enforcement decides it. When the
+    # registration details were not read, enforcement is still judged, so a
+    # demonstrated enforcement gap is reported, and registration is named as not
+    # assessed (it used to return not assessed here and erase a Gap with it).
+    $regText = if ($mfaRegCollected) { "$registeredPct% registered" } else { 'MFA registration not read' }
 
     # Enforcement decides the verdict; registration only qualifies it. MFA that
     # is not REQUIRED is not configured — a Gap however many users registered
@@ -187,7 +185,7 @@ function Test-TPControlAADMFA {
     }
     if (-not $caRead) {
         Add-TPFinding -ControlId 'AAD-1.2' -State 'NotApplicable' -Category 'Identity' -Title 'MFA Required for All Users' -FrameworkIds $cit `
-            -Detail "$registeredPct% of users are MFA-registered, but Conditional Access policies were not collected, so whether MFA is required could not be assessed. $secDefText"
+            -Detail "$(if ($mfaRegCollected) { "$registeredPct% of users are MFA-registered, but " } else { 'MFA registration details were not collected, and ' })Conditional Access policies were not collected, so whether MFA is required could not be assessed. $secDefText"
         return
     }
     # Security Defaults not read and no CA policy On: it may be on (then this
@@ -221,13 +219,13 @@ function Test-TPControlAADMFA {
             "$($_.DisplayName) [$why]" })
         Add-TPFinding -ControlId 'AAD-1.2' -State 'Partial' -Category 'Identity' -Title 'MFA Required for All Users' -Severity 'Critical' -FrameworkIds $cit `
             -Detail "MFA is requested but not required of all users on all apps: $($how -join '; '). $secDefText" `
-            -CurrentValue "MFA partly enforced; $registeredPct% registered" -RequiredValue $req -Remediation 'Enforce MFA (or an authentication strength) for All users on All cloud apps, with MFA required rather than one alternative.'
+            -CurrentValue "MFA partly enforced; $regText" -RequiredValue $req -Remediation 'Enforce MFA (or an authentication strength) for All users on All cloud apps, with MFA required rather than one alternative.'
         return
     }
     if ($enforcing.Count -eq 0) {
         Add-TPFinding -ControlId 'AAD-1.2' -State 'Gap' -Category 'Identity' -Title 'MFA Required for All Users' -Severity 'Critical' -FrameworkIds $cit `
-            -Detail "No Conditional Access policy requires MFA for all users on all cloud apps. $secDefText $registeredPct% of users have registered MFA, but registration alone does not require it at sign-in." `
-            -CurrentValue "No enforcing policy; $registeredPct% registered" -RequiredValue $req `
+            -Detail "No Conditional Access policy requires MFA for all users on all cloud apps. $secDefText $(if ($mfaRegCollected) { "$registeredPct% of users have registered MFA, but registration alone does not require it at sign-in." } else { 'MFA registration details were not collected, so registration was not assessed; registration alone would not require MFA at sign-in.' })" `
+            -CurrentValue "No enforcing policy; $regText" -RequiredValue $req `
             -Remediation 'Create a Conditional Access policy requiring MFA (or an authentication strength) for All users on All cloud apps, excluding only break-glass accounts. Stage it in report-only first.'
         return
     }
@@ -237,16 +235,34 @@ function Test-TPControlAADMFA {
     # inferred here). Each verified half stays in the Detail. MFA has to reach every
     # interactive sign-in: a policy limited to the browser leaves the desktop and
     # mobile clients unprompted and is narrower scope, not all-user coverage.
-    $cov = Get-TPCAEffectiveCoverage -Policies $enforcing -RequiredClientAppTypes (Get-TPCAInteractiveClientAppTypes)
+    # A policy for all users that excludes guests or external users can be
+    # complemented by an enabled policy requiring MFA of those guests on all
+    # applications (Get-TPCAEffectiveCoverage credits it only where it establishes
+    # the coverage). Passed only when some enforcing policy excludes guests, so a
+    # tenant without such an exclusion reads exactly as before.
+    $guestComplements = @()
+    $excludesGuests = @($enforcing | Where-Object { @(Get-TPCAPrincipalExclusions -Policy $_ | Where-Object { $_ -like 'guests:*' }).Count -gt 0 })
+    if ($excludesGuests.Count -gt 0) {
+        $guestComplements = @(@($caRaw.Data['Policies']) | Where-Object {
+            $null -ne $_ -and
+            [string](Get-TPObjectField -Item $_ -Key 'State' -Default '') -eq 'enabled' -and
+            -not (Test-TPCAAllUsers $_) -and (Test-TPCAAllApps $_) -and
+            (Test-TPCAGrantRequires -Policy $_ -Any @('mfa','authStrength')) -and
+            ($null -ne (Get-TPNestedProperty -Object $_ -Path 'Conditions.Users.IncludeGuestsOrExternalUsers' -Default $null) -or
+             @(Get-TPNestedProperty -Object $_ -Path 'Conditions.Users.IncludeUsers' -Default @()) -contains 'GuestsOrExternalUsers')
+        })
+    }
+    $cov = Get-TPCAEffectiveCoverage -Policies @($enforcing + $guestComplements) -RequiredClientAppTypes (Get-TPCAInteractiveClientAppTypes)
     $cv  = Get-TPCACoverageVerdict -Coverage $cov -What 'MFA is required'
     $verified = @($cv.Verified); $short = @($cv.Shortfalls); $unknown = @($cv.NotEstablished)
     if ($cov.Kind -eq 'None') {
         # Every enforcing policy is narrower than all users on all apps.
         $short += "MFA is required only under narrower scope: $(($cov.Narrowed | ForEach-Object { "$($_.Name) ($($_.Why))" }) -join '; ')."
     }
-    if ($unregisteredCnt -eq 0) { $verified += "All $totalEnabled enabled member account(s) have registered an MFA method.$syncNote" }
+    if (-not $mfaRegCollected) { $unknown += 'whether every enabled member has registered an MFA method; the registration details were not collected.' }
+    elseif ($unregisteredCnt -eq 0) { $verified += "All $totalEnabled enabled member account(s) have registered an MFA method.$syncNote" }
     else { $short += "$unregisteredCnt of $totalEnabled enabled member(s) have not registered a method. They will be asked to register at their next sign-in, so whoever holds their password can enroll the second factor - or they are excluded from the policy. Sample: $sample.$syncNote" }
     Add-TPExpectedStateFinding -ControlId 'AAD-1.2' -Control ([pscustomobject]@{ Category = 'Identity'; Title = 'MFA Required for All Users'; Severity = 'Critical'; Remediation = 'Require MFA (or an authentication strength) for All users on All cloud apps, excluding only emergency access accounts, and run an MFA registration campaign so every enabled user registers.' }) `
         -FrameworkIds $cit -Verified $verified -Shortfalls $short -NotEstablished $unknown -AffectedObjects $cv.AffectedObjects `
-        -CurrentValue "MFA enforcement: $($cov.Kind); $registeredPct% registered ($($totalEnabled - $unregisteredCnt)/$totalEnabled)" -RequiredValue $req
+        -CurrentValue "MFA enforcement: $($cov.Kind); $(if ($mfaRegCollected) { "$registeredPct% registered ($($totalEnabled - $unregisteredCnt)/$totalEnabled)" } else { $regText })" -RequiredValue $req
 }

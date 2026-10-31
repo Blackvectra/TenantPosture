@@ -502,9 +502,9 @@ function Test-TPControlAADPhishResistantMFA {
             # CIS 5.2.2.5 accepts no narrowing condition: every client app type
             # (legacy ones included), no platform, location, device-filter, risk or
             # authentication-flow condition, all resources with none excluded.
+            # The authentication-flow condition is one of the shared narrowing reasons
+            # (Get-TPCANarrowing); this check no longer keeps its own copy.
             $nar = @(Get-TPCANarrowing -Policy $p -RequiredClientAppTypes @('browser', 'mobileAppsAndDesktopClients', 'exchangeActiveSync', 'other') -Ignore @('applies to only some users, groups or roles'))
-            $flows = @(@(Get-TPNestedProperty -Object $p -Path 'Conditions.AuthFlows' -Default @()) | Where-Object { $null -ne $_ } | ForEach-Object { [string](Get-TPObjectField -Item $_ -Key 'transferMethods' -Default '') } | Where-Object { $_ })
-            if ($flows.Count -gt 0) { $nar += "limited to some authentication flows ($($flows -join ', '))" }
             # A block beside the strength makes the policy a block, not a
             # phishing-resistant MFA requirement (CIS 5.2.2.5 audits the strength).
             if (@((Get-TPCAGrantAlternatives -Policy $p).Controls) -contains 'block') { $nar += 'its grant also blocks access, so it is a block rather than a phishing-resistant MFA requirement' }
@@ -2550,8 +2550,9 @@ function Test-TPControlAADDeviceCode {
         (Test-TPCAGrantRequires -Policy $_ -Any @('block'))
     })
     # Combined coverage: all users, all applications, no extra condition; exclusions are
-    # judged across every qualifying policy (see Get-TPCAEffectiveCoverage).
-    $cov = Get-TPCAEffectiveCoverage -Policies $dcPolicies
+    # judged across every qualifying policy (see Get-TPCAEffectiveCoverage). The
+    # device-code flow condition is what this control judges, so it does not narrow.
+    $cov = Get-TPCAEffectiveCoverage -Policies $dcPolicies -AllowAuthFlows
     if ($cov.Kind -ne 'None' -or @($cov.Narrowed).Count -gt 0) {
         $cv = Get-TPCACoverageVerdict -Coverage $cov -What 'The device code authentication flow is blocked'
         Add-TPExpectedStateFinding -ControlId $cid -Control $ctrl -FrameworkIds $cit `
