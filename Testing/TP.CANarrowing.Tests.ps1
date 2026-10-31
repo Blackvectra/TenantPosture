@@ -280,4 +280,35 @@ Describe 'Conditional Access scope narrowing (batch 1: guest exclusions and auth
             $f.State | Should -Be 'Partial'
         }
     }
+
+    Context 'Validation records' {
+
+        It 'every test a batch-1 validation record cites exists under that exact name, and the dimensions stay separate' {
+            $doc = Get-Content -LiteralPath (Join-Path $script:Root 'docs/validation/control-validation.json') -Raw | ConvertFrom-Json
+            $names = @{}
+            foreach ($f in Get-ChildItem -LiteralPath (Join-Path $script:Root 'Testing') -Filter '*.Tests.ps1') {
+                $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
+                foreach ($c in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'It' }, $true)) {
+                    $arg = $c.CommandElements[1]
+                    if ($arg -is [System.Management.Automation.Language.StringConstantExpressionAst]) { $names["$($f.Name)|$($arg.Value)"] = $true }
+                }
+            }
+            @($doc.records).Count | Should -BeGreaterThan 0
+            foreach ($r in @($doc.records)) {
+                $r.Kind | Should -BeIn 'Decision', 'Inventory', 'ManualReview', 'PlatformEnforced'
+                foreach ($dim in 'Implementation', 'LocalValidation', 'CIValidation', 'LiveObservation', 'LiveValidation', 'Qualifications', 'EvidenceRequirement') {
+                    $r.PSObject.Properties[$dim] | Should -Not -BeNullOrEmpty -Because "$($r.ControlId) keeps $dim as its own dimension"
+                }
+                foreach ($t in @($r.LocalValidation.Batch1Scenarios) + @($r.LocalValidation.PriorTestsNamingControl)) {
+                    # A record keeps the EXECUTED name; a data-driven test's source name is a
+                    # template with <placeholders>, matched here by its fixed text.
+                    $key = "$($t.File)|$($t.Test)"
+                    $found = $names.ContainsKey($key) -or @($names.Keys | Where-Object {
+                        $_ -like '*<*>*' -and $key -match ('^' + (([regex]::Escape($_)) -replace '<[^>]*>', '.+') + '$')
+                    }).Count -gt 0
+                    $found | Should -BeTrue -Because "$($r.ControlId) cites '$($t.Test)' in $($t.File)"
+                }
+            }
+        }
+    }
 }

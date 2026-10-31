@@ -1,0 +1,1130 @@
+{
+  "version": 1,
+  "generated": "2026-10-31",
+  "note": "One record per control changed in batch 1. Dimensions are independent; see README.md. Tests are those actually executed at the named revision (Pester per-test results), never names that merely exist.",
+  "records": [
+    {
+      "ControlId": "AAD-1.1",
+      "Kind": "Decision",
+      "EvidenceRequirement": {
+        "Version": "batch1-2026-10-31",
+        "Requires": [
+          "AAD-CAPolicies: every policy, with conditions.users (including guest and external-user scope) and conditions.authenticationFlows",
+          "AAD-AuthPolicies: Security Defaults state"
+        ]
+      },
+      "Implementation": {
+        "Status": "Implemented",
+        "Revision": "748e350",
+        "Note": "Shared helper Lib/Get-TPEffectiveCoverage.ps1 changed for D1 and D2 in this revision"
+      },
+      "LocalValidation": {
+        "Revision": "748e350",
+        "Date": "2026-10-31",
+        "Batch1Scenarios": [
+          {
+            "Scenario": "Scope: guest exclusion narrows the policy",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "AAD-1.1, AAD-11.1, AAD-2.3 and INT-1.2: the same exclusion is not Satisfied",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Scope: authentication-flow condition narrows the policy",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "AAD-1.1: a legacy block limited to an authentication flow is not Satisfied",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Contract: collector-to-evaluator shape",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "the real collector stores the guest exclusion (with listed organizations) and the flow condition in the shape the helpers read",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNamingControl": [
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.1: an enabled block policy scoped to NO application establishes nothing",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.1: a report-only policy and a disabled policy establish nothing",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.1: narrower conditions (one platform, some applications, some users) are not all-user coverage",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.1: an exclusion is not a gap when another qualifying policy covers those users",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.1: an account excluded from every qualifying policy is named as an exception (Partial), with the covered part kept",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.1: an excluded account is named when the user list was collected, not only its id",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.1: different exclusions in different policies are unproven (not assessed), not satisfied and not a gap",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.1: no policy at all is still a Gap",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.FalsePassPaths.Tests.ps1",
+            "Test": "AAD-1.1 is unchanged: the legacy block needs the other client type, not the browser",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.1: a pilot-group legacy block is Partial; an EAS-only block is a Gap; all users on Other clients passes",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.1: a legacy-auth block whose application scope is None (or one app) blocks nothing and is not credited",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.1: Security Defaults on is Satisfied through Security Defaults; the same CA data with Security Defaults disabled is still the Gap",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.1: Security Defaults on stays Satisfied when the Conditional Access read failed",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.1: a report-only legacy block beside Security Defaults earns no half credit and is named, never \"nothing is blocked\"",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "on a Business Standard tenant with Security Defaults, AAD-1.1 and AAD-11.1 findings need no license; the gated AAD-1.3 keeps the Security Defaults reason",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.1, AAD-11.1 and AAD-1.3 with the state not read and no CA policy On are not assessed, with citations, never the Gap that assumes it is off",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.Review106CA.Tests.ps1",
+            "Test": "a legacy-auth block with includePlatforms [all] and no exclusions is Satisfied (AAD-1.1)",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.Review106CA.Tests.ps1",
+            "Test": "includePlatforms [all] with a platform excluded IS a narrowing (AAD-1.1 Partial)",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.Review106CA.Tests.ps1",
+            "Test": "a specific platform list IS a narrowing (AAD-1.1 Partial)",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNote": "Tests whose names mention this control, executed and passed in the same run; not classified by scenario in batch 1.",
+        "Omitted": [
+          "Pagination and licensing: covered by pre-existing collector and license-gating tests, not re-inventoried in batch 1"
+        ]
+      },
+      "CIValidation": {
+        "Status": "NotRun",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "LiveObservation": {
+        "Source": "NRGTS live run",
+        "CollectedAt": "2026-10-30 10:47-11:18 local",
+        "Environment": "authorized client tenant (production)",
+        "Payload": "AAD-CAPolicies: excludeGuestsOrExternalUsers {GuestOrExternalUserTypes, ExternalTenantsMembershipKind} and authenticationFlows [{transferMethods}] observed",
+        "Limitations": "Collected before ExternalTenantsMembers existed; configuration not known in advance, so observation only."
+      },
+      "LiveValidation": {
+        "Status": "NotPerformed",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "Qualifications": [
+        {
+          "Qualification": "Insider-risk conditions and application filters are not judged",
+          "Scope": "Policies using conditions.insiderRiskLevels or an application filter",
+          "Effect": "Such a policy can still count as all-user coverage; confidence in a Satisfied result is reduced where they are used",
+          "Reason": "Deferred from batch 1 by decision of 2026-10-31"
+        },
+        {
+          "Qualification": "Group membership is not resolved",
+          "Scope": "Exclusions of groups that differ between policies",
+          "Effect": "Coverage is reported unproven (not assessed), never covered and never a gap",
+          "Reason": "By design; unchanged by batch 1"
+        },
+        {
+          "Qualification": "Whether the tenant currently holds guests of an excluded type is not judged",
+          "Scope": "Guest-exclusion shortfalls",
+          "Effect": "The shortfall describes configuration scope, not a count of exposed accounts",
+          "Reason": "Not collected for this purpose"
+        },
+        {
+          "Qualification": "Complementary guest policies are credited only when the caller passes them",
+          "Scope": "AAD-1.1",
+          "Effect": "This control passes every enabled policy delivering the protection, so a guest-only complement is considered; no batch-1 test exercises the complement path for this control specifically",
+          "Reason": "Batch-1 complement tests cover AAD-1.2 only"
+        }
+      ]
+    },
+    {
+      "ControlId": "AAD-1.2",
+      "Kind": "Decision",
+      "EvidenceRequirement": {
+        "Version": "batch1-2026-10-31",
+        "Requires": [
+          "AAD-CAPolicies: every policy, with conditions.users (including guest and external-user scope) and conditions.authenticationFlows",
+          "AAD-AuthPolicies: Security Defaults state",
+          "AAD-Users: MFA registration (qualifies the verdict; its absence does not erase an enforcement gap)"
+        ]
+      },
+      "Implementation": {
+        "Status": "Implemented",
+        "Revision": "748e350",
+        "Note": "Shared helper Lib/Get-TPEffectiveCoverage.ps1 changed for D1 and D2 in this revision"
+      },
+      "LocalValidation": {
+        "Revision": "748e350",
+        "Date": "2026-10-31",
+        "Batch1Scenarios": [
+          {
+            "Scenario": "Scope: guest exclusion narrows the policy",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "AAD-1.2: MFA for All users excluding B2B collaboration guests is Partial (members credited), never Satisfied",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Positive: no new false failure ('none' type)",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "a guestOrExternalUserTypes of \"none\" excludes nothing (no new false failure)",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Positive: combined coverage by a second all-user policy",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "another all-user policy without the guest exclusion still gives full coverage",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Scope: legacy GuestsOrExternalUsers value",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "the legacy ExcludeUsers value GuestsOrExternalUsers is read as every guest type, not as a user",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Incomplete evidence: demonstrated shortfall preserved",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "a shortfall on guests is kept when another component of the control was not read",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Incomplete evidence: demonstrated gap preserved",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "AAD-1.2: no MFA policy at all is still a Gap when registration was not read (the Gap is not erased)",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Combination: complementary guest policy establishes coverage",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "a guest-only MFA policy covering the excluded type with no exclusions of its own gives full coverage",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Combination: complement covers only some types",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "a guest policy covering only some of the excluded types leaves the rest named as a shortfall",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Incomplete evidence: complement with own exclusions is not assessed",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "a guest policy with exclusions of its own leaves guest coverage not established, never a shortfall",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Combination: complement limited to listed organizations",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "a guest policy limited to some external organizations does not cover an exclusion of all of them",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Combination: shared listed-organization exclusion",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "two policies excluding the same listed organizations share the exclusion (Partial)",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Replay: organizations not recorded in an older file",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "listed organizations that were not recorded (an older results file) are never treated as the same exclusion",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Exception handling: guest population never approved",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "the approval pass names a guest exclusion as never an emergency-access principal",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Scope: authentication-flow condition narrows the policy",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "AAD-1.2: MFA for All users limited to the device-code flow is not all-user coverage (Partial with every user registered, as for a browser-only policy), never Satisfied",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Positive: no new false failure ('none' method)",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "transferMethods \"none\" narrows nothing (no new false failure)",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Contract: collector-to-evaluator shape",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "the real collector stores the guest exclusion (with listed organizations) and the flow condition in the shape the helpers read",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Replay: recorded 2026-10-30 payload shape",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "a policy stored before ExternalTenantsMembers was collected (recorded 2026-10-30 shape) is still judged",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNamingControl": [
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.2: MFA enforced for all users with everyone registered is Satisfied; the method strength is not asserted",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.2: registration and enforcement are separate findings of fact: enforced but 2 of 4 unregistered is Partial naming both halves",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.2: everyone registered but the only enforcing policy excludes an account is Partial, naming it",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.EmergencyAccess.Tests.ps1",
+            "Test": "an approved exclusion beside another shortfall never makes the finding Satisfied: AAD-1.2 with an unregistered user, AAD-1.4 with no medium-risk policy (review finding)",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.FalsePassPaths.Tests.ps1",
+            "Test": "AAD-1.2: an all-users \"MFA or custom control\" policy is Partial (MFA is one alternative), never Satisfied",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.FalsePassPaths.Tests.ps1",
+            "Test": "AAD-1.2: a browser-only all-users MFA policy is not all-user coverage (Partial with every user registered, Gap otherwise), and the detail names the client app types",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.2's definition does not claim Security Defaults requires MFA of every user at every sign-in",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.2 through Security Defaults on a Business Standard tenant: a registration shortfall stays a scored Partial, and registration not collected is a collection gap, not license gated",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.2 through Security Defaults says the registration report needs Entra ID P1 or P2, and says re-running will not help only when Graph refused it for that reason",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.2 through Security Defaults with no enabled members is not applicable and carries its citations",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.2 beside Security Defaults with the CA read failed and registration refused: the reason does not blame the Conditional Access collector",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.2 with every user registered beside Security Defaults is gated on a tenant without Entra ID P1, keeping the Security Defaults verdict in the detail",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "compliance matrix: the Security Defaults AAD-1.2 not-assessed finding is not listed as a license gap; a gated control is",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNote": "Tests whose names mention this control, executed and passed in the same run; not classified by scenario in batch 1.",
+        "Omitted": [
+          "Pagination and licensing: covered by pre-existing collector and license-gating tests, not re-inventoried in batch 1"
+        ]
+      },
+      "CIValidation": {
+        "Status": "NotRun",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "LiveObservation": {
+        "Source": "NRGTS live run",
+        "CollectedAt": "2026-10-30 10:47-11:18 local",
+        "Environment": "authorized client tenant (production)",
+        "Payload": "AAD-CAPolicies: excludeGuestsOrExternalUsers {GuestOrExternalUserTypes, ExternalTenantsMembershipKind} and authenticationFlows [{transferMethods}] observed",
+        "Limitations": "Collected before ExternalTenantsMembers existed; configuration not known in advance, so observation only."
+      },
+      "LiveValidation": {
+        "Status": "NotPerformed",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "Qualifications": [
+        {
+          "Qualification": "Insider-risk conditions and application filters are not judged",
+          "Scope": "Policies using conditions.insiderRiskLevels or an application filter",
+          "Effect": "Such a policy can still count as all-user coverage; confidence in a Satisfied result is reduced where they are used",
+          "Reason": "Deferred from batch 1 by decision of 2026-10-31"
+        },
+        {
+          "Qualification": "Group membership is not resolved",
+          "Scope": "Exclusions of groups that differ between policies",
+          "Effect": "Coverage is reported unproven (not assessed), never covered and never a gap",
+          "Reason": "By design; unchanged by batch 1"
+        },
+        {
+          "Qualification": "Whether the tenant currently holds guests of an excluded type is not judged",
+          "Scope": "Guest-exclusion shortfalls",
+          "Effect": "The shortfall describes configuration scope, not a count of exposed accounts",
+          "Reason": "Not collected for this purpose"
+        }
+      ]
+    },
+    {
+      "ControlId": "AAD-1.3",
+      "Kind": "Decision",
+      "EvidenceRequirement": {
+        "Version": "batch1-2026-10-31",
+        "Requires": [
+          "AAD-CAPolicies: every policy, with conditions.users (including guest and external-user scope) and conditions.authenticationFlows",
+          "AAD-AuthPolicies: Security Defaults state"
+        ]
+      },
+      "Implementation": {
+        "Status": "Implemented",
+        "Revision": "748e350",
+        "Note": "Shared helper Lib/Get-TPEffectiveCoverage.ps1 changed for D1 and D2 in this revision"
+      },
+      "LocalValidation": {
+        "Revision": "748e350",
+        "Date": "2026-10-31",
+        "Batch1Scenarios": [
+          {
+            "Scenario": "Implementation: one shared narrowing reason",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "AAD-1.3 names the flow condition once (one shared reason, no private copy)",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Contract: collector-to-evaluator shape",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "the real collector stores the guest exclusion (with listed organizations) and the flow condition in the shape the helpers read",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNamingControl": [
+          {
+            "File": "TP.CisV7Thresholds.Tests.ps1",
+            "Test": "AAD-1.3 cites CIS 5.2.2.5",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.3: phishing resistance comes from the strength's allowed methods, never from a policy name",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.3: a role-scoped policy with no role catalog read is not assessed (never Satisfied, never a Gap)",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-1.3: a role-scoped policy that covers only some privileged roles is not full admin coverage",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.EmergencyAccess.Tests.ps1",
+            "Test": "an approved exclusion beside a component that was not established never makes the finding Satisfied (review finding: AAD-1.3 with the role catalog unread)",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.FalsePassPaths.Tests.ps1",
+            "Test": "AAD-1.3: a browser-only phishing-resistant admin policy is a shortfall, never Satisfied",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.3: Security Defaults on is Partial (Medium) for standard admin MFA at every sign-in, never the Critical Gap",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "Security Defaults on while the Conditional Access read lists a policy as On is not assessed and never credited (AAD-1.3, AAD-11.1, AAD-10.4)",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "on a Business Standard tenant with Security Defaults, AAD-1.1 and AAD-11.1 findings need no license; the gated AAD-1.3 keeps the Security Defaults reason",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.1, AAD-11.1 and AAD-1.3 with the state not read and no CA policy On are not assessed, with citations, never the Gap that assumes it is off",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNote": "Tests whose names mention this control, executed and passed in the same run; not classified by scenario in batch 1.",
+        "Omitted": [
+          "Pagination and licensing: covered by pre-existing collector and license-gating tests, not re-inventoried in batch 1"
+        ]
+      },
+      "CIValidation": {
+        "Status": "NotRun",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "LiveObservation": {
+        "Source": "NRGTS live run",
+        "CollectedAt": "2026-10-30 10:47-11:18 local",
+        "Environment": "authorized client tenant (production)",
+        "Payload": "AAD-CAPolicies: excludeGuestsOrExternalUsers {GuestOrExternalUserTypes, ExternalTenantsMembershipKind} and authenticationFlows [{transferMethods}] observed",
+        "Limitations": "Collected before ExternalTenantsMembers existed; configuration not known in advance, so observation only."
+      },
+      "LiveValidation": {
+        "Status": "NotPerformed",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "Qualifications": [
+        {
+          "Qualification": "Insider-risk conditions and application filters are not judged",
+          "Scope": "Policies using conditions.insiderRiskLevels or an application filter",
+          "Effect": "Such a policy can still count as all-user coverage; confidence in a Satisfied result is reduced where they are used",
+          "Reason": "Deferred from batch 1 by decision of 2026-10-31"
+        },
+        {
+          "Qualification": "Group membership is not resolved",
+          "Scope": "Exclusions of groups that differ between policies",
+          "Effect": "Coverage is reported unproven (not assessed), never covered and never a gap",
+          "Reason": "By design; unchanged by batch 1"
+        },
+        {
+          "Qualification": "Whether the tenant currently holds guests of an excluded type is not judged",
+          "Scope": "Guest-exclusion shortfalls",
+          "Effect": "The shortfall describes configuration scope, not a count of exposed accounts",
+          "Reason": "Not collected for this purpose"
+        },
+        {
+          "Qualification": "Complementary guest policies are not considered",
+          "Scope": "AAD-1.3 builds its own candidate list",
+          "Effect": "A guest exclusion on an admin MFA policy is reported even if a separate guest policy covers it (a possible false shortfall, conservative direction)",
+          "Reason": "Not in batch 1 scope"
+        }
+      ]
+    },
+    {
+      "ControlId": "AAD-1.4",
+      "Kind": "Decision",
+      "EvidenceRequirement": {
+        "Version": "batch1-2026-10-31",
+        "Requires": [
+          "AAD-CAPolicies: every policy, with conditions.users (including guest and external-user scope) and conditions.authenticationFlows",
+          "AAD-AuthPolicies: Security Defaults state"
+        ]
+      },
+      "Implementation": {
+        "Status": "Implemented",
+        "Revision": "748e350",
+        "Note": "Shared helper Lib/Get-TPEffectiveCoverage.ps1 changed for D1 and D2 in this revision"
+      },
+      "LocalValidation": {
+        "Revision": "748e350",
+        "Date": "2026-10-31",
+        "Batch1Scenarios": [
+          {
+            "Scenario": "Scope: guest exclusion narrows the policy",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "AAD-1.4: a risk policy excluding guests is not Satisfied",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Scope: authentication-flow condition narrows the policy",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "AAD-1.4: a risk policy limited to an authentication flow is not Satisfied and earns no CIS credit",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Contract: collector-to-evaluator shape",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "the real collector stores the guest exclusion (with listed organizations) and the flow condition in the shape the helpers read",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNamingControl": [
+          {
+            "File": "TP.EmergencyAccess.Tests.ps1",
+            "Test": "an approved exclusion beside another shortfall never makes the finding Satisfied: AAD-1.2 with an unregistered user, AAD-1.4 with no medium-risk policy (review finding)",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.FalsePassPaths.Tests.ps1",
+            "Test": "AAD-1.4: an enabled high+medium policy scoped to one group, to no application, or to one application is a Gap naming the policy",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.FalsePassPaths.Tests.ps1",
+            "Test": "AAD-1.4: a tenant-wide policy excluding a group is Partial and names the exclusion",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.FalsePassPaths.Tests.ps1",
+            "Test": "AAD-1.4: levels are not merged across differently scoped policies; two tenant-wide policies combine",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.FalsePassPaths.Tests.ps1",
+            "Test": "AAD-1.4 / 1.5: the report-only qualification applies the same client-app rule",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.4 / 1.5: report-only is Partial only when the policy meets every scope, risk and grant condition; otherwise Gap; disabled is Gap",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.4 / 1.5: a policy list that could not be proven complete is not assessed, never a Gap; an absent key replays as complete",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.4 / 1.5: blocking and risk-remediation responses count toward coverage; CIS needs MFA every time (or a block) and a password change",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.4 / 1.5: only the risk levels Microsoft's templates select count",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.4 (CIS 5.2.2.7): one policy, both levels, MFA with sign-in frequency every time or a block on its own; each shortfall is named",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.4, AAD-1.5, AAD-10.1, AAD-11.5 under Security Defaults stay Gaps and name it; AAD-1.4 no longer says \"let through without a challenge\"",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.4, AAD-1.5 and AAD-10.1 scope \"no risk policy\" to Conditional Access and Security Defaults",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNote": "Tests whose names mention this control, executed and passed in the same run; not classified by scenario in batch 1.",
+        "Omitted": [
+          "Pagination and licensing: covered by pre-existing collector and license-gating tests, not re-inventoried in batch 1"
+        ]
+      },
+      "CIValidation": {
+        "Status": "NotRun",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "LiveObservation": {
+        "Source": "NRGTS live run",
+        "CollectedAt": "2026-10-30 10:47-11:18 local",
+        "Environment": "authorized client tenant (production)",
+        "Payload": "AAD-CAPolicies: excludeGuestsOrExternalUsers {GuestOrExternalUserTypes, ExternalTenantsMembershipKind} and authenticationFlows [{transferMethods}] observed",
+        "Limitations": "Collected before ExternalTenantsMembers existed; configuration not known in advance, so observation only."
+      },
+      "LiveValidation": {
+        "Status": "NotPerformed",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "Qualifications": [
+        {
+          "Qualification": "Insider-risk conditions and application filters are not judged",
+          "Scope": "Policies using conditions.insiderRiskLevels or an application filter",
+          "Effect": "Such a policy can still count as all-user coverage; confidence in a Satisfied result is reduced where they are used",
+          "Reason": "Deferred from batch 1 by decision of 2026-10-31"
+        },
+        {
+          "Qualification": "Group membership is not resolved",
+          "Scope": "Exclusions of groups that differ between policies",
+          "Effect": "Coverage is reported unproven (not assessed), never covered and never a gap",
+          "Reason": "By design; unchanged by batch 1"
+        },
+        {
+          "Qualification": "Whether the tenant currently holds guests of an excluded type is not judged",
+          "Scope": "Guest-exclusion shortfalls",
+          "Effect": "The shortfall describes configuration scope, not a count of exposed accounts",
+          "Reason": "Not collected for this purpose"
+        },
+        {
+          "Qualification": "Complementary guest policies are credited only when the caller passes them",
+          "Scope": "AAD-1.4",
+          "Effect": "This control passes every enabled policy delivering the protection, so a guest-only complement is considered; no batch-1 test exercises the complement path for this control specifically",
+          "Reason": "Batch-1 complement tests cover AAD-1.2 only"
+        }
+      ]
+    },
+    {
+      "ControlId": "AAD-1.5",
+      "Kind": "Decision",
+      "EvidenceRequirement": {
+        "Version": "batch1-2026-10-31",
+        "Requires": [
+          "AAD-CAPolicies: every policy, with conditions.users (including guest and external-user scope) and conditions.authenticationFlows",
+          "AAD-AuthPolicies: Security Defaults state"
+        ]
+      },
+      "Implementation": {
+        "Status": "Implemented",
+        "Revision": "748e350",
+        "Note": "Shared helper Lib/Get-TPEffectiveCoverage.ps1 changed for D1 and D2 in this revision"
+      },
+      "LocalValidation": {
+        "Revision": "748e350",
+        "Date": "2026-10-31",
+        "Batch1Scenarios": [
+          {
+            "Scenario": "Contract: collector-to-evaluator shape",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "the real collector stores the guest exclusion (with listed organizations) and the flow condition in the shape the helpers read",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNamingControl": [
+          {
+            "File": "TP.FalsePassPaths.Tests.ps1",
+            "Test": "AAD-1.5: a group-scoped high user-risk policy is a Gap; tenant-wide passes; different exclusions in two policies are not assessed",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.5 (CIS 5.2.2.6): password change AND MFA (or a strength), operator AND, sign-in frequency every time",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "a policy only the beta list returns is kept, flagged and readable by AAD-1.5 (the v1.0 list returned 15 where the beta list returned 17)",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.4, AAD-1.5, AAD-10.1, AAD-11.5 under Security Defaults stay Gaps and name it; AAD-1.4 no longer says \"let through without a challenge\"",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.4, AAD-1.5 and AAD-10.1 scope \"no risk policy\" to Conditional Access and Security Defaults",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNote": "Tests whose names mention this control, executed and passed in the same run; not classified by scenario in batch 1.",
+        "Omitted": [
+          "Pagination and licensing: covered by pre-existing collector and license-gating tests, not re-inventoried in batch 1"
+        ]
+      },
+      "CIValidation": {
+        "Status": "NotRun",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "LiveObservation": {
+        "Source": "NRGTS live run",
+        "CollectedAt": "2026-10-30 10:47-11:18 local",
+        "Environment": "authorized client tenant (production)",
+        "Payload": "AAD-CAPolicies: excludeGuestsOrExternalUsers {GuestOrExternalUserTypes, ExternalTenantsMembershipKind} and authenticationFlows [{transferMethods}] observed",
+        "Limitations": "Collected before ExternalTenantsMembers existed; configuration not known in advance, so observation only."
+      },
+      "LiveValidation": {
+        "Status": "NotPerformed",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "Qualifications": [
+        {
+          "Qualification": "Insider-risk conditions and application filters are not judged",
+          "Scope": "Policies using conditions.insiderRiskLevels or an application filter",
+          "Effect": "Such a policy can still count as all-user coverage; confidence in a Satisfied result is reduced where they are used",
+          "Reason": "Deferred from batch 1 by decision of 2026-10-31"
+        },
+        {
+          "Qualification": "Group membership is not resolved",
+          "Scope": "Exclusions of groups that differ between policies",
+          "Effect": "Coverage is reported unproven (not assessed), never covered and never a gap",
+          "Reason": "By design; unchanged by batch 1"
+        },
+        {
+          "Qualification": "Whether the tenant currently holds guests of an excluded type is not judged",
+          "Scope": "Guest-exclusion shortfalls",
+          "Effect": "The shortfall describes configuration scope, not a count of exposed accounts",
+          "Reason": "Not collected for this purpose"
+        },
+        {
+          "Qualification": "Complementary guest policies are credited only when the caller passes them",
+          "Scope": "AAD-1.5",
+          "Effect": "This control passes every enabled policy delivering the protection, so a guest-only complement is considered; no batch-1 test exercises the complement path for this control specifically",
+          "Reason": "Batch-1 complement tests cover AAD-1.2 only"
+        },
+        {
+          "Qualification": "No batch-1 scenario test targets AAD-1.5 directly",
+          "Scope": "AAD-1.5",
+          "Effect": "AAD-1.5 shares the risk-coverage helper that AAD-1.4 tests exercise; its own guest and flow cases are untested",
+          "Reason": "Omitted in batch 1"
+        }
+      ]
+    },
+    {
+      "ControlId": "AAD-2.3",
+      "Kind": "Decision",
+      "EvidenceRequirement": {
+        "Version": "batch1-2026-10-31",
+        "Requires": [
+          "AAD-CAPolicies: every policy, with conditions.users (including guest and external-user scope) and conditions.authenticationFlows",
+          "AAD-AuthPolicies: Security Defaults state"
+        ]
+      },
+      "Implementation": {
+        "Status": "Implemented",
+        "Revision": "748e350",
+        "Note": "Shared helper Lib/Get-TPEffectiveCoverage.ps1 changed for D1 and D2 in this revision"
+      },
+      "LocalValidation": {
+        "Revision": "748e350",
+        "Date": "2026-10-31",
+        "Batch1Scenarios": [
+          {
+            "Scenario": "Scope: guest exclusion narrows the policy",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "AAD-1.1, AAD-11.1, AAD-2.3 and INT-1.2: the same exclusion is not Satisfied",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Contract: collector-to-evaluator shape",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "the real collector stores the guest exclusion (with listed organizations) and the flow condition in the shape the helpers read",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNamingControl": [
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-2.3: \"compliant OR MFA\" does not enforce a device",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-2.3 and INT-1.2: a report-only compliant-device policy beside Security Defaults is a Gap for both, not Partial",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNote": "Tests whose names mention this control, executed and passed in the same run; not classified by scenario in batch 1.",
+        "Omitted": [
+          "Pagination and licensing: covered by pre-existing collector and license-gating tests, not re-inventoried in batch 1"
+        ]
+      },
+      "CIValidation": {
+        "Status": "NotRun",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "LiveObservation": {
+        "Source": "NRGTS live run",
+        "CollectedAt": "2026-10-30 10:47-11:18 local",
+        "Environment": "authorized client tenant (production)",
+        "Payload": "AAD-CAPolicies: excludeGuestsOrExternalUsers {GuestOrExternalUserTypes, ExternalTenantsMembershipKind} and authenticationFlows [{transferMethods}] observed",
+        "Limitations": "Collected before ExternalTenantsMembers existed; configuration not known in advance, so observation only."
+      },
+      "LiveValidation": {
+        "Status": "NotPerformed",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "Qualifications": [
+        {
+          "Qualification": "Insider-risk conditions and application filters are not judged",
+          "Scope": "Policies using conditions.insiderRiskLevels or an application filter",
+          "Effect": "Such a policy can still count as all-user coverage; confidence in a Satisfied result is reduced where they are used",
+          "Reason": "Deferred from batch 1 by decision of 2026-10-31"
+        },
+        {
+          "Qualification": "Group membership is not resolved",
+          "Scope": "Exclusions of groups that differ between policies",
+          "Effect": "Coverage is reported unproven (not assessed), never covered and never a gap",
+          "Reason": "By design; unchanged by batch 1"
+        },
+        {
+          "Qualification": "Whether the tenant currently holds guests of an excluded type is not judged",
+          "Scope": "Guest-exclusion shortfalls",
+          "Effect": "The shortfall describes configuration scope, not a count of exposed accounts",
+          "Reason": "Not collected for this purpose"
+        },
+        {
+          "Qualification": "Complementary guest policies are credited only when the caller passes them",
+          "Scope": "AAD-2.3",
+          "Effect": "This control passes every enabled policy delivering the protection, so a guest-only complement is considered; no batch-1 test exercises the complement path for this control specifically",
+          "Reason": "Batch-1 complement tests cover AAD-1.2 only"
+        },
+        {
+          "Qualification": "Authentication-flow narrowing is not tested for this control",
+          "Scope": "AAD-2.3",
+          "Effect": "The shared narrowing reason applies, but no test exercises it here",
+          "Reason": "Omitted in batch 1"
+        }
+      ]
+    },
+    {
+      "ControlId": "INT-1.2",
+      "Kind": "Decision",
+      "EvidenceRequirement": {
+        "Version": "batch1-2026-10-31",
+        "Requires": [
+          "AAD-CAPolicies: every policy, with conditions.users (including guest and external-user scope) and conditions.authenticationFlows",
+          "AAD-AuthPolicies: Security Defaults state"
+        ]
+      },
+      "Implementation": {
+        "Status": "Implemented",
+        "Revision": "748e350",
+        "Note": "Shared helper Lib/Get-TPEffectiveCoverage.ps1 changed for D1 and D2 in this revision"
+      },
+      "LocalValidation": {
+        "Revision": "748e350",
+        "Date": "2026-10-31",
+        "Batch1Scenarios": [
+          {
+            "Scenario": "Scope: guest exclusion narrows the policy",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "AAD-1.1, AAD-11.1, AAD-2.3 and INT-1.2: the same exclusion is not Satisfied",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Contract: collector-to-evaluator shape",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "the real collector stores the guest exclusion (with listed organizations) and the flow condition in the shape the helpers read",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNamingControl": [
+          {
+            "File": "TP.FalsePassPaths.Tests.ps1",
+            "Test": "an excluded application is narrower scope: a Gap that names the exclusion (INT-1.2 passed on All users + All applications alone)",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-2.3 and INT-1.2: a report-only compliant-device policy beside Security Defaults is a Gap for both, not Partial",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNote": "Tests whose names mention this control, executed and passed in the same run; not classified by scenario in batch 1.",
+        "Omitted": [
+          "Pagination and licensing: covered by pre-existing collector and license-gating tests, not re-inventoried in batch 1"
+        ]
+      },
+      "CIValidation": {
+        "Status": "NotRun",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "LiveObservation": {
+        "Source": "NRGTS live run",
+        "CollectedAt": "2026-10-30 10:47-11:18 local",
+        "Environment": "authorized client tenant (production)",
+        "Payload": "AAD-CAPolicies: excludeGuestsOrExternalUsers {GuestOrExternalUserTypes, ExternalTenantsMembershipKind} and authenticationFlows [{transferMethods}] observed",
+        "Limitations": "Collected before ExternalTenantsMembers existed; configuration not known in advance, so observation only."
+      },
+      "LiveValidation": {
+        "Status": "NotPerformed",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "Qualifications": [
+        {
+          "Qualification": "Insider-risk conditions and application filters are not judged",
+          "Scope": "Policies using conditions.insiderRiskLevels or an application filter",
+          "Effect": "Such a policy can still count as all-user coverage; confidence in a Satisfied result is reduced where they are used",
+          "Reason": "Deferred from batch 1 by decision of 2026-10-31"
+        },
+        {
+          "Qualification": "Group membership is not resolved",
+          "Scope": "Exclusions of groups that differ between policies",
+          "Effect": "Coverage is reported unproven (not assessed), never covered and never a gap",
+          "Reason": "By design; unchanged by batch 1"
+        },
+        {
+          "Qualification": "Whether the tenant currently holds guests of an excluded type is not judged",
+          "Scope": "Guest-exclusion shortfalls",
+          "Effect": "The shortfall describes configuration scope, not a count of exposed accounts",
+          "Reason": "Not collected for this purpose"
+        },
+        {
+          "Qualification": "Complementary guest policies are credited only when the caller passes them",
+          "Scope": "INT-1.2",
+          "Effect": "This control passes every enabled policy delivering the protection, so a guest-only complement is considered; no batch-1 test exercises the complement path for this control specifically",
+          "Reason": "Batch-1 complement tests cover AAD-1.2 only"
+        },
+        {
+          "Qualification": "Authentication-flow narrowing is not tested for this control",
+          "Scope": "INT-1.2",
+          "Effect": "The shared narrowing reason applies, but no test exercises it here",
+          "Reason": "Omitted in batch 1"
+        }
+      ]
+    },
+    {
+      "ControlId": "AAD-11.1",
+      "Kind": "Decision",
+      "EvidenceRequirement": {
+        "Version": "batch1-2026-10-31",
+        "Requires": [
+          "AAD-CAPolicies: every policy, with conditions.users (including guest and external-user scope) and conditions.authenticationFlows",
+          "AAD-AuthPolicies: Security Defaults state"
+        ]
+      },
+      "Implementation": {
+        "Status": "Implemented",
+        "Revision": "748e350",
+        "Note": "Shared helper Lib/Get-TPEffectiveCoverage.ps1 changed for D1 and D2 in this revision"
+      },
+      "LocalValidation": {
+        "Revision": "748e350",
+        "Date": "2026-10-31",
+        "Batch1Scenarios": [
+          {
+            "Scenario": "Scope: guest exclusion narrows the policy",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "AAD-1.1, AAD-11.1, AAD-2.3 and INT-1.2: the same exclusion is not Satisfied",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Positive: device-code block unchanged",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "AAD-11.1: a device-code block keeps its verdict (it judges that flow itself)",
+            "Result": "Passed"
+          },
+          {
+            "Scenario": "Contract: collector-to-evaluator shape",
+            "File": "TP.CANarrowing.Tests.ps1",
+            "Test": "the real collector stores the guest exclusion (with listed organizations) and the flow condition in the shape the helpers read",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNamingControl": [
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-11.1: the block must cover all users; exclusions across policies are combined",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-11.1: MFA on the device code flow is not a block",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.CoverageTruth.Tests.ps1",
+            "Test": "AAD-11.1: a device-code policy for one application is reported as narrower, not as coverage",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.EmergencyAccess.Tests.ps1",
+            "Test": "AAD-11.1 (device code block) with a shared exclusion is approved the same way",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-11.1: a device-code policy must block, not only require MFA",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-11.1: Security Defaults on is Satisfied \u2014 device code flow is blocked by Security Defaults",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "Security Defaults on while the Conditional Access read lists a policy as On is not assessed and never credited (AAD-1.3, AAD-11.1, AAD-10.4)",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "on a Business Standard tenant with Security Defaults, AAD-1.1 and AAD-11.1 findings need no license; the gated AAD-1.3 keeps the Security Defaults reason",
+            "Result": "Passed"
+          },
+          {
+            "File": "TP.IdentityTruth.Tests.ps1",
+            "Test": "AAD-1.1, AAD-11.1 and AAD-1.3 with the state not read and no CA policy On are not assessed, with citations, never the Gap that assumes it is off",
+            "Result": "Passed"
+          }
+        ],
+        "PriorTestsNote": "Tests whose names mention this control, executed and passed in the same run; not classified by scenario in batch 1.",
+        "Omitted": [
+          "Pagination and licensing: covered by pre-existing collector and license-gating tests, not re-inventoried in batch 1"
+        ]
+      },
+      "CIValidation": {
+        "Status": "NotRun",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "LiveObservation": {
+        "Source": "NRGTS live run",
+        "CollectedAt": "2026-10-30 10:47-11:18 local",
+        "Environment": "authorized client tenant (production)",
+        "Payload": "AAD-CAPolicies: excludeGuestsOrExternalUsers {GuestOrExternalUserTypes, ExternalTenantsMembershipKind} and authenticationFlows [{transferMethods}] observed",
+        "Limitations": "Collected before ExternalTenantsMembers existed; configuration not known in advance, so observation only."
+      },
+      "LiveValidation": {
+        "Status": "NotPerformed",
+        "See": "STATUS-2026-10-31.md"
+      },
+      "Qualifications": [
+        {
+          "Qualification": "Insider-risk conditions and application filters are not judged",
+          "Scope": "Policies using conditions.insiderRiskLevels or an application filter",
+          "Effect": "Such a policy can still count as all-user coverage; confidence in a Satisfied result is reduced where they are used",
+          "Reason": "Deferred from batch 1 by decision of 2026-10-31"
+        },
+        {
+          "Qualification": "Group membership is not resolved",
+          "Scope": "Exclusions of groups that differ between policies",
+          "Effect": "Coverage is reported unproven (not assessed), never covered and never a gap",
+          "Reason": "By design; unchanged by batch 1"
+        },
+        {
+          "Qualification": "Whether the tenant currently holds guests of an excluded type is not judged",
+          "Scope": "Guest-exclusion shortfalls",
+          "Effect": "The shortfall describes configuration scope, not a count of exposed accounts",
+          "Reason": "Not collected for this purpose"
+        },
+        {
+          "Qualification": "Complementary guest policies are credited only when the caller passes them",
+          "Scope": "AAD-11.1",
+          "Effect": "This control passes every enabled policy delivering the protection, so a guest-only complement is considered; no batch-1 test exercises the complement path for this control specifically",
+          "Reason": "Batch-1 complement tests cover AAD-1.2 only"
+        }
+      ]
+    }
+  ]
+}
