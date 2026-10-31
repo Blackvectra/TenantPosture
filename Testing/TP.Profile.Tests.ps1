@@ -132,3 +132,40 @@ Describe 'The loaded profile colors reach the HTML report' {
         $bad | Should -BeNullOrEmpty
     }
 }
+
+Describe 'The loaded profile name reaches the playbook and the executive summary' {
+
+    BeforeAll {
+        $script:RepoRoot = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { (Get-Location).Path }
+        Import-Module (Join-Path $script:RepoRoot 'TenantPosture.psm1') -Force -ErrorAction Stop
+        $script:PbFindings = @(
+            @{ ControlId = 'AAD-1.1'; State = 'Gap'; Severity = 'High'; Category = 'Identity'; Title = 'Legacy authentication'; Detail = 'Not blocked.'; CurrentValue = 'none'; RequiredValue = 'block'; Remediation = 'Block it.'; FrameworkIds = 'NIST:IA-2'; AffectedObjects = @() },
+            @{ ControlId = 'EXO-1.1'; State = 'Satisfied'; Severity = 'Informational'; Category = 'Email'; Title = 'Audit'; Detail = 'On.'; CurrentValue = 'on'; RequiredValue = 'on'; Remediation = 'm'; FrameworkIds = 'NIST:AU-2'; AffectedObjects = @() }
+        )
+        $script:PbConn = @{ Graph = $true; EXO = $true; Teams = $false; IPPSSession = $false; SharePoint = $false }
+    }
+    AfterAll { Remove-Module 'TenantPosture' -Force -ErrorAction SilentlyContinue }
+
+    It 'prints the brand recorded in the run metadata, never another practice''s name (the executive summary hard-coded one)' {
+        $d = Join-Path $TestDrive 'pb-brand'; New-Item -ItemType Directory -Path $d -Force | Out-Null
+        $meta = @{ TenantDomain = 'contoso.example'; AssessmentDate = 'October 31, 2026'; ToolVersion = '4.14.3'; Operator = 'a'
+                   Brand = @{ CompanyName = 'Acme Managed IT' } }
+        Publish-TPRemediationPlaybook -Metadata $meta -Findings $script:PbFindings -Connections $script:PbConn `
+            -OutputPath (Join-Path $d 'p.md') -ExecutivePath (Join-Path $d 'e.md') | Out-Null
+        foreach ($f in 'p.md', 'e.md') {
+            $t = Get-Content -LiteralPath (Join-Path $d $f) -Raw
+            $t | Should -Match 'Acme Managed IT' -Because "$f must name the run's own practice"
+            $t | Should -Not -Match 'NRG Technology Services' -Because "$f printed the other practice's name on an nls-profile run"
+        }
+    }
+
+    It 'falls back to the loaded profile, then the neutral default, when the metadata records no brand' {
+        $d = Join-Path $TestDrive 'pb-nobrand'; New-Item -ItemType Directory -Path $d -Force | Out-Null
+        $meta = @{ TenantDomain = 'contoso.example'; AssessmentDate = 'October 31, 2026'; ToolVersion = '4.14.3'; Operator = 'a' }
+        Publish-TPRemediationPlaybook -Metadata $meta -Findings $script:PbFindings -Connections $script:PbConn `
+            -OutputPath (Join-Path $d 'p.md') -ExecutivePath (Join-Path $d 'e.md') | Out-Null
+        $loaded = [string](Get-TPObjectField -Item (Get-Variable -Name TPBrand -ValueOnly -ErrorAction SilentlyContinue) -Key 'CompanyName' -Default '')
+        $want = if ($loaded) { $loaded } else { 'NRG Technology Services / NextLayerSec LLC' }
+        (Get-Content -LiteralPath (Join-Path $d 'e.md') -Raw) | Should -Match ('\*\*Prepared by:\*\* ' + [regex]::Escape((ConvertTo-TPMarkdownSafe $want)))
+    }
+}

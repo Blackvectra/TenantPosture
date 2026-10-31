@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- **[Reports] The monthly report now writes from the entry point, cites HIPAA safeguards, and the playbook and
+  executive summary carry the run's own brand.** Found on the first `-MonthlyReport` run through
+  `Invoke-TPAssessment.ps1` and on an `nls`-profile run.
+  - `Publish-TPMonthlyReport` created its output folder with `New-Item -LiteralPath`, a parameter `New-Item` does
+    not have. The entry point always writes into a new `monthly\` folder, so every real run ended with
+    "Monthly report publish failed" and no file; the suite never saw it because it wrote into an existing folder.
+  - Its HIPAA Safeguard column read `FrameworkIds` off the control rows, which carry `References.HIPAA` and no
+    such field; under StrictMode the read threw, was swallowed, and every row printed a dash. The citations now
+    come from `Get-TPFrameworkCitations`, one line per section.
+  - `Publish-TPRemediationPlaybook` hard-coded "NRG Technology Services / NextLayerSec LLC" in the playbook and
+    the executive summary. Both now print the brand recorded in the run's metadata (so a `-FromResults`
+    republish keeps the profile the run used), then the loaded profile, then the neutral default.
+  - `TP.MonthlyReport.Tests.ps1` and `TP.Profile.Tests.ps1` pin all three.
+- **[Docs] Documentation-maintenance rule** (`CLAUDE.md`), two Documentation items in the pull-request
+  template, the suite count in `docs/WHAT-CAN-I-RUN.md` stated without a number, and the CIS Microsoft 365
+  Foundations references in `CLAUDE.md` corrected to v7.0.0, the edition `Config/frameworks.json` encodes.
+- **[Tooling] `/tp-verify`** (`.claude/skills/tp-verify/SKILL.md`): a verification-only Claude Code project
+  skill that runs the test gate, the security analysis, the analyzer, the export-list check and the Markdown
+  check from the repository root and reports what ran; it edits nothing. `.gitignore` now tracks that one skill
+  and keeps the rest of `.claude/` ignored.
+
 - **[Assessment] Conditional Access coverage now honors guest exclusions and authentication-flow conditions
   (batch 1, `docs/validation/batch-1-ca-narrowing.md`).** Both were false passes in the shared coverage helper behind
   AAD-1.1, 1.2, 1.4, 1.5, 2.3, 11.1 and INT-1.2.
