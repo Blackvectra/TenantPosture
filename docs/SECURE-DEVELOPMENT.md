@@ -93,7 +93,7 @@ This matches the structure CISA expects in the [Secure Software Development Atte
 
 | Task | Evidence |
 |---|---|
-| PW.4.1 — Acquire and maintain well-secured software components | Dependencies are vendor-supported (Microsoft, OSS with active maintainers); Dependabot keeps versions current; Dependency Review blocks vulnerable additions |
+| PW.4.1 — Acquire and maintain well-secured software components | Dependencies are vendor-supported (Microsoft, OSS with active maintainers); Dependabot keeps versions current; Dependency Review blocks vulnerable additions; OSV-Scanner checks every pinned Python package against the OSV database on each change and weekly |
 | PW.4.4 — Verify that acquired commercial, open-source, and all other third-party software complies with the requirements defined by the organization | SBOM published per release; license review during dependency addition |
 
 ### PW.5 — Create Source Code by Adhering to Secure Coding Practices
@@ -139,7 +139,7 @@ This matches the structure CISA expects in the [Secure Software Development Atte
 | Task | Evidence |
 |---|---|
 | RV.1.1 — Gather information from acquirers, users, and public sources | `SECURITY.md` + `docs/VULNERABILITY-DISCLOSURE-POLICY.md` describe inbound channels (private advisory, email); GitHub Security tab routes private reports |
-| RV.1.2 — Review, analyze, and / or test the software's code to identify or confirm the presence of previously undetected vulnerabilities | Weekly OpenSSF Scorecard sweep; Gitleaks / TruffleHog full-history scans; weekly Trivy scan of the OSS Scanner image (a newly published CVE against a pinned package is reported with no code change) and weekly ZAP scan of the GUI; `/security-review` skill on the current diff |
+| RV.1.2 — Review, analyze, and / or test the software's code to identify or confirm the presence of previously undetected vulnerabilities | Weekly OpenSSF Scorecard sweep; Gitleaks / TruffleHog full-history scans; weekly Trivy scan of the OSS Scanner image (a newly published CVE against a pinned package is reported with no code change); weekly OSV-Scanner sweep of the pinned Python packages (`osv-scanner.yml`) and weekly ZAP scan of the GUI; `/security-review` skill on the current diff |
 | RV.1.3 — Have a policy that addresses vulnerability disclosure and remediation | `docs/VULNERABILITY-DISCLOSURE-POLICY.md` (CISA BOD 20-01 aligned) |
 
 ### RV.2 — Assess, Prioritize, and Remediate Vulnerabilities
