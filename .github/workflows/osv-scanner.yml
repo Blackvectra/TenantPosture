@@ -1,0 +1,114 @@
+# OSV-Scanner — known vulnerabilities in the pinned Python packages.
+#
+# Dependency Review (dependency-review.yml) judges only what a pull request
+# changes, so a vulnerability published later against a version that is already
+# pinned is never reported by it. This job reads every requirement file in the
+# repository (the .github/*-requirements.txt files CI and the questionnaire
+# importers install from, and .oss-scanner/requirements.txt) and checks each
+# pinned version against the OSV database, on every change to those files and
+# weekly with no change at all.
+#
+# The scanner runs from the image pinned by tag and digest in
+# .github/scanners/osv/Dockerfile (the job reads the FROM line), which
+# Dependabot's docker ecosystem keeps current. The PowerShell Gallery has no
+# vulnerability database, so the pinned modules are outside what OSV can judge;
+# tools/pinned-modules.psd1 and the weekly freshness check stay their control.
+#
+# Any finding fails the job. Fix it by moving the pin to a fixed version (with
+# its new hashes). A finding that is true and accepted goes into an
+# osv-scanner.toml beside the requirement file it concerns, as an
+# [[IgnoredVulns]] entry with an `ignoreUntil` date and a `reason` a reviewer
+# can check; Testing/TP.WorkflowSecurity.Tests.ps1 fails an entry without both.
+# Results upload to Code Scanning.
+
+name: OSV-Scanner
+
+on:
+  # Manual runs stay available alongside the automatic triggers.
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '**/*requirements*.txt'
+      - '**/osv-scanner.toml'
+      - '.github/scanners/osv/**'
+      - '.github/workflows/osv-scanner.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**/*requirements*.txt'
+      - '**/osv-scanner.toml'
+      - '.github/scanners/osv/**'
+      - '.github/workflows/osv-scanner.yml'
+  schedule:
+    # Weekly: an advisory published against a version already pinned is
+    # reported with no code change.
+    - cron: '23 7 * * 2'
+permissions:
+  contents: read
+
+# One run per workflow and pull request (or branch). A newer push to the same
+# pull request cancels the older run; runs on main and scheduled runs are
+# never cancelled, so every commit on main keeps a complete result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  osv-scanner:
+    name: Known vulnerabilities in pinned packages (OSV-Scanner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read  # read the repository
+      security-events: write  # upload the OSV-Scanner SARIF to Code Scanning
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Scan the requirement files against the OSV database
+        id: scan
+        run: |
+          set -euo pipefail
+          image="$(awk '/^FROM /{print $2}' .github/scanners/osv/Dockerfile)"
+          echo "OSV-Scanner image: ${image}"
+          out="${RUNNER_TEMP}/osv-out"
+          mkdir -p "${out}"
+          # The checkout is mounted read-only at its own path, so the file
+          # locations in the SARIF are the repository's own and Code Scanning
+          # maps each result to its file.
+          scan() {
+            docker run --rm \
+              -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:ro" \
+              -v "${out}:${out}" \
+              -w "${GITHUB_WORKSPACE}" \
+              "${image}" scan source --recursive "$@" .
+          }
+          set +e
+          scan --format sarif --output-file "${out}/osv.sarif"
+          rc=$?
+          set -e
+          # hashFiles() sees only the workspace, so the upload step is told here
+          # whether a SARIF file was written (also when the scan found something).
+          if [ -s "${out}/osv.sarif" ]; then echo "sarif=true" >> "${GITHUB_OUTPUT}"; fi
+          # The table is for the log; the SARIF run above decided the result.
+          scan --format table || true
+          # 0: no known vulnerability. 1: at least one. 128: no package found,
+          # which means the scan read nothing and proves nothing.
+          if [ "${rc}" -eq 1 ]; then
+            echo "::error title=Known vulnerabilities in pinned packages::OSV-Scanner reported a known vulnerability in a pinned package (see the table above). Move the pin to a fixed version with its new hashes, or review an accepted finding into osv-scanner.toml with ignoreUntil and a reason."
+            exit 1
+          elif [ "${rc}" -ne 0 ]; then
+            echo "::error title=OSV-Scanner did not complete::OSV-Scanner exited ${rc}; exit 128 means it found no package to scan. Nothing was judged."
+            exit 1
+          fi
+
+      - name: Upload the scan to Code Scanning
+        # Run even when the scan failed, so findings surface for triage.
+        if: always() && steps.scan.outputs.sarif == 'true'
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: ${{ runner.temp }}/osv-out/osv.sarif
+          category: osv-scanner
