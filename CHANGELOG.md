@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **[Security] pypdf 6.21.4.** The questionnaire importers' PDF reader moves from 6.21.2 to 6.21.4, which fixes
+  seven High advisories published on 2026-10-30 (GHSA-42gh-23hr-vphw, GHSA-4vqv-7265-gm2w, GHSA-5849-834g-hvw5,
+  GHSA-62m5-6wh8-28x7, GHSA-cggf-277g-3q54, GHSA-mfr5-77xh-9j7h, GHSA-x3rh-gjgm-fmqc): long runtimes, large memory use
+  and infinite loops while parsing a crafted PDF. The importers read client-returned questionnaire PDFs, which are
+  untrusted; their 60-second watchdog and 32 MB file cap limit the damage, but memory is not bounded on Windows. Every
+  pin moves at once, as `TP.RuntimePins` requires: `.github/runtime-pdf-requirements.txt` (both hashes taken from
+  PyPI and checked by installing the file with `--require-hashes`), `tools/Generate-SBOM.ps1`,
+  `docs/security/SBOM.md` and `CLAUDE.md`. 6.21.4 declares the same dependencies as 6.21.2 (`typing_extensions`
+  below Python 3.11). `Install-TPPrerequisites.ps1` replaces a present pypdf of any other version with the pinned
+  one on its next run. The importer round trip (a fillable questionnaire written with reportlab, filled, then read
+  back) was run locally against 6.21.4, and OSV-Scanner reports no known vulnerability in the pinned packages after
+  the bump; no CI job installs the pinned file, so CI does not exercise a real pypdf.
+
 - **[Reports] The monthly report now writes from the entry point, cites HIPAA safeguards, and the playbook and
   executive summary carry the run's own brand.** Found on the first `-MonthlyReport` run through
   `Invoke-TPAssessment.ps1` and on an `nls`-profile run.
