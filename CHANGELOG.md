@@ -15,6 +15,19 @@
   back) was run locally against 6.21.4, and OSV-Scanner reports no known vulnerability in the pinned packages after
   the bump; no CI job installs the pinned file, so CI does not exercise a real pypdf.
 
+- **[CI] OSV-Scanner checks the pinned Python packages against the OSV database
+  (`.github/workflows/osv-scanner.yml`).** Dependency Review judges only what a pull request changes, so an
+  advisory published later against a version already pinned was never reported. The new job scans every
+  `*requirements*.txt` in the repository on a change to one and weekly with none, from the image pinned by tag
+  and digest in `.github/scanners/osv/Dockerfile` (Dependabot's docker ecosystem keeps it current). It fails on
+  any finding and on a scan that found no package, and uploads SARIF to Code Scanning. An accepted finding goes
+  into an `osv-scanner.toml` beside its requirement file with an `ignoreUntil` date and a reason;
+  `TP.WorkflowSecurity.Tests.ps1` fails an entry without both and pins the image, the triggers, the exit
+  handling and the read-only mount. The PowerShell Gallery has no vulnerability database, so the pinned modules
+  stay under `tools/pinned-modules.psd1` and the weekly freshness check. Its first run reports seven High
+  advisories (denial of service while parsing) against pypdf 6.21.2 in `.github/runtime-pdf-requirements.txt`,
+  fixed in 6.21.4; that pin is not moved in this change.
+
 - **[Reports] The monthly report now writes from the entry point, cites HIPAA safeguards, and the playbook and
   executive summary carry the run's own brand.** Found on the first `-MonthlyReport` run through
   `Invoke-TPAssessment.ps1` and on an `nls`-profile run.

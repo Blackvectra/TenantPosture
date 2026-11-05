@@ -10,7 +10,8 @@
 # tests pin the parts of that arrangement a later edit could quietly weaken:
 # the gate's strictness, the hash-locked install, a suppression with no
 # reason, an action pinned by tag, a checkout that leaves its token on disk,
-# a workflow with no concurrency group or with workflow-wide write access.
+# a workflow with no concurrency group or with workflow-wide write access,
+# and a dependency scan that could pass without reading anything.
 
 BeforeDiscovery {
     # -ForEach data must exist at discovery; BeforeAll runs too late and
@@ -120,6 +121,53 @@ Describe 'Workflow security' {
             $req = Get-Content -LiteralPath (Join-Path $script:RepoRoot '.oss-scanner/requirements.txt') -Raw
             foreach ($pkg in 'openpyxl', 'et-xmlfile', 'yamllint', 'pathspec', 'pyyaml') {
                 $req | Should -Match "(?m)^$pkg==\d+(\.\d+)+ \\\s*\r?\n\s+--hash=sha256:[0-9a-f]{64}"
+            }
+        }
+    }
+
+    Context 'OSV-Scanner (known vulnerabilities in pinned packages)' {
+
+        BeforeAll {
+            $script:Osv = Get-Content -LiteralPath (Join-Path $script:WorkflowDir 'osv-scanner.yml') -Raw
+            $script:OsvPin = Get-Content -LiteralPath (Join-Path $script:RepoRoot '.github/scanners/osv/Dockerfile') -Raw
+        }
+
+        It 'runs the scanner image pinned by tag and digest in its one-line Dockerfile, which Dependabot tracks' {
+            $script:OsvPin | Should -Match '(?m)^FROM ghcr\.io/google/osv-scanner:v\d+\.\d+\.\d+@sha256:[0-9a-f]{64}\s*$'
+            $script:Osv | Should -Match ([regex]::Escape("awk '/^FROM /{print `$2}' .github/scanners/osv/Dockerfile"))
+            $script:Osv | Should -Not -Match 'osv-scanner:(latest|v\d)' -Because 'the workflow runs the reference the pin file holds, never a tag of its own'
+            $script:Dependabot | Should -Match 'package-ecosystem: "docker"\s+directory: "/\.github/scanners/osv"'
+        }
+
+        It 'scans every requirement file on a change to one and weekly with no change' {
+            $script:Osv | Should -Match '(?m)^  schedule:'
+            ([regex]::Matches($script:Osv, "- '\*\*/\*requirements\*\.txt'")).Count | Should -Be 2 -Because 'push and pull_request both name the requirement files'
+            $script:Osv | Should -Match 'scan source --recursive'
+        }
+
+        It 'fails on any finding and on a scan that read nothing, and uploads the SARIF either way' {
+            $script:Osv | Should -Match '"\$\{rc\}" -eq 1 \]; then[\s\S]*?exit 1'
+            $script:Osv | Should -Match '"\$\{rc\}" -ne 0 \]; then[\s\S]*?exit 1' -Because 'exit 128 (no package found) proves nothing and must not pass'
+            $script:Osv | Should -Not -Match '--exit-code 0|continue-on-error'
+            $script:Osv | Should -Match "if: always\(\) && steps\.scan\.outputs\.sarif == 'true'"
+            $script:Osv | Should -Match 'category: osv-scanner\b'
+        }
+
+        It 'mounts the checkout read-only' {
+            $script:Osv | Should -Match ([regex]::Escape('-v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}:ro"'))
+        }
+
+        It 'accepts a finding only with an expiry and a reason a reviewer can check' {
+            # -Force: .github and .oss-scanner are hidden folders on Linux and would be skipped.
+            $configs = @(Get-ChildItem -LiteralPath $script:RepoRoot -Recurse -File -Force -Filter 'osv-scanner.toml' |
+                Where-Object { $_.FullName -notmatch '[\\/](\.git|node_modules|output)[\\/]' })
+            foreach ($cfg in $configs) {
+                $blocks = @((Get-Content -LiteralPath $cfg.FullName -Raw) -split '(?m)^\s*\[\[IgnoredVulns\]\]\s*$' | Select-Object -Skip 1)
+                foreach ($b in $blocks) {
+                    $b | Should -Match '(?m)^\s*id\s*=\s*"[^"]+"' -Because $cfg.FullName
+                    $b | Should -Match '(?m)^\s*ignoreUntil\s*=\s*\d{4}-\d{2}-\d{2}' -Because "$($cfg.FullName): an accepted finding is reviewed again"
+                    $b | Should -Match '(?m)^\s*reason\s*=\s*"[^"]{61,}"' -Because "$($cfg.FullName): the reason is written where the next reader finds it"
+                }
             }
         }
     }
