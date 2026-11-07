@@ -530,7 +530,11 @@ return @{ value = @() }
             (Verdict 'Test-TPControlEXOConnectionFilter' 'EXO-3.1').State | Should -Be 'Satisfied'
         }
         It 'PPL-3.3 with no Copilot licenses is not applicable, not a pass that claims nobody can use Copilot' {
-            Set-TPRawData -Key 'M365Copilot' -Data (Raw @{ CopilotLicensedUserCount = 0; TotalUserCount = 124; LicensedSkus = @('SPB') })
+            # The intended case is a SUCCESSFUL subscription read that holds no recognized Copilot SKU
+            # (SPB is Business Premium, and a bare string is not a recognized-SKU row). Since D1 that has
+            # to be recorded: SectionStatus.Licensing = 'Collected'. The same shape without the status
+            # is ambiguous and is pinned as not assessed in TP.CopilotLicensing.Tests.ps1.
+            Set-TPRawData -Key 'M365Copilot' -Data (Raw @{ CopilotLicensedUserCount = 0; TotalUserCount = 124; LicensedSkus = @('SPB'); SectionStatus = @{ Licensing = 'Collected' } })
             $f = Verdict 'Test-TPControlAICopilotLicensedOnly' 'PPL-3.3'
             $f.State  | Should -Be 'NotApplicable'
             $f.Detail | Should -Match 'Copilot Chat'

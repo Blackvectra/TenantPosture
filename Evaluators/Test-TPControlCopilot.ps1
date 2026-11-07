@@ -55,6 +55,52 @@ function script:Test-TPCopilotPurviewCollected {
     return [bool]($purviewRaw -and $purviewRaw.Success)
 }
 
+# The one licensing gate PPL-3.1, 3.2, 3.3 and 3.5 share (D1, 2026-11-06).
+# Returns the licensing state when Copilot seats are established as assigned;
+# otherwise writes the control's NotApplicable finding (with its citations)
+# and returns $null. A failed, incomplete or unrecorded read is "not
+# assessed", never "no Copilot": a default zero is not evidence
+# (Lib/Get-TPCopilotLicensingState.ps1). Only a collected subscription list
+# with no recognized Copilot SKU, or a complete measurement reading zero
+# assigned seats, makes the control not applicable to the tenant.
+function script:Get-TPCopilotLicensingGate {
+    param(
+        [Parameter(Mandatory)] [string] $ControlId,
+        [Parameter(Mandatory)] [object] $Control,
+        [AllowNull()] [object] $Citations,
+        [Parameter(Mandatory)] [object] $Raw,
+        [Parameter(Mandatory)] [string] $What
+    )
+    $state = Get-TPCopilotLicensingState -Raw $Raw
+    if ($state.Assignment -eq 'Assigned') { return $state }
+    $chat = Get-TPCopilotChatEligibilityNote
+    $detail = $null
+    if ($state.RecognizedSku -eq 'None') {
+        $detail = "The tenant's subscription list was read and holds no subscription that this tool recognizes as Microsoft Copilot, so $What is not applicable here. $chat"
+    } elseif ($state.Assignment -eq 'NoneAssigned') {
+        $basis = if ($state.AssignmentEvidence -eq 'EnumeratedUsers') { 'a complete enumeration of the directory''s accounts found no account holding it' } else { 'its consumed units read zero on every recognized subscription' }
+        $detail = "A recognized Copilot subscription is present but no seat is assigned ($basis), so $What is not applicable here. $chat"
+    } else {
+        switch ([string]$state.Reason) {
+            'LicensingNotCollected' {
+                $detail = (Get-TPSectionNotCollectedDetail -Raw $Raw -Section 'Licensing' -CollectorSource 'M365Copilot-Skus') +
+                    " The Copilot subscription list was not read, so whether any Copilot seat exists is unknown; $What was not assessed."
+            }
+            'StatusNotRecorded' {
+                $detail = "Copilot licensing was not assessed: this data does not record whether the subscription list was read, and it records no assigned Copilot seat, so a zero here is not evidence that Copilot is absent; $What was not assessed."
+            }
+            'MeasurementsDisagree' {
+                $detail = "A recognized Copilot subscription is present, but the complete user enumeration found no account holding it while the subscriptions report consumed seats, so whether any seat is assigned is not established; $What was not assessed."
+            }
+            default {
+                $detail = "A recognized Copilot subscription is present, but whether any seat is assigned could not be determined (the user enumeration did not complete and the subscriptions' consumed units were not returned); $What was not assessed."
+            }
+        }
+    }
+    Add-TPFinding -ControlId $ControlId -State 'NotApplicable' -Category $Control.Category -Title $Control.Title -FrameworkIds $Citations -Detail $detail
+    return $null
+}
+
 # ── PPL-3.1  M365 Copilot Sensitivity Label Enforcement ──────────────────────
 function Test-TPControlAICopilotSensitivityLabels {
     [CmdletBinding()] param()
@@ -72,20 +118,15 @@ function Test-TPControlAICopilotSensitivityLabels {
     }
 
     $d = $raw.Data
-    $licensed = [int]($d.CopilotLicensedUserCount ?? 0)
-
-    if ($licensed -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' `
-            -Category $ctrl.Category -Title $ctrl.Title `
-            -Detail 'No Microsoft 365 Copilot licenses detected — sensitivity label enforcement for Copilot is not applicable to this tenant.'
-        return
-    }
+    $lic = Get-TPCopilotLicensingGate -ControlId $cid -Control $ctrl -Citations $cit -Raw $raw -What 'sensitivity label enforcement for Copilot'
+    if ($null -eq $lic) { return }
+    $licensedPhrase = Get-TPCopilotAssignedPhrase -State $lic
 
     # Labels were read from Purview (section collected) or the Graph fallback;
     # otherwise "no sensitivity labels" is unknown, not a Gap.
     if (-not (Test-TPCopilotPurviewSection 'SensitivityLabels') -and (Get-TPObjectField -Item $d -Key 'LabelsRead' -Default $false) -ne $true) {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit `
-            -Detail "Copilot is licensed to $licensed user(s), but sensitivity labels were not collected (Purview section not read and the Graph fallback failed); not assessed."
+            -Detail "$licensedPhrase, but sensitivity labels were not collected (Purview section not read and the Graph fallback failed); not assessed."
         return
     }
     $labelsEnabled  = [bool]($d.SensitivityLabelsEnabled ?? $false)
@@ -125,7 +166,7 @@ function Test-TPControlAICopilotSensitivityLabels {
             -FrameworkIds $cit `
             -CurrentValue 'No sensitivity labels configured' `
             -RequiredValue 'Sensitivity labels with Files & emails scope + auto-labeling' `
-            -Detail "Copilot is licensed to $licensed user(s) but no sensitivity labels are configured. Copilot can surface any document the user can access — HR, financial, contractual — with no label-based suppression. Over-sharing risk is materially amplified." `
+            -Detail "$licensedPhrase but no sensitivity labels are configured. Copilot can surface any document the user can access — HR, financial, contractual — with no label-based suppression. Over-sharing risk is materially amplified." `
             -Remediation $ctrl.Remediation
     }
 }
@@ -146,15 +187,9 @@ function Test-TPControlAICopilotDLP {
         return
     }
 
-    $d = $raw.Data
-    $licensed = [int]($d.CopilotLicensedUserCount ?? 0)
-
-    if ($licensed -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' `
-            -Category $ctrl.Category -Title $ctrl.Title `
-            -Detail 'No Copilot licenses detected — DLP coverage of Copilot interactions is not applicable.'
-        return
-    }
+    $lic = Get-TPCopilotLicensingGate -ControlId $cid -Control $ctrl -Citations $cit -Raw $raw -What 'DLP coverage of Copilot interactions'
+    if ($null -eq $lic) { return }
+    $licensedPhrase = Get-TPCopilotAssignedPhrase -State $lic
 
     # Judged from the Purview DLP policies and rules directly. A policy is scoped to Microsoft 365
     # Copilot only when its EnforcementPlanes name CopilotExperiences (the plane Microsoft's Copilot
@@ -165,7 +200,7 @@ function Test-TPControlAICopilotDLP {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' `
             -Category $ctrl.Category -Title $ctrl.Title `
             -FrameworkIds $cit `
-            -Detail "Copilot is licensed to $licensed user(s) but DLP coverage could not be evaluated — the Purview/IPPS session did not collect data (there is no Graph fallback for Copilot DLP policies). Run the assessment with Purview included to verify DLP coverage for Copilot interactions."
+            -Detail "$licensedPhrase but DLP coverage could not be evaluated — the Purview/IPPS session did not collect data (there is no Graph fallback for Copilot DLP policies). Run the assessment with Purview included to verify DLP coverage for Copilot interactions."
         return
     }
     $pvd = (Get-TPRawData -Key 'Purview').Data
@@ -186,7 +221,7 @@ function Test-TPControlAICopilotDLP {
             -FrameworkIds $cit `
             -CurrentValue 'No DLP policies cover Copilot' `
             -RequiredValue $req `
-            -Detail "Copilot is licensed to $licensed user(s) but no DLP policy is scoped to the Microsoft 365 Copilot location. Users can prompt Copilot to summarize, translate, or reformat sensitive data — bypassing every other data control." `
+            -Detail "$licensedPhrase but no DLP policy is scoped to the Microsoft 365 Copilot location. Users can prompt Copilot to summarize, translate, or reformat sensitive data — bypassing every other data control." `
             -Remediation $ctrl.Remediation
         return
     }
@@ -249,55 +284,67 @@ function Test-TPControlAICopilotLicensedOnly {
         return
     }
 
-    $d = $raw.Data
-    $licensed = [int]($d.CopilotLicensedUserCount ?? 0)
-    $total    = [int]($d.TotalUserCount ?? 0)
-    $skus     = @($d.LicensedSkus ?? @())
+    $lic = Get-TPCopilotLicensingGate -ControlId $cid -Control $ctrl -Citations $cit -Raw $raw -What 'restricting Copilot to licensed users'
+    if ($null -eq $lic) { return }
 
-    if ($skus.Count -eq 0 -and $licensed -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' `
-            -Category $ctrl.Category -Title $ctrl.Title `
-            -Detail 'No Copilot SKUs visible — licensing posture cannot be evaluated.'
+    # Judgment call (the 95% threshold and the Satisfied/Partial policy are not
+    # changed by D1; that policy is D2's): M365 Copilot is licensed per user, not
+    # tenant-wide, so the platform guarantees licensed-only access at the
+    # entitlement layer. What we CAN check is whether the assignment looks
+    # intentional (subset of users) vs. blanket (every user has a Copilot SKU,
+    # which usually indicates lack of governance review). D1 corrected the
+    # population, so verdicts can change: the numerator used to be every account
+    # holding a seat (guests and disabled accounts included) or, when none was
+    # counted, the SKUs' consumed units, over enabled members; it is now enabled
+    # members holding a seat over enabled members, each account once, both from a
+    # complete enumeration. A missing count is never 0.
+    $ratio = $lic.Ratio
+    if (-not $ratio.Available) {
+        $usersWhy = [string]$lic.UsersError
+        $detail = switch ([string]$ratio.Reason) {
+            'ZeroDenominator' { 'The complete user enumeration counted no enabled member account, so the share of members holding a Copilot seat could not be determined; not assessed.' }
+            'AssignmentsNotEstablished' { 'The enabled members holding a recognized Copilot subscription could not be counted from a complete enumeration, so the share holding a Copilot seat could not be determined; not assessed.' }
+            'StatusNotRecorded' { 'This data does not record whether the license and user reads completed, so the share of enabled members holding a Copilot seat could not be determined; not assessed.' }
+            default {
+                if ($lic.UsersRead -in @('Failed', 'NotRun', 'NotRecorded')) {
+                    (Get-TPSectionNotCollectedDetail -Raw $raw -Section 'Users' -CollectorSource 'M365Copilot-Users') + ' The share of enabled members holding a Copilot seat needs the complete user enumeration and was not assessed.'
+                } else {
+                    'The user enumeration did not complete' + $(if ($usersWhy) { " ($usersWhy)" } else { '' }) + ', so the share of enabled members holding a Copilot seat could not be determined; not assessed.'
+                }
+            }
+        }
+        Add-TPFinding -ControlId $cid -State 'NotApplicable' -Category $ctrl.Category -Title $ctrl.Title -FrameworkIds $cit -Detail $detail
         return
     }
 
-    # Judgment call: M365 Copilot is licensed per-user, not tenant-wide, so the
-    # platform guarantees licensed-only access at the entitlement layer. What we
-    # CAN check is whether the assignment looks intentional (subset of users) vs.
-    # blanket (every user has a Copilot SKU — which usually indicates lack of
-    # governance review).
-    if ($total -gt 0) {
-        $ratio = if ($total -gt 0) { [double]$licensed / [double]$total } else { 0.0 }
+    $licensed = [int]$ratio.Numerator
+    $total    = [int]$ratio.Denominator
+    $share    = [double]$licensed / [double]$total
+    $current  = "$licensed of $total enabled member account(s) hold a Copilot seat ($([math]::Round($share * 100,1))%)"
 
-        if ($licensed -eq 0) {
-            # Nothing licensed is nothing to restrict — not applicable, like
-            # PPL-3.1/3.2/3.5. It is not a pass, and "no user can invoke
-            # Copilot" was false: Microsoft 365 Copilot Chat needs no license.
-            Add-TPFinding -ControlId $cid -State 'NotApplicable' `
-                -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' `
-                -FrameworkIds $cit `
-                -CurrentValue "0 of $total users licensed" `
-                -Detail "No Microsoft 365 Copilot licenses are assigned (0 of $total users), so there is no licensed Copilot access to restrict. Microsoft 365 Copilot Chat is available to users without this license and is not governed by it."
-        } elseif ($ratio -ge 0.95) {
-            Add-TPFinding -ControlId $cid -State 'Partial' `
-                -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' `
-                -FrameworkIds $cit `
-                -CurrentValue "$licensed of $total users licensed ($([math]::Round($ratio * 100,1))%)" `
-                -RequiredValue 'Group-based or PIM-time-bound assignment with documented business need' `
-                -Detail "Copilot is licensed for $licensed of $total users — effectively the entire tenant. This pattern usually indicates blanket assignment without per-user governance review. Confirm via Entra ID > Groups > license assignment whether Copilot is gated by an approval group." `
-                -Remediation $ctrl.Remediation
-        } else {
-            Add-TPFinding -ControlId $cid -State 'Satisfied' `
-                -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' `
-                -FrameworkIds $cit `
-                -CurrentValue "$licensed of $total users licensed ($([math]::Round($ratio * 100,1))%)" `
-                -RequiredValue 'Copilot licensing scoped to a subset of users' `
-                -Detail "Copilot is scoped to $licensed of $total users — licensing is bounded rather than blanket-assigned. Verify the assignment group reflects documented business need."
-        }
-    } else {
+    if ($licensed -eq 0) {
+        # Seats exist but only on disabled or guest accounts: no active member
+        # holds licensed Copilot access, so there is nothing to restrict. Not a pass.
         Add-TPFinding -ControlId $cid -State 'NotApplicable' `
-            -Category $ctrl.Category -Title $ctrl.Title `
-            -Detail 'User count could not be determined — licensing posture cannot be evaluated.'
+            -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' `
+            -FrameworkIds $cit `
+            -CurrentValue $current `
+            -Detail "Copilot seats are assigned, but no enabled member account holds one (0 of $total), so there is no licensed Copilot access among members to restrict. $(Get-TPCopilotChatEligibilityNote)"
+    } elseif ($share -ge 0.95) {
+        Add-TPFinding -ControlId $cid -State 'Partial' `
+            -Category $ctrl.Category -Title $ctrl.Title -Severity 'Medium' `
+            -FrameworkIds $cit `
+            -CurrentValue $current `
+            -RequiredValue 'Group-based or PIM-time-bound assignment with documented business need' `
+            -Detail "Copilot is licensed for $licensed of $total enabled member accounts — effectively the entire tenant. This pattern usually indicates blanket assignment without per-user governance review. Confirm via Entra ID > Groups > license assignment whether Copilot is gated by an approval group." `
+            -Remediation $ctrl.Remediation
+    } else {
+        Add-TPFinding -ControlId $cid -State 'Satisfied' `
+            -Category $ctrl.Category -Title $ctrl.Title -Severity 'Informational' `
+            -FrameworkIds $cit `
+            -CurrentValue $current `
+            -RequiredValue 'Copilot licensing scoped to a subset of users' `
+            -Detail "Copilot is scoped to $licensed of $total enabled member accounts — licensing is bounded rather than blanket-assigned. Verify the assignment group reflects documented business need."
     }
 }
 
@@ -346,14 +393,9 @@ function Test-TPControlAICopilotInteractionData {
     }
 
     $d = $raw.Data
-    $licensed = [int]($d.CopilotLicensedUserCount ?? 0)
-
-    if ($licensed -eq 0) {
-        Add-TPFinding -ControlId $cid -State 'NotApplicable' `
-            -Category $ctrl.Category -Title $ctrl.Title `
-            -Detail 'No Copilot licenses detected — interaction audit applicability is not yet relevant.'
-        return
-    }
+    $lic = Get-TPCopilotLicensingGate -ControlId $cid -Control $ctrl -Citations $cit -Raw $raw -What 'Copilot interaction auditing'
+    if ($null -eq $lic) { return }
+    $licensedPhrase = Get-TPCopilotAssignedPhrase -State $lic
 
     $auditRaw = Get-TPObjectField -Item $d -Key 'AuditCopilotEnabled'
     $audit = [bool]$auditRaw
@@ -368,7 +410,7 @@ function Test-TPControlAICopilotInteractionData {
         Add-TPFinding -ControlId $cid -State 'NotApplicable' `
             -Category $ctrl.Category -Title $ctrl.Title `
             -FrameworkIds $cit `
-            -Detail "Copilot is licensed to $licensed user(s) but Unified Audit Log status for Copilot interactions could not be evaluated — the Purview/IPPS session did not collect data. Run the assessment with Purview included to verify Copilot audit logging."
+            -Detail "$licensedPhrase but Unified Audit Log status for Copilot interactions could not be evaluated — the Purview/IPPS session did not collect data. Run the assessment with Purview included to verify Copilot audit logging."
     } elseif (-not $audit) {
         Add-TPFinding -ControlId $cid -State 'Gap' `
             -Category $ctrl.Category -Title $ctrl.Title -Severity $ctrl.Severity `
