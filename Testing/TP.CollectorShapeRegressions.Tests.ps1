@@ -162,10 +162,16 @@ Describe 'Collector shape regressions — live-tenant-confirmed omissions' {
             }
         }
 
-        It 'does not throw "Cannot process argument ConsumedUnits" and sums licensed users correctly' {
+        It 'does not throw "Cannot process argument ConsumedUnits" and sums the consumed units correctly' {
+            # The sum of consumed units is a seat measurement, not a count of
+            # accounts (one account can hold seats on two SKUs), so it lives in
+            # LicensingMeasurements.SkuConsumedUnits; CopilotLicensedUserCount is
+            # the number of distinct accounts from a complete user enumeration.
             $result = Invoke-TPCollectM365Copilot
-            $result.Data.LicensedSkus.Count       | Should -Be 2
-            $result.Data.CopilotLicensedUserCount | Should -Be 8
+            $result.Data.LicensedSkus.Count                              | Should -Be 2
+            $result.Data.LicensingMeasurements.SkuConsumedUnits.Value    | Should -Be 8
+            $result.Data.LicensingMeasurements.SkuConsumedUnits.Completeness | Should -Be 'Complete'
+            $result.Data.LicensingMeasurements.PurchasedSeats.Value      | Should -Be 14
             $result.Errors -join ' ' | Should -Not -Match 'ConsumedUnits'
         }
     }
