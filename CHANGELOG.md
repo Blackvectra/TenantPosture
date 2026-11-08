@@ -18,7 +18,8 @@
   four evaluators share one gate: a license read not collected is not assessed with the recorded reason (a
   collection gap); a read that found no recognized SKU says "no subscription that this tool recognizes as
   Microsoft Copilot", never "no Copilot", with Microsoft's Copilot Chat eligibility stated; "no seat assigned"
-  needs an explicit zero from a complete enumeration or from every recognized SKU's consumed units; a complete
+  needs an explicit zero from a complete enumeration or from every recognized SKU's consumed units, while a
+  positive consumed-unit sum proves seats are assigned even when another recognized SKU omitted its value; a complete
   enumeration finding no holder beside consumed seats is a disagreement and not assessed. PPL-3.3's share is
   computed only when both counts are complete, from one population, and a zero denominator is not assessed.
   **The population is corrected, so PPL-3.3 verdicts can change** even though the 95% threshold and the

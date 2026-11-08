@@ -253,6 +253,11 @@ function Get-TPCopilotLicensingState {
         } else {
             $s.Assignment = 'NoneAssigned'; $s.AssignmentEvidence = 'SkuConsumedUnits'; $s.Reason = 'Established'
         }
+    } elseif ($consumed.Completeness -eq 'Incomplete' -and $consumed.Value -gt 0) {
+        # A positive sum is a lower bound even when a recognized SKU omitted its
+        # consumedUnits: seats are assigned. Completeness is required only to
+        # establish zero (NoneAssigned), never to establish that seats exist.
+        $s.Assignment = 'Assigned'; $s.AssignmentEvidence = 'SkuConsumedUnits'; $s.Reason = 'AtLeast'
     } else {
         $s.Reason = 'AssignmentEvidenceMissing'
     }

@@ -244,6 +244,32 @@ Describe 'Copilot licensing reads (D1)' {
             $f.State | Should -Be 'NotApplicable'; $f.Detail | Should -Match 'whether any seat is assigned could not be determined.*not assessed'
             (Bucket (Scope) 'PPL-3.1') | Should -Be 'CollectionIncomplete'
         }
+        It 'a positive consumed-unit sum stays assignment evidence when another recognized SKU omits consumedUnits (PR #239 review)' {
+            # One SKU reports 3 consumed seats, the other omits the field, and the user read fails:
+            # the sum is an incomplete lower bound, and a lower bound above zero still proves seats.
+            Set-Scenario @((Sku $script:CopilotSku 'M365_Copilot' 10 3), (Sku $script:CopilotSku2 'Microsoft_365_Copilot_Addon' 5 'omit')) @{ $script:UsersFirst = 'throw' }
+            $r = Run-Collector
+            $r.Data.LicensingMeasurements.SkuConsumedUnits.Value | Should -Be 3
+            $r.Data.LicensingMeasurements.SkuConsumedUnits.Completeness | Should -Be 'Incomplete'
+            $s = State $r
+            $s.Assignment | Should -Be 'Assigned'; $s.AssignmentEvidence | Should -Be 'SkuConsumedUnits'; $s.Reason | Should -Be 'AtLeast'
+            $s.AssignedCount | Should -BeNullOrEmpty -Because 'consumed units are seats, not a count of accounts'
+            foreach ($pair in @(@('Test-TPControlAICopilotSensitivityLabels', 'PPL-3.1'), @('Test-TPControlAICopilotDLP', 'PPL-3.2'), @('Test-TPControlAICopilotInteractionData', 'PPL-3.5'))) {
+                $f = Verdict $pair[0] $pair[1]
+                $f.Detail | Should -Not -Match 'whether any seat is assigned could not be determined' -Because $pair[1]
+            }
+            $f3 = Verdict 'Test-TPControlAICopilotLicensedOnly' 'PPL-3.3'
+            $f3.State | Should -Be 'NotApplicable' -Because 'the ratio still needs the complete user enumeration'
+            (State $r).Ratio.Available | Should -BeFalse
+        }
+        It 'an incomplete consumed-unit sum of zero is not an explicit zero: still not assessed' {
+            Set-Scenario @((Sku $script:CopilotSku 'M365_Copilot' 10 0), (Sku $script:CopilotSku2 'Microsoft_365_Copilot_Addon' 5 'omit')) @{ $script:UsersFirst = 'throw' }
+            $r = Run-Collector
+            $r.Data.LicensingMeasurements.SkuConsumedUnits.Completeness | Should -Be 'Incomplete'
+            $s = State $r
+            $s.Assignment | Should -Be 'Unknown'; $s.Reason | Should -Be 'AssignmentEvidenceMissing'
+            (Verdict 'Test-TPControlAICopilotSensitivityLabels' 'PPL-3.1').State | Should -Be 'NotApplicable'
+        }
         It 'the same SKU reporting zero consumed units is an explicit zero: NoneAssigned from the SKU measurement' {
             Set-Scenario @((Sku $script:CopilotSku 'M365_Copilot' 10 0)) @{ $script:UsersFirst = 'throw' }
             $r = Run-Collector
