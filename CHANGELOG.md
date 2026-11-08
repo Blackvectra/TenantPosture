@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+- **[Fix] A failed Copilot license read is no longer "no Copilot" (D1, `Collectors/AI/Invoke-TPCollectM365Copilot.ps1`,
+  `Lib/Get-TPCopilotLicensingState.ps1`, `Evaluators/Test-TPControlCopilot.ps1`).** The collector started
+  `CopilotLicensedUserCount` at 0 and kept it when the `subscribedSkus` read failed, so PPL-3.1, PPL-3.2, PPL-3.3
+  and PPL-3.5 reported "no Copilot licenses detected" as not applicable to the tenant, and the scope section
+  filed them as checked rather than as a collection gap. The two reads now publish `SectionStatus` (`Licensing`,
+  `Users`; `Truncated` at the 200-page cap or on a repeated next link) and `SectionErrors`, and every count is a
+  measurement in `LicensingMeasurements` with its value, source and completeness (`Complete` / `Incomplete` /
+  `NotRead`): recognized SKUs, purchased seats (`prepaidUnits.enabled`), SKU consumed units, enabled members,
+  distinct accounts holding a recognized SKU and enabled members holding one. Purchased capacity, per-SKU
+  assignments and distinct holders are kept apart: consumed units summed over two SKUs are not a count of
+  accounts. Rows read before a mid-enumeration failure are kept as an incomplete count; coverage is `Partial`
+  whenever either read is not `Collected`. `Get-TPCopilotLicensingState` derives one state (recognized SKU
+  Present / None / Unknown; assignment Assigned / NoneAssigned / Unknown, with the evidence it rests on) and the
+  four evaluators share one gate: a license read not collected is not assessed with the recorded reason (a
+  collection gap); a read that found no recognized SKU says "no subscription that this tool recognizes as
+  Microsoft Copilot", never "no Copilot", with Microsoft's Copilot Chat eligibility stated; "no seat assigned"
+  needs an explicit zero from a complete enumeration or from every recognized SKU's consumed units, while a
+  positive consumed-unit sum proves seats are assigned even when another recognized SKU omitted its value; a complete
+  enumeration finding no holder beside consumed seats is a disagreement and not assessed. PPL-3.3's share is
+  computed only when both counts are complete, from one population, and a zero denominator is not assessed.
+  **The population is corrected, so PPL-3.3 verdicts can change** even though the 95% threshold and the
+  Satisfied/Partial policy are not changed: the numerator was every account holding a recognized SKU (guests
+  and disabled accounts included, a row Graph repeated counted twice) or, when that count was zero, the SKUs'
+  summed consumed units, over enabled non-guest accounts; it is now enabled members holding a seat over enabled
+  members, each account once by object id. A tenant with 8 of 10 enabled members licensed plus 2 disabled
+  holders and a guest holder read 11 of 10 (Partial) and now reads 8 of 10 (Satisfied). A row with no id, or an
+  account whose `accountEnabled` was not returned, is left out and makes the counts it could belong to
+  incomplete, so there is no ratio. An older results file
+  without the status keeps a positive recorded count as an observation of unknown completeness; a recorded zero
+  or SKU rows without consumed seats are not assessed, never "no Copilot", and a stored row counts as Copilot
+  evidence only when its part number matches the collector's rule (`Get-TPCopilotSkuPartNumberPattern`, now one
+  copy): a bare string such as `SPB` or a row naming another product proves nothing. **Compatibility:**
+  `CopilotLicensedUserCount` is now the number of distinct accounts holding a recognized SKU and
+  `TotalUserCount` the enabled members, each set only from a complete enumeration and `$null` otherwise; a
+  `LicensedSkus` row's `PrepaidUnits` / `ConsumedUnits` is `$null` when Graph did not return it. No evaluator
+  reads the two compatibility counts. The SKU recognition rule is unchanged and still unconfirmed on a live
+  tenant. `TP.CopilotLicensing.Tests.ps1` drives the real collector against mocked Graph responses.
+
 - **[Security] pypdf 6.21.4.** The questionnaire importers' PDF reader moves from 6.21.2 to 6.21.4, which fixes
   seven High advisories published on 2026-10-30 (GHSA-42gh-23hr-vphw, GHSA-4vqv-7265-gm2w, GHSA-5849-834g-hvw5,
   GHSA-62m5-6wh8-28x7, GHSA-cggf-277g-3q54, GHSA-mfr5-77xh-9j7h, GHSA-x3rh-gjgm-fmqc): long runtimes, large memory use

@@ -456,7 +456,11 @@ Describe 'Purview and Copilot controls judge what enforces' {
                     Set-TPRawData -Key 'Purview' -Data ([ordered]@{ Success = $true; Data = @{ SectionStatus = @{ SensitivityLabels = 'Collected' }; SensitivityLabels = @(@{ Name = 'Confidential' }) } })
                     Set-Item -Path 'function:script:Invoke-TPGraphRequest' -Value {
                         [CmdletBinding()] param([string] $Method, [string] $Uri, $Body, $Headers)
-                        if ($Uri -match 'subscribedSkus') { return [pscustomobject]@{ value = @([pscustomobject]@{ skuId = 's1'; skuPartNumber = 'Microsoft_365_Copilot'; consumedUnits = 5; prepaidUnits = [pscustomobject]@{ enabled = 10 }; servicePlans = @() }) } }
+                        if ($Uri -match 'subscribedSkus') { return [pscustomobject]@{ value = @([pscustomobject]@{ skuId = 's1'; skuPartNumber = 'Microsoft_365_Copilot'; consumedUnits = 1; prepaidUnits = [pscustomobject]@{ enabled = 10 }; servicePlans = @() }) } }
+                        # One enabled member holding the seat the SKU reports as consumed: a
+                        # complete enumeration that found no holder beside consumed seats is a
+                        # disagreement the licensing gate does not resolve (D1).
+                        if ($Uri -match '/users') { return [pscustomobject]@{ value = @([pscustomobject]@{ id = 'u1'; userType = 'Member'; accountEnabled = $true; assignedLicenses = @([pscustomobject]@{ skuId = 's1' }) }) } }
                         [pscustomobject]@{ value = @() }
                     }
                     $script:T_Auto = $auto
