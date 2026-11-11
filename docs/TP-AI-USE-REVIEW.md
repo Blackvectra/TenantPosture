@@ -20,6 +20,7 @@ is not modified.
 | `-Profile` | Branding profile (`Config/profiles/<name>.psd1`). |
 | `-OutputPath` | Folder for the output; defaults to the results file's folder. The folder is proved able to hold an owner-only file first. |
 | `-HIPAA` | Uses the ePHI wording for the sensitive-information review area. **Wording only**: it does not assess, verify or determine HIPAA compliance, and the page says so. |
+| `-User` | Up to 25 user principal names. Adds what each named account needs before a Copilot license is assigned. Without it the page names no account. |
 | `-Pdf` | Also prints the HTML to PDF with the Edge, Chrome or Chromium already installed. Optional: when no browser can print, the HTML is still written and the console says `HTML generated; PDF unavailable`. |
 
 Output: `<client>-ai-use-review-<yyyyMMdd-HHmmss>.html` (and `.pdf`), written
@@ -34,6 +35,36 @@ an AI risk assessment, not a determination of compliance with any law,
 regulation or standard, not a statement that AI use is safe, approved or
 governed, not a measure of whether anyone uses an AI tool. It has no score. The
 five counts are how many of the reviewed controls fall in each group.
+
+**Copilot deployment gate.** A technical gate over the controls the practice
+approved as blockers (`Config/tp-standards.json`, `CopilotReadinessBlockers`):
+
+| Outcome | When |
+|---|---|
+| Not ready: blockers found | At least one blocker control was recorded Gap or Partial. Each is listed with why it blocks and what changing it does to users. |
+| Cannot be determined from this assessment | No blocker failed, but at least one produced no verdict (no finding, an errored check, a failed collector, a license not held). A missing verdict is never a pass. |
+| No blockers found in the controls checked | Every blocker that applies to the tenant was recorded in place. An agent control with no agents present does not apply. |
+| No deployment gate is approved | The approved list is empty; no verdict is printed. |
+
+The gate makes no safety determination. Under every outcome the page lists what
+the assessment does not read and that bears directly on a deployment: internal
+oversharing of sites and files (the assessment reads tenant sharing settings,
+not who can open what), Restricted Content Discovery, Purview's posture tool
+for AI, the Copilot web search setting, and retention for Copilot
+interactions. The basis is Microsoft's guidance to verify each protection
+before assigning Copilot licenses; which controls block is the practice's
+standard, and the owner edits the list in `tp-standards.json`.
+
+**Named accounts (only with `-User`).** One table per account: a member account
+with sign-in enabled; the assigned base licenses by part number, for you to
+confirm against Microsoft's list of prerequisite licenses (eligibility is not
+judged); a Microsoft Copilot license; multifactor registration; and whether a
+non-compliant managed device is recorded for the account. Each row is Met, To
+add, Confirm, Not established or Not read. An account missing from a user list
+that was cut short is "not established", never "absent". The assessment keeps
+only non-compliant devices by account, so no row claims a compliant device.
+What the account can reach, its apps and network, and its OneDrive are listed
+as not checked.
 
 **1. Observed AI-related configuration.** From the saved assessment:
 
@@ -130,7 +161,7 @@ The file is read three ways, each bounded by `Get-TPRunRecordMaxBytes`:
   statuses and counts, each collector's coverage status and success flag.
 
 The model and the page therefore carry no finding detail, no account name or
-UPN, no object id, no agent or environment name, no error text, no operator and
+UPN (unless you name accounts with `-User`), no object id, no agent or environment name, no error text, no operator and
 no tenant identifier. Every displayed value is escaped; the page loads nothing
 and runs nothing (`default-src 'none'`); every link is an https Microsoft URL.
 `TP.AiUseReview.Tests.ps1` plants sentinels for each of these in a synthetic
@@ -162,5 +193,7 @@ nothing is written. Catalog membership is separate from `controls.json`: the
 - The PDF is printed by the headless browser on the workstation (Edge on
   Windows is the intended printer); printing has been exercised by the tests
   with Playwright's headless shell only.
-- Not built in this slice: an `-AiUseReview` switch on
+- The gate cannot see internal oversharing, Microsoft's first concern for a
+  Copilot deployment. Closing that needs new collection.
+- Not built: an `-AiUseReview` switch on
   `Invoke-TPAssessment.ps1`; any new collection; adoption scoring.

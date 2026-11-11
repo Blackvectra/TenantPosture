@@ -13,13 +13,15 @@
 # Rendering rules (pinned by TP.AiUseReview.Tests.ps1):
 #   - Page one states what the review is and is not before any number; the
 #     numbers are counts of catalog controls, never a score.
-#   - Nothing says compliant, safe, approved or AI-ready.
+#   - Nothing says compliant, safe, approved or AI-ready. The deployment gate
+#     says "not ready", "no blockers found in the controls checked" or "cannot
+#     be determined", always beside what the assessment does not check.
 #   - Every count is rendered with its status (complete, lower bound, not
 #     established, not read); an incomplete read never prints as zero.
 #   - Technical evidence, third-party declarations and unrecorded
 #     organizational evidence are three different labels.
-#   - No finding detail, account, object id, agent or application name, or
-#     tenant identifier. Every string is escaped; the page loads and runs
+#   - No finding detail, object id, agent or application name, or tenant
+#     identifier, and no account unless the preparer named it (-User). Every string is escaped; the page loads and runs
 #     nothing (default-src 'none').
 #
 # Inputs:  -Model, -OutputPath (file path of the .html; the .pdf sits beside
@@ -121,6 +123,56 @@ function Publish-TPAiUseReview {
     if ($Model.Statements.Hipaa) { $about += '<p class="tp-small"><strong>HIPAA wording.</strong> ' + (Esc $Model.Statements.Hipaa) + '</p>' }
     $about += '<p class="tp-note">' + (Esc "The counts below are how many of the $($Model.CatalogControls) reviewed controls fall in each group. They are not a score, and the $($Model.ControlsJsonTotal) controls of the full assessment are not all reviewed here.") + '</p>' + $kpis
     $null = $sb.Append((New-TPThemeSection -Id 'about' -Title 'About this review' -Kicker 'Read this first' -BodyHtml $about -First))
+
+    # ── Copilot deployment gate ──────────────────────────────────────────────
+    $gate = Get-TPObjectField -Item $Model -Key 'Readiness' -Default $null
+    if ($null -ne $gate) {
+        $gateTone = switch ([string]$gate.Outcome) { 'BlockersFound' { 'bad' } 'NoBlockersInCheckedControls' { 'info' } default { 'warn' } }
+        $body = '<div class="tp-banner tp-banner--' + $gateTone + '"><strong>' + (Esc $gate.Label) + '.</strong> ' + (Esc $gate.Summary) + '</div>'
+        $body += '<p class="tp-small"><strong>What this gate is.</strong> ' + (Esc $gate.Statement) + ' ' + (Esc $gate.Basis) + '</p>'
+        $gateRows = {
+            param([object[]] $rowsIn, [string] $pillStatus, [string] $pillText, [bool] $withImpact)
+            $html = ''
+            foreach ($g in @($rowsIn | Where-Object { $null -ne $_ })) {
+                $detail = (Esc $g.ReasonText)
+                if ($g.Why) { $detail += '<div class="tp-small tp-muted">' + (Esc "Why it blocks: $($g.Why)") + '</div>' }
+                if ($withImpact) {
+                    $detail += '<div class="tp-small tp-muted">' + $(if ($null -ne $g.Impact) { Esc "If changed: $($g.Impact.Summary) Effort: $($g.Impact.Effort)." } else { 'Operational impact not documented.' }) + '</div>'
+                }
+                $html += '<tr><td>' + (Esc $g.Title) + ' <span class="tp-muted tp-mono">' + (Esc $g.ControlId) + '</span></td><td>' + (& $pill $pillStatus $pillText) + '</td><td class="tp-small">' + $detail + '</td></tr>'
+            }
+            return $html
+        }
+        if ([string]$gate.Outcome -ne 'NotConfigured') {
+            $body += '<div class="tp-table-wrap"><table class="tp-table"><thead><tr><th>Blocker control</th><th>Result</th><th>What the assessment recorded</th></tr></thead><tbody>'
+            $body += & $gateRows $gate.Blockers 'Bad' 'Blocker' $true
+            $body += & $gateRows $gate.NotVerified 'Warn' 'No verdict' $false
+            $body += & $gateRows $gate.Passed 'Good' 'In place' $false
+            $body += & $gateRows $gate.DoesNotApply 'Neutral' 'Does not apply' $false
+            foreach ($bad in @($gate.InvalidIds)) { $body += '<tr><td class="tp-mono">' + (Esc $bad) + '</td><td>' + (& $pill 'Warn' 'No verdict') + '</td><td class="tp-small">This id in the approved blocker list is not a control of the installed tool.</td></tr>' }
+            $body += '</tbody></table></div>'
+        }
+        $body += '<h3 style="margin:14px 0 8px">Not checked by this assessment</h3><p class="tp-small">' + (Esc 'These bear directly on a Copilot deployment and are outside what this assessment reads. Nothing above speaks for them.') + '</p><div class="tp-table-wrap"><table class="tp-table"><thead><tr><th>Item</th><th>Why it matters</th></tr></thead><tbody>'
+        foreach ($nc in @($gate.NotChecked)) { $body += '<tr><td>' + (Esc $nc.Title) + '</td><td class="tp-small">' + (Esc $nc.Why) + (& $refHtml $nc.Reference) + '</td></tr>' }
+        $body += '</tbody></table></div>'
+        $null = $sb.Append((New-TPThemeSection -Id 'readiness' -Title 'Copilot deployment gate' -Kicker 'A technical gate, not a safety determination' -BodyHtml $body))
+    }
+
+    # ── Named accounts ───────────────────────────────────────────────────────
+    $accounts = @(Get-TPObjectField -Item $Model -Key 'Users' -Default @() | Where-Object { $null -ne $_ })
+    if ($accounts.Count -gt 0) {
+        $rowTone = @{ Met = 'Good'; NotMet = 'Bad'; Confirm = 'Warn'; NotEstablished = 'Neutral'; NotRead = 'Neutral' }
+        $rowWord = @{ Met = 'Met'; NotMet = 'To add'; Confirm = 'Confirm'; NotEstablished = 'Not established'; NotRead = 'Not read' }
+        $body = '<p class="tp-note">' + (Esc 'What each account the preparer named needs before a Microsoft Copilot license is assigned to it, from the saved assessment. The tenant-wide gate above applies to every account as well.') + '</p>'
+        foreach ($acct in $accounts) {
+            $body += '<div class="tp-card" style="margin:0 0 12px"><div class="tp-card-head"><div><span class="tp-card-title tp-mono">' + (Esc $acct.UserPrincipalName) + '</span></div><span class="tp-chip">' + (Esc "$(@($acct.ToAdd).Count) to add") + '</span></div>'
+            $body += '<div class="tp-table-wrap"><table class="tp-table"><thead><tr><th>Requirement</th><th>Status</th><th>What the assessment recorded</th><th>Next action</th></tr></thead><tbody>'
+            foreach ($r in @($acct.Rows)) { $body += '<tr><td>' + (Esc $r.Requirement) + '</td><td>' + (& $pill $rowTone[[string]$r.Status] $rowWord[[string]$r.Status]) + '</td><td class="tp-small">' + (Esc $r.Detail) + '</td><td class="tp-small">' + (Esc $r.ToAdd) + '</td></tr>' }
+            foreach ($nc in @($acct.NotChecked)) { $body += '<tr><td>' + (Esc $nc.Title) + '</td><td>' + (& $pill 'Neutral' 'Not checked') + '</td><td class="tp-small">' + (Esc $nc.Why) + '</td><td class="tp-small"></td></tr>' }
+            $body += '</tbody></table></div></div>'
+        }
+        $null = $sb.Append((New-TPThemeSection -Id 'accounts' -Title 'Named accounts' -Kicker "$($accounts.Count) account(s) named by the preparer" -BodyHtml $body))
+    }
 
     # ── 1 Observed ───────────────────────────────────────────────────────────
     $obs = $Model.Observed

@@ -42,6 +42,11 @@
     Use the ePHI wording for the sensitive-information review area. This
     selects wording only: it does not assess, verify or determine HIPAA
     compliance, and the page says so.
+.PARAMETER User
+    Up to 25 user principal names. For each, the page adds what that one
+    account needs before a Microsoft Copilot license is assigned to it
+    (account, licenses, MFA registration, device), read from the results
+    file. Without it the page names no account.
 .PARAMETER Pdf
     Also print the HTML to PDF with the Edge, Chrome or Chromium already
     installed (ConvertTo-TPPdf). Optional: when no browser is found the HTML is
@@ -80,6 +85,10 @@ param(
     [string] $OutputPath,
 
     [switch] $HIPAA,
+
+    [ValidateCount(0, 25)]
+    [ValidateLength(3, 256)]
+    [string[]] $User = @(),
 
     [switch] $Pdf
 )
@@ -120,7 +129,9 @@ try {
         exit 4
     }
     $facts = Read-TPAiUseFacts -Path $resultsFull
-    $model = Get-TPAiUseReview -Findings @($run.Findings) -Metadata $run.Metadata -Facts $facts -ScopeBuckets $scope.Buckets -ClientName $ClientName -PreparedBy $PreparedBy -Hipaa:$HIPAA
+    $userFacts = @()
+    if (@($User).Count -gt 0) { $userFacts = @(Read-TPAiUseUserFacts -Path $resultsFull -UserPrincipalName $User) }
+    $model = Get-TPAiUseReview -Findings @($run.Findings) -Metadata $run.Metadata -Facts $facts -ScopeBuckets $scope.Buckets -ClientName $ClientName -PreparedBy $PreparedBy -Hipaa:$HIPAA -UserFacts $userFacts
     Write-Host ''
     if (-not $model.Available) {
         Write-Host "  [!] $($model.Note)" -ForegroundColor Yellow
@@ -137,6 +148,10 @@ try {
     $names = $model.GroupNames
     Write-Host "  AI use readiness review: $($model.ClientName)" -ForegroundColor Green
     foreach ($k in $names.Keys) { Write-Host ("    {0,-44} {1,3} of {2}" -f $names[$k], $model.Counts[$k], $model.CatalogControls) }
+    Write-Host "  Copilot deployment gate: $($model.Readiness.Label)" -ForegroundColor $(switch ($model.Readiness.Outcome) { 'BlockersFound' { 'Red' } 'NoBlockersInCheckedControls' { 'Green' } default { 'Yellow' } })
+    foreach ($b in @($model.Readiness.Blockers)) { Write-Host "    blocker     $($b.ControlId)  $($b.Title)" }
+    foreach ($b in @($model.Readiness.NotVerified)) { Write-Host "    no verdict  $($b.ControlId)  $($b.Title)" }
+    if (@($model.Users).Count -gt 0) { Write-Host "  [i] The page names $(@($model.Users).Count) account(s) you passed with -User." -ForegroundColor DarkGray }
     if ($scope.DroppedFindings -gt 0) { Write-Host "  [i] $($scope.DroppedFindings) finding(s) in the file were not control findings and were not read." -ForegroundColor DarkGray }
     Write-Host ''
     Write-Host "  [+] HTML: $($files.Html)" -ForegroundColor Green

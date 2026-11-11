@@ -26,6 +26,12 @@
 #   - the offline scope matches Get-TPAssessmentScope on the same objects, the
 #     source file is unchanged, no finding is emitted and the score is unmoved
 #   - the PDF is optional: no browser is a note and the HTML stays
+#   - the Copilot deployment gate: one shortfall on an approved blocker is
+#     "not ready"; a missing verdict is "cannot be determined", never a pass;
+#     "no blockers" is always beside what the assessment does not check; no
+#     approved list means no verdict; nothing says safe
+#   - named accounts appear only when the preparer names them, each requirement
+#     as met, to add, confirm, not established or not read
 # Data keys consumed: synthetic results files only. Graph scopes / cmdlets: none.
 
 BeforeAll {
@@ -702,7 +708,7 @@ Describe 'AI use review: parity, immutability and reuse' {
         }
     }
     It 'the four public functions are exported and the headers are in place' {
-        foreach ($fn in 'Get-TPAiUseReview', 'Publish-TPAiUseReview', 'Read-TPAiUseFacts', 'Get-TPAiUseReviewScope') { (Get-Command $fn -Module TenantPosture -ErrorAction SilentlyContinue) | Should -Not -BeNullOrEmpty -Because $fn }
+        foreach ($fn in 'Get-TPAiUseReview', 'Publish-TPAiUseReview', 'Read-TPAiUseFacts', 'Get-TPAiUseReviewScope', 'Read-TPAiUseUserFacts') { (Get-Command $fn -Module TenantPosture -ErrorAction SilentlyContinue) | Should -Not -BeNullOrEmpty -Because $fn }
         $manifest = Import-PowerShellDataFile -Path (Join-Path $script:RepoRoot 'TenantPosture.psd1')
         $manifest.FunctionsToExport | Should -Contain 'Get-TPAiUseReview'
     }
@@ -755,5 +761,193 @@ Describe 'AI use review: the standalone script' {
         $r.Exit | Should -Be 4
         $r.Html.Count | Should -Be 0
         $r.Log | Should -Match 'incident-response output'
+    }
+}
+
+Describe 'AI use review: Copilot deployment gate' {
+    BeforeAll {
+        $script:Blockers = @('AAD-1.2', 'AAD-1.1', 'SPO-1.1', 'SPO-1.2', 'AAD-6.2', 'AAD-15.1', 'PVW-1.1', 'PPL-3.5', 'PPL-4.1', 'PPL-4.2')
+        $script:GateModel = {
+            param([hashtable] $States, [hashtable] $Buckets = @{}, [object] $Ids = $script:Blockers)
+            $f = @(foreach ($id in $script:Blockers) { $st = if ($States.ContainsKey($id)) { $States[$id] } else { 'Satisfied' }; if ($st) { & $script:Finding $id $st 'x' } })
+            Get-TPAiUseReview -Findings $f -Metadata (& $script:FullMeta) -Facts (& $script:FactsWith $null) -ScopeBuckets $Buckets -BlockerControlIds $Ids
+        }
+    }
+    It 'the approved standard names ten controls that all exist, each with a reason' {
+        $std = @((Get-TPStandards).CopilotReadinessBlockers)
+        $std | Should -Be $script:Blockers
+        foreach ($id in $std) { $script:Defs.ContainsKey($id) | Should -BeTrue; $script:Catalog.Readiness.BlockerReasons[$id] | Should -Not -BeNullOrEmpty -Because $id }
+        @($script:Catalog.Readiness.NotChecked | ForEach-Object Id) | Should -Contain 'internal-oversharing'
+        foreach ($src in $script:Catalog.Readiness.Sources) { $src.Url | Should -Match '^https://learn\.microsoft\.com/' }
+    }
+    It 'one shortfall on a blocker is "not ready", whatever else passed' {
+        $m = & $script:GateModel @{ 'SPO-1.2' = 'Partial' }
+        $m.Readiness.Outcome | Should -Be 'BlockersFound'
+        $m.Readiness.Label | Should -Be 'Not ready: blockers found'
+        @($m.Readiness.Blockers | ForEach-Object ControlId) | Should -Be @('SPO-1.2')
+        $m.Readiness.Passed.Count | Should -Be 9
+        $m.Readiness.Summary | Should -Match '1 of the 10 blocker control'
+    }
+    It 'a missing verdict is "cannot be determined", never a pass' -ForEach @(
+        @{ Label = 'no finding'; State = $null }, @{ Label = 'an errored check'; State = 'Error' }, @{ Label = 'an unclassified not-applicable'; State = 'NotApplicable' }
+    ) {
+        $m = & $script:GateModel @{ 'PVW-1.1' = $State }
+        $m.Readiness.Outcome | Should -Be 'NotDetermined'
+        @($m.Readiness.NotVerified | ForEach-Object ControlId) | Should -Be @('PVW-1.1')
+        $m.Readiness.Summary | Should -Match 'never counted as a pass'
+    }
+    It 'a shortfall beats a missing verdict' {
+        (& $script:GateModel @{ 'PVW-1.1' = $null; 'AAD-1.2' = 'Gap' }).Readiness.Outcome | Should -Be 'BlockersFound'
+    }
+    It 'a Satisfied blocker beside a failed collector is no verdict' {
+        $f = @(foreach ($id in $script:Blockers) { & $script:Finding $id 'Satisfied' 'x' })
+        $facts = & $script:FactsWith $null
+        $facts.Coverage = @{ ($script:Defs['SPO-1.1'].CollectorDependency) = 'Failed' }
+        $m = Get-TPAiUseReview -Findings $f -Metadata (& $script:FullMeta) -Facts $facts -ScopeBuckets @{} -BlockerControlIds $script:Blockers
+        $m.Readiness.Outcome | Should -Be 'NotDetermined'
+        @($m.Readiness.NotVerified | ForEach-Object Reason | Sort-Object -Unique) | Should -Be @('EvidenceConflict')
+    }
+    It 'every blocker in place reads "no blockers found in the controls checked", beside what is not checked' {
+        $m = & $script:GateModel @{ 'PPL-4.1' = 'NotApplicable'; 'PPL-4.2' = 'NotApplicable' } @{ 'PPL-4.1' = 'NotApplicableToTenant'; 'PPL-4.2' = 'NotApplicableToTenant' }
+        $m.Readiness.Outcome | Should -Be 'NoBlockersInCheckedControls'
+        $m.Readiness.Label | Should -Be 'No blockers found in the controls checked'
+        $m.Readiness.DoesNotApply.Count | Should -Be 2
+        $m.Readiness.Passed.Count | Should -Be 8
+        $m.Readiness.Summary | Should -Match 'only the controls checked'
+        $m.Readiness.Statement | Should -Match 'makes no safety determination'
+        @($m.Readiness.NotChecked).Count | Should -BeGreaterThan 3
+    }
+    It 'no approved list prints no verdict; an id that is not a control is never a pass' {
+        $none = & $script:GateModel @{} @{} @()
+        $none.Readiness.Outcome | Should -Be 'NotConfigured'
+        $none.Readiness.Total | Should -Be 0
+        $bad = & $script:GateModel @{} @{} @('SPO-1.1', 'ZZZ-9.9', '<b>x</b>')
+        $bad.Readiness.Outcome | Should -Be 'NotDetermined'
+        $bad.Readiness.InvalidIds.Count | Should -Be 2
+        $dup = & $script:GateModel @{} @{} @('SPO-1.1', 'spo-1.1', 'SPO-1.1')
+        $dup.Readiness.Total | Should -Be 1
+    }
+    It 'the main scenario is not ready, and the page shows the gate with what is not checked and never says safe' {
+        $script:M.Readiness.Outcome | Should -Be 'BlockersFound'
+        @($script:M.Readiness.Blockers | ForEach-Object ControlId | Sort-Object) | Should -Be @('AAD-1.1', 'PPL-4.1', 'SPO-1.1')
+        @($script:M.Readiness.NotVerified | ForEach-Object ControlId | Sort-Object) | Should -Be @('AAD-1.2', 'PVW-1.1')
+        Mock -ModuleName 'TenantPosture' Find-TPPdfBrowser -MockWith { $null }
+        $html = Get-Content -LiteralPath (Publish-TPAiUseReview -Model $script:M -OutputPath (Join-Path $script:Tmp 'gate.html')).Html -Raw
+        $html | Should -Match 'id="readiness"'
+        $html | Should -Match 'Not ready: blockers found'
+        $html | Should -Match 'Internal oversharing of sites and files'
+        $html | Should -Match 'makes no safety determination'
+        $html.IndexOf('What this is not.') | Should -BeLessThan $html.IndexOf('id="readiness"')
+        $clean = & $script:GateModel @{}
+        $page = Get-Content -LiteralPath (Publish-TPAiUseReview -Model $clean -OutputPath (Join-Path $script:Tmp 'gate-clean.html')).Html -Raw
+        $page | Should -Match 'No blockers found in the controls checked'
+        foreach ($p in @($html, $page)) {
+            $p | Should -Not -Match '(?i)\bCopilot is safe\b|\bCopilot[- ]ready\b|\bready to deploy\b|\bsafe to (use|deploy|enable)\b|\bapproved for\b'
+            $p | Should -Not -Match '(?i)<script|<img|<iframe'
+        }
+        $page | Should -Not -Match 'id="accounts"'
+    }
+}
+
+Describe 'AI use review: named accounts' {
+    BeforeAll {
+        $run = & $script:NewRun (& $script:FullMeta) (& $script:MainFindings) (& $script:MainCopilotData) (& $script:MainStudioData) @(
+            @{ SkuPartNumber = 'Microsoft_365_Copilot'; SkuId = 'c0000000-0000-0000-0000-000000000001'; ServicePlans = @('M365_COPILOT_APPS') },
+            @{ SkuPartNumber = 'SPB'; SkuId = 'b0000000-0000-0000-0000-000000000002'; ServicePlans = @('AAD_PREMIUM') })
+        $user = { param($upn, $enabled, $type, $skus) @{ Id = [guid]::NewGuid().ToString(); DisplayName = "DISPLAY-$upn"; UserPrincipalName = $upn; AccountEnabled = $enabled; UserType = $type; AssignedSkuIds = @($skus) } }
+        $run.RawData['AAD-Users'] = @{ CollectorId = 'AAD-Users'; Success = $true; Data = @{
+            SectionStatus = @{ Users = 'Collected'; MFARegistration = 'Collected' }
+            Users = @(
+                (& $user 'ready@contoso.example' $true 'Member' @('C0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000002')),
+                (& $user 'needs@contoso.example' $true 'Member' @('b0000000-0000-0000-0000-000000000002')),
+                (& $user 'bare@contoso.example' $false 'Member' @()),
+                (& $user 'guest_x#EXT#@contoso.example' $true 'Guest' @()),
+                (& $user 'odd@contoso.example' $true 'Member' @('dddddddd-0000-0000-0000-000000000009')),
+                (& $user $script:S.Upn $true 'Member' @()))
+            MFARegistration = @{ RegistrationDetails = @(
+                @{ UserPrincipalName = 'READY@contoso.example'; IsMfaRegistered = $true; IsMfaCapable = $true },
+                @{ UserPrincipalName = 'needs@contoso.example'; IsMfaRegistered = $false; IsMfaCapable = $false }) } } }
+        $run.RawData['Intune-DeviceCompliance'] = @{ CollectorId = 'Intune-DeviceCompliance'; Success = $true; Data = @{
+            SectionStatus = @{ OSComplianceSummary = 'Collected' }
+            OSComplianceSummary = @{ NonCompliantTruncated = $false; NonCompliantDevices = @(
+                @{ DeviceName = 'DEVICE-NAME-SENTINEL'; ComplianceState = 'noncompliant'; UserPrincipalName = 'needs@contoso.example' }) } } }
+        $script:UserPath = & $script:WriteRun $run 'users-results.json'
+        $script:UF = @(Read-TPAiUseUserFacts -Path $script:UserPath -UserPrincipalName @('Ready@Contoso.example', 'needs@contoso.example', 'bare@contoso.example', 'guest_x#EXT#@contoso.example', 'odd@contoso.example', 'absent@contoso.example', 'ready@contoso.example'))
+        $script:UM = Get-TPAiUseReview -Findings @(& $script:MainFindings) -Metadata (& $script:FullMeta) -Facts (Read-TPAiUseFacts -Path $script:UserPath) -ScopeBuckets @{} -UserFacts $script:UF
+        $script:Acct = { param([string] $upn) @($script:UM.Users | Where-Object { $_.UserPrincipalName -ieq $upn })[0] }
+        $script:RowOf = { param([string] $upn, [string] $req) @((& $script:Acct $upn).Rows | Where-Object { $_.Requirement -like "$req*" })[0] }
+    }
+    It 'reads only the named accounts, once each, and nothing else about anyone' {
+        $script:UF.Count | Should -Be 6
+        $json = $script:UF | ConvertTo-Json -Depth 8
+        $json | Should -Not -Match ([regex]::Escape($script:S.Upn))
+        $json | Should -Not -Match 'DISPLAY-|DEVICE-NAME-SENTINEL'
+        ($script:UM | ConvertTo-Json -Depth 24) | Should -Not -Match 'DISPLAY-|DEVICE-NAME-SENTINEL'
+    }
+    It 'an account with a base license, a Copilot license and usable MFA has nothing to add' {
+        (& $script:RowOf 'Ready@Contoso.example' 'Work account').Status | Should -Be 'Met'
+        (& $script:RowOf 'Ready@Contoso.example' 'Microsoft Copilot license').Status | Should -Be 'Met'
+        $base = & $script:RowOf 'Ready@Contoso.example' 'Eligible'
+        $base.Status | Should -Be 'Confirm' -Because 'the review names the license and does not judge eligibility'
+        $base.Detail | Should -Match 'Assigned: SPB'
+        (& $script:RowOf 'Ready@Contoso.example' 'Multifactor').Status | Should -Be 'Met'
+        (& $script:RowOf 'Ready@Contoso.example' 'Managed device').Status | Should -Be 'NotEstablished' -Because 'only non-compliant devices are kept by account'
+        @((& $script:Acct 'Ready@Contoso.example').ToAdd).Count | Should -Be 0
+    }
+    It 'names what to add: a Copilot license, MFA registration and a compliant device' {
+        (& $script:RowOf 'needs@contoso.example' 'Microsoft Copilot license').Status | Should -Be 'NotMet'
+        (& $script:RowOf 'needs@contoso.example' 'Multifactor').Status | Should -Be 'NotMet'
+        (& $script:RowOf 'needs@contoso.example' 'Managed device').Status | Should -Be 'NotMet'
+        @((& $script:Acct 'needs@contoso.example').ToAdd).Count | Should -Be 3
+    }
+    It 'a blocked account with no license, a guest, an unnamed license and an absent account are told apart' {
+        (& $script:RowOf 'bare@contoso.example' 'Work account').Detail | Should -Match 'sign-in is blocked'
+        (& $script:RowOf 'bare@contoso.example' 'Eligible').Status | Should -Be 'NotMet'
+        (& $script:RowOf 'bare@contoso.example' 'Multifactor').Status | Should -Be 'NotEstablished'
+        (& $script:RowOf 'guest_x#EXT#@contoso.example' 'Work account').Detail | Should -Match 'guest accounts are not licensed'
+        (& $script:RowOf 'odd@contoso.example' 'Microsoft Copilot license').Status | Should -Be 'NotEstablished'
+        $absent = & $script:Acct 'absent@contoso.example'
+        $absent.Found | Should -BeFalse
+        $absent.Rows.Count | Should -Be 1
+        $absent.Rows[0].Status | Should -Be 'NotMet'
+        $absent.Rows[0].Detail | Should -Match 'complete user list'
+    }
+    It 'an account missing from a truncated or unread user list is not established, never absent' {
+        $get = { param($status) & $script:Mod { param($f) Get-TPAiUseUserReadiness -UserFacts $f } @{ UserPrincipalName = 'a@b.example'; UsersRead = $status; Found = $false } }
+        foreach ($st in 'Truncated', 'Failed', 'NotRecorded') { (& $get $st).Rows[0].Status | Should -Be 'NotEstablished' -Because $st }
+        (& $get 'Truncated').Rows[0].Detail | Should -Match 'does not show the account is absent'
+    }
+    It 'licenses cannot be named when the subscription list was not read' {
+        $r = & $script:Mod { param($f) Get-TPAiUseUserReadiness -UserFacts $f } @{ UserPrincipalName = 'a@b.example'; UsersRead = 'Collected'; Found = $true; AccountEnabled = $true; UserType = 'Member'; AssignedSkuIds = @('x'); SkuCatalogRead = $false }
+        @($r.Rows | Where-Object { $_.Requirement -like '*license' } | ForEach-Object Status | Sort-Object -Unique) | Should -Be @('NotEstablished')
+    }
+    It 'refuses a name that is not a user principal name, more than 25 names, and an incident-response file' {
+        { Read-TPAiUseUserFacts -Path $script:UserPath -UserPrincipalName @('not a upn') } | Should -Throw '*not a user principal name*'
+        { Read-TPAiUseUserFacts -Path $script:UserPath -UserPrincipalName @('<script>@x.example') } | Should -Throw '*not a user principal name*'
+        { Read-TPAiUseUserFacts -Path $script:UserPath -UserPrincipalName @(1..26 | ForEach-Object { "u$_@x.example" }) } | Should -Throw '*at most 25*'
+        @(Read-TPAiUseUserFacts -Path $script:UserPath -UserPrincipalName @(' ')).Count | Should -Be 0
+        $ir = & $script:WriteRun @{ Metadata = (& $script:FullMeta); DeepDives = @(@{ User = 'x' }); Findings = @() } 'ir-users.json'
+        { Read-TPAiUseUserFacts -Path $ir -UserPrincipalName @('a@b.example') } | Should -Throw '*incident-response*'
+    }
+    It 'the page names an account only when the preparer named it, and escapes it' {
+        Mock -ModuleName 'TenantPosture' Find-TPPdfBrowser -MockWith { $null }
+        $html = Get-Content -LiteralPath (Publish-TPAiUseReview -Model $script:UM -OutputPath (Join-Path $script:Tmp 'users.html')).Html -Raw
+        $html | Should -Match 'id="accounts"'
+        $html | Should -Match 'needs@contoso\.example'
+        $html | Should -Match 'guest_x#EXT#@contoso\.example'
+        $html | Should -Match 'What this account can reach'
+        $html | Should -Not -Match ([regex]::Escape($script:S.Upn))
+        $html | Should -Not -Match 'DISPLAY-|DEVICE-NAME-SENTINEL'
+        $script:Html | Should -Not -Match 'id="accounts"'
+    }
+    It 'the script takes -User, prints the gate and leaves the file unchanged' {
+        $before = & $script:Hash $script:UserPath
+        $out = Join-Path $script:Tmp 'out-users'; $null = New-Item -ItemType Directory -Path $out -Force
+        $log = & pwsh -NoProfile -NonInteractive -File (Join-Path $script:RepoRoot 'New-TPAiUseReview.ps1') -ResultsPath $script:UserPath -OutputPath $out -ClientName 'Contoso' -User 'needs@contoso.example' 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $log
+        $log | Should -Match 'Copilot deployment gate: Not ready: blockers found'
+        $log | Should -Match 'names 1 account'
+        (Get-Content -LiteralPath (Get-ChildItem -LiteralPath $out -Filter '*.html')[0].FullName -Raw) | Should -Match 'needs@contoso\.example'
+        (& $script:Hash $script:UserPath) | Should -Be $before
     }
 }

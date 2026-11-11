@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **[Client] AI use readiness review: Copilot deployment gate and named accounts (`Lib/Get-TPAiUseReview.ps1`,
+  `Config/ai-use-review.json` v1.1, `Config/tp-standards.json`).** The review now prints a technical gate over the
+  controls approved as blockers (`CopilotReadinessBlockers`, ten controls proposed 2026-11-11 for the owner to confirm):
+  a blocker recorded Gap or Partial is "Not ready: blockers found", a blocker with no verdict (no finding, an errored
+  check, a failed collector, an unlicensed setting) is "Cannot be determined" and never a pass, and every applicable
+  blocker in place is "No blockers found in the controls checked". Each outcome is printed beside what the assessment
+  does not read (internal oversharing first), with Microsoft's Zero Trust and deployment guidance as the basis; nothing
+  says safe, and an empty list prints no verdict. `New-TPAiUseReview.ps1 -User <upn>` adds, for up to 25 named accounts,
+  what each needs before a Copilot license is assigned (account, base licenses by part number for the preparer to
+  confirm, Copilot license, MFA registration, non-compliant managed devices), each as met, to add, confirm, not
+  established or not read; `Read-TPAiUseUserFacts` (one new export) materializes only the named accounts, and without
+  `-User` the page still names nobody.
 - **[Client] AI use readiness review (`New-TPAiUseReview.ps1`, `Config/ai-use-review.json`, `Lib/Get-TPAiUseReview.ps1`,
   `Publishers/Publish-TPAiUseReview.ps1`).** A client-facing review written offline from one full-run results file: what
   the assessment observed about Microsoft Copilot entitlement, seats and Copilot Studio agents (every count as a

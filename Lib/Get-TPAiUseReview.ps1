@@ -226,7 +226,39 @@ function Get-TPAiUseReviewCatalog {
     $retrieved = [string](Get-TPObjectField -Item $raw -Key 'vendorFactsRetrieved' -Default '')
     if ($retrieved -cnotmatch '\A\d{4}-\d{2}-\d{2}\z') { throw 'The AI use review catalog has no vendorFactsRetrieved date (yyyy-MM-dd).' }
 
+    # Readiness gate: the reasons, the items this assessment never checks and the
+    # sources. WHICH controls block is the practice's standard (tp-standards.json),
+    # not part of this catalog.
+    $rd = Get-TPObjectField -Item $raw -Key 'readiness' -Default $null
+    $reasons = [ordered]@{}
+    $rr = Get-TPObjectField -Item $rd -Key 'blockerReasons' -Default $null
+    if ($rr -is [System.Collections.IDictionary]) {
+        foreach ($k in @($rr.Keys)) {
+            if (-not $known.ContainsKey([string]$k)) { throw "The AI use review catalog gives a blocker reason for $k, which is not in controls.json." }
+            $reasons[[string]$k] = [string]$rr[$k]
+        }
+    }
+    $notChecked = [System.Collections.Generic.List[object]]::new()
+    foreach ($row in @(Get-TPObjectField -Item $rd -Key 'notChecked' -Default @())) {
+        $id = [string](Get-TPObjectField -Item $row -Key 'Id' -Default '')
+        $notChecked.Add([ordered]@{
+            Id = $id; Title = [string](Get-TPObjectField -Item $row -Key 'Title' -Default ''); Why = [string](Get-TPObjectField -Item $row -Key 'Why' -Default '')
+            Reference = (& $checkRef (Get-TPObjectField -Item $row -Key 'Reference' -Default $null) "not-checked item '$id'")
+        })
+    }
+    $userNotChecked = @(foreach ($row in @(Get-TPObjectField -Item $rd -Key 'userNotChecked' -Default @())) {
+        [ordered]@{ Id = [string](Get-TPObjectField -Item $row -Key 'Id' -Default ''); Title = [string](Get-TPObjectField -Item $row -Key 'Title' -Default ''); Why = [string](Get-TPObjectField -Item $row -Key 'Why' -Default '') }
+    })
+    $rdSources = @(foreach ($row in @(Get-TPObjectField -Item $rd -Key 'sources' -Default @())) { & $checkRef $row 'a readiness source' })
+
     return [ordered]@{
+        Readiness            = [ordered]@{
+            Basis          = [string](Get-TPObjectField -Item $rd -Key 'basis' -Default '')
+            BlockerReasons = $reasons
+            NotChecked     = $notChecked.ToArray()
+            UserNotChecked = $userNotChecked
+            Sources        = $rdSources
+        }
         Version              = $version
         VendorFactsRetrieved = $retrieved
         Relationships        = (Get-TPObjectField -Item $raw -Key 'relationships' -Default @{})
@@ -510,7 +542,13 @@ function Get-TPAiUseReview {
         [AllowEmptyString()] [string] $ClientName = '',
         [AllowEmptyString()] [string] $PreparedBy = '',
         [switch] $Hipaa,
-        [AllowEmptyString()] [string] $ConfigPath = ''
+        [AllowEmptyString()] [string] $ConfigPath = '',
+        # The controls whose shortfall blocks a Copilot deployment. Defaults to the
+        # approved standard (tp-standards.json, CopilotReadinessBlockers); an empty
+        # list means no gate is approved and no verdict is printed.
+        [AllowNull()] [AllowEmptyCollection()] [string[]] $BlockerControlIds,
+        # Per-account facts from Read-TPAiUseUserFacts, for accounts the operator named.
+        [AllowNull()] [AllowEmptyCollection()] [object[]] $UserFacts
     )
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'
@@ -573,7 +611,7 @@ function Get-TPAiUseReview {
         NotAssessed           = 'The check produced no verdict in this run.'
     }
     $place = {
-        param([object] $entry)
+        param([object] $entry, [bool] $addToGroup = $true)
         $cid = [string]$entry.ControlId
         $def = $defs[$cid]
         $f = $byControl[$cid]
@@ -627,9 +665,76 @@ function Get-TPAiUseReview {
             LicenseRequirement = [string](Get-TPObjectField -Item $def -Key 'LicenseRequirement' -Default '')
             Impact        = $(if ($null -ne $impact) { [ordered]@{ Archetype = [string]$impact.Archetype; Effort = [string]$impact.Effort; Summary = [string]$impact.Summary; Reversible = [string]$impact.Reversible } } else { $null })
         }
-        $groups[$group].Add($item)
+        if ($addToGroup) { $groups[$group].Add($item) }
+        return $item
     }
-    foreach ($entry in @($catalog.Controls)) { & $place $entry }
+    foreach ($entry in @($catalog.Controls)) { $null = & $place $entry $true }
+
+    # ── Copilot deployment gate ──────────────────────────────────────────────
+    # A technical gate over the approved blocker controls, each judged by the same
+    # placement as the catalog. Asymmetric on purpose: one shortfall is "not
+    # ready"; "no blockers" needs every blocker to have passed (or not apply), and
+    # still never says safe, because what this assessment does not read is listed.
+    if (-not $PSBoundParameters.ContainsKey('BlockerControlIds') -or $null -eq $BlockerControlIds) {
+        $BlockerControlIds = @((Get-TPStandards).CopilotReadinessBlockers)
+    }
+    $gate = [ordered]@{ Blockers = [System.Collections.Generic.List[object]]::new(); Passed = [System.Collections.Generic.List[object]]::new(); NotVerified = [System.Collections.Generic.List[object]]::new(); DoesNotApply = [System.Collections.Generic.List[object]]::new(); Invalid = [System.Collections.Generic.List[string]]::new() }
+    $seenBlocker = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($bid in @($BlockerControlIds | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+        $bid = ([string]$bid).Trim()
+        if (-not $seenBlocker.Add($bid)) { continue }
+        if ($bid -cnotmatch '\A[A-Z]{2,8}-\d+\.\d+\z' -or -not $defs.ContainsKey($bid)) { $gate.Invalid.Add(($bid -replace '[^\x20-\x7E]', '?')); continue }
+        $it = & $place ([ordered]@{ ControlId = $bid; Relationship = 'General'; Scope = ''; Explanation = ''; Reference = $null }) $false
+        $row = [ordered]@{
+            ControlId  = $bid
+            Title      = [string]$it.Title
+            Severity   = [string]$it.Severity
+            State      = [string]$it.State
+            Reason     = [string]$it.Reason
+            ReasonText = [string]$it.ReasonText
+            Why        = [string](Get-TPObjectField -Item $catalog.Readiness.BlockerReasons -Key $bid -Default '')
+            Impact     = $it.Impact
+            LicenseRequirement = [string]$it.LicenseRequirement
+        }
+        switch ([string]$it.Group) {
+            'Attention' { $gate.Blockers.Add($row) }
+            'Verified'  { $gate.Passed.Add($row) }
+            default     { if ([string]$it.Reason -eq 'NotApplicableToTenant') { $gate.DoesNotApply.Add($row) } else { $gate.NotVerified.Add($row) } }
+        }
+    }
+    $gateTotal = $gate.Blockers.Count + $gate.Passed.Count + $gate.NotVerified.Count + $gate.DoesNotApply.Count
+    $outcome = if ($gateTotal -eq 0 -and $gate.Invalid.Count -eq 0) { 'NotConfigured' }
+               elseif ($gate.Blockers.Count -gt 0) { 'BlockersFound' }
+               elseif ($gate.NotVerified.Count -gt 0 -or $gate.Invalid.Count -gt 0 -or $gate.Passed.Count -eq 0) { 'NotDetermined' }
+               else { 'NoBlockersInCheckedControls' }
+    $gateLabel = switch ($outcome) {
+        'BlockersFound'               { 'Not ready: blockers found' }
+        'NoBlockersInCheckedControls' { 'No blockers found in the controls checked' }
+        'NotDetermined'               { 'Cannot be determined from this assessment' }
+        default                       { 'No deployment gate is approved' }
+    }
+    $gateSummary = switch ($outcome) {
+        'BlockersFound'               { [string]::Format([cultureinfo]::InvariantCulture, '{0} of the {1} blocker control(s) were recorded as a gap or only partly in place. Resolve them before assigning Microsoft Copilot licenses.', $gate.Blockers.Count, $gateTotal) }
+        'NoBlockersInCheckedControls' { [string]::Format([cultureinfo]::InvariantCulture, 'Every blocker control that applies to this tenant was recorded in place ({0} of {1}; {2} do not apply). This covers only the controls checked: the items listed as not checked, the organizational decisions and anything changed since the assessment date are outside it.', $gate.Passed.Count, $gateTotal, $gate.DoesNotApply.Count) }
+        'NotDetermined'               { [string]::Format([cultureinfo]::InvariantCulture, 'No blocker control was recorded as a shortfall, but {0} of the {1} produced no verdict, so the gate is neither passed nor failed. A missing verdict is never counted as a pass.', ($gate.NotVerified.Count + $gate.Invalid.Count), ($gateTotal + $gate.Invalid.Count)) }
+        default                       { 'No list of blocker controls is approved (Config/tp-standards.json, CopilotReadinessBlockers), so this review prints no deployment verdict.' }
+    }
+    $readiness = [ordered]@{
+        Outcome      = $outcome
+        Label        = $gateLabel
+        Summary      = $gateSummary
+        Statement    = 'This is a technical gate over the Microsoft 365 settings listed here. It makes no safety determination about deploying Microsoft Copilot, and it does not replace the organizational decisions in section 4.'
+        Basis        = [string]$catalog.Readiness.Basis
+        Total        = $gateTotal
+        Blockers     = @($gate.Blockers | Sort-Object @{ Expression = { $sevRank[[string]$_.Severity] ?? 9 } }, ControlId)
+        Passed       = @($gate.Passed | Sort-Object ControlId)
+        NotVerified  = @($gate.NotVerified | Sort-Object ControlId)
+        DoesNotApply = @($gate.DoesNotApply | Sort-Object ControlId)
+        InvalidIds   = @($gate.Invalid)
+        NotChecked   = @($catalog.Readiness.NotChecked)
+        Sources      = @($catalog.Readiness.Sources)
+    }
+    $users = @(foreach ($uf in @($UserFacts | Where-Object { $null -ne $_ })) { Get-TPAiUseUserReadiness -UserFacts $uf -NotChecked @($catalog.Readiness.UserNotChecked) })
 
     # Observations: PPL-3.3 and any other catalog observation, never a safeguard.
     $copilotRaw = Get-TPObjectField -Item $Facts -Key 'Copilot' -Default $null
@@ -853,6 +958,8 @@ function Get-TPAiUseReview {
             Attested    = @(& $sortRel $groups.Attested)
             NotVerified = @(& $sortRel $groups.NotVerified)
         }
+        Readiness        = $readiness
+        Users            = $users
         Observed         = $observed
         Organizational   = $organizational
         EvidenceGaps     = $gapCounts
@@ -941,4 +1048,229 @@ function Get-TPAiUseCopilotStudioSummary {
         default     { 'This results file does not record whether the environment list was read, so completeness is unknown.' }
     }
     return $out
+}
+
+# ── Per-account readiness (only for accounts the operator names) ─────────────
+
+function Read-TPAiUseUserFacts {
+    <#
+    .SYNOPSIS
+        Reads, for each account the operator names, the facts the saved results
+        file holds about that one account: whether it exists, is enabled and is
+        a member; the part numbers of its assigned licenses; its MFA
+        registration; and how many non-compliant managed devices record it as
+        primary user. No other account is materialized.
+    .DESCRIPTION
+        Same bounds as Read-TPAiUseFacts (one JsonDocument, Get-TPRunRecordMaxBytes).
+        A name is matched as a user principal name, ordinal and case-insensitive.
+        Each fact carries whether its read completed, so "not found in a
+        truncated list" is never "does not exist".
+    #>
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param(
+        [Parameter(Mandatory)] [string] $Path,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $UserPrincipalName
+    )
+    Set-StrictMode -Version Latest
+
+    $wanted = [System.Collections.Generic.List[string]]::new()
+    foreach ($n in @($UserPrincipalName)) {
+        $t = ([string]$n).Trim()
+        if (-not $t) { continue }
+        if ($t.Length -gt 256 -or $t -cnotmatch '\A[A-Za-z0-9._%+''#-]+@[A-Za-z0-9.-]+\z') { throw 'A user name given to the AI use review is not a user principal name.' }
+        if (-not ($wanted | Where-Object { [string]::Equals($_, $t, [System.StringComparison]::OrdinalIgnoreCase) })) { $wanted.Add($t) }
+    }
+    if ($wanted.Count -eq 0) { return @() }
+    if ($wanted.Count -gt 25) { throw 'The AI use review reads at most 25 named accounts.' }
+
+    $item = Get-Item -LiteralPath $Path -ErrorAction Stop
+    if ($item -isnot [System.IO.FileInfo]) { throw 'The results path is not a file.' }
+    if ($item.Length -gt (Get-TPRunRecordMaxBytes)) { throw 'The results file is larger than this tool reads.' }
+
+    $kinds = [System.Text.Json.JsonValueKind]
+    $prop = {
+        param([object] $el, [string] $name)
+        if ($null -eq $el -or $el.ValueKind -ne $kinds::Object) { return $null }
+        $out = [System.Text.Json.JsonElement]::new()
+        if ($el.TryGetProperty($name, [ref]$out)) { return $out }
+        return $null
+    }
+    $text = { param([object] $el) if ($null -ne $el -and $el.ValueKind -eq $kinds::String) { $el.GetString() } else { '' } }
+    $bool = { param([object] $el) if ($null -eq $el) { $null } elseif ($el.ValueKind -eq $kinds::True) { $true } elseif ($el.ValueKind -eq $kinds::False) { $false } else { $null } }
+    $same = { param([string] $a, [string] $b) [string]::Equals($a, $b, [System.StringComparison]::OrdinalIgnoreCase) }
+
+    $out = [ordered]@{}
+    foreach ($w in $wanted) {
+        $out[$w] = [ordered]@{
+            UserPrincipalName = $w
+            UsersRead = 'NotRecorded'; Found = $false; AccountEnabled = $null; UserType = ''
+            AssignedSkuIds = @(); SkuCatalogRead = $false; AssignedPartNumbers = @(); UnnamedLicenses = 0
+            MfaRead = 'NotRecorded'; MfaFound = $false; IsMfaRegistered = $null; IsMfaCapable = $null
+            DevicesRead = 'NotRecorded'; DevicesTruncated = $null; NonCompliantDevices = $null
+        }
+    }
+    $options = [System.Text.Json.JsonDocumentOptions]::new()
+    $options.MaxDepth = 256
+    $stream = [System.IO.File]::Open($item.FullName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+    try {
+        try { $doc = [System.Text.Json.JsonDocument]::Parse($stream, $options) } catch { throw 'The results file is not valid JSON.' }
+        try {
+            $root = $doc.RootElement
+            if ($root.ValueKind -ne $kinds::Object) { throw 'The file is not an assessment results file.' }
+            if ($null -ne (& $prop $root 'DeepDives')) { throw 'That file is an incident-response output, not an assessment.' }
+            $rawData = & $prop $root 'RawData'
+
+            # SKU id -> part number, from the subscription list.
+            $skuNames = @{}
+            $skus = & $prop (& $prop (& $prop $rawData 'AAD-Inventory') 'Data') 'SubscribedSkus'
+            $skuRead = ($null -ne $skus -and $skus.ValueKind -eq $kinds::Array -and $skus.GetArrayLength() -gt 0)
+            if ($skuRead) { foreach ($s in $skus.EnumerateArray()) { $id = & $text (& $prop $s 'SkuId'); $pn = & $text (& $prop $s 'SkuPartNumber'); if ($id -and $pn) { $skuNames[$id.ToLowerInvariant()] = $pn } } }
+
+            $ud = & $prop (& $prop $rawData 'AAD-Users') 'Data'
+            $ss = & $prop $ud 'SectionStatus'
+            $usersStatus = & $text (& $prop $ss 'Users')
+            $mfaStatus = & $text (& $prop $ss 'MFARegistration')
+            $list = & $prop $ud 'Users'
+            $haveUsers = ($null -ne $list -and $list.ValueKind -eq $kinds::Array)
+            foreach ($w in $wanted) {
+                $out[$w].UsersRead = if ($usersStatus -cin @('Collected', 'Truncated', 'Failed', 'NotRun')) { $usersStatus } elseif ($haveUsers) { 'NotRecorded' } else { 'NotRun' }
+                $out[$w].MfaRead = if ($mfaStatus -cin @('Collected', 'Failed', 'NotRun')) { $mfaStatus } else { 'NotRecorded' }
+                $out[$w].SkuCatalogRead = $skuRead
+            }
+            if ($haveUsers) {
+                foreach ($u in $list.EnumerateArray()) {
+                    $upn = & $text (& $prop $u 'UserPrincipalName')
+                    if (-not $upn) { continue }
+                    foreach ($w in $wanted) {
+                        if (-not (& $same $upn $w)) { continue }
+                        $rec = $out[$w]
+                        $rec.Found = $true
+                        $rec.AccountEnabled = & $bool (& $prop $u 'AccountEnabled')
+                        $rec.UserType = & $text (& $prop $u 'UserType')
+                        $ids = [System.Collections.Generic.List[string]]::new()
+                        $a = & $prop $u 'AssignedSkuIds'
+                        if ($null -ne $a -and $a.ValueKind -eq $kinds::Array) { foreach ($x in $a.EnumerateArray()) { $v = & $text $x; if ($v) { $ids.Add($v) } } }
+                        elseif ($null -ne $a -and $a.ValueKind -eq $kinds::String) { $ids.Add($a.GetString()) }
+                        $rec.AssignedSkuIds = $ids.ToArray()
+                        $named = @($ids | ForEach-Object { $skuNames[$_.ToLowerInvariant()] } | Where-Object { $_ })
+                        $rec.AssignedPartNumbers = @($named | Sort-Object -Unique)
+                        $rec.UnnamedLicenses = $ids.Count - $named.Count
+                    }
+                }
+            }
+            $reg = & $prop (& $prop $ud 'MFARegistration') 'RegistrationDetails'
+            if ($null -ne $reg -and $reg.ValueKind -eq $kinds::Array) {
+                foreach ($r in $reg.EnumerateArray()) {
+                    $upn = & $text (& $prop $r 'UserPrincipalName')
+                    if (-not $upn) { continue }
+                    foreach ($w in $wanted) {
+                        if (-not (& $same $upn $w)) { continue }
+                        $out[$w].MfaFound = $true
+                        $out[$w].IsMfaRegistered = & $bool (& $prop $r 'IsMfaRegistered')
+                        $out[$w].IsMfaCapable = & $bool (& $prop $r 'IsMfaCapable')
+                    }
+                }
+            }
+            $dc = & $prop (& $prop $rawData 'Intune-DeviceCompliance') 'Data'
+            $summary = & $prop $dc 'OSComplianceSummary'
+            $devStatus = & $text (& $prop (& $prop $dc 'SectionStatus') 'OSComplianceSummary')
+            $nc = & $prop $summary 'NonCompliantDevices'
+            $haveNc = ($null -ne $nc -and $nc.ValueKind -eq $kinds::Array)
+            $trunc = & $bool (& $prop $summary 'NonCompliantTruncated')
+            foreach ($w in $wanted) {
+                $out[$w].DevicesRead = if ($devStatus -ceq 'Failed') { 'Failed' } elseif ($haveNc) { 'Collected' } else { 'NotRecorded' }
+                $out[$w].DevicesTruncated = $trunc
+                if ($haveNc -and $devStatus -cne 'Failed') { $out[$w].NonCompliantDevices = 0 }
+            }
+            if ($haveNc -and $devStatus -cne 'Failed') {
+                foreach ($dv in $nc.EnumerateArray()) {
+                    $upn = & $text (& $prop $dv 'UserPrincipalName')
+                    foreach ($w in $wanted) { if ($upn -and (& $same $upn $w)) { $out[$w].NonCompliantDevices++ } }
+                }
+            }
+        } finally { $doc.Dispose() }
+    } finally { $stream.Dispose() }
+    return @($out.Values)
+}
+
+# One named account's requirements for Microsoft Copilot, from the facts above.
+# Row Status: Met / NotMet / Confirm (a fact was read and a person has to judge
+# it) / NotEstablished (the read was incomplete or does not record it) / NotRead.
+function Get-TPAiUseUserReadiness {
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param([Parameter(Mandatory)] [object] $UserFacts, [AllowEmptyCollection()] [object[]] $NotChecked = @())
+    $f = $UserFacts
+    $get = { param([string] $k, $d = $null) Get-TPObjectField -Item $f -Key $k -Default $d }
+    $rows = [System.Collections.Generic.List[object]]::new()
+    $row = { param([string] $req, [string] $status, [string] $detail, [string] $toAdd = '') $rows.Add([ordered]@{ Requirement = $req; Status = $status; Detail = $detail; ToAdd = $toAdd }) }
+    $usersRead = [string](& $get 'UsersRead' 'NotRecorded')
+    $found = [bool](& $get 'Found' $false)
+    $copilotRx = Get-TPCopilotSkuPartNumberPattern
+
+    if (-not $found) {
+        $why = switch ($usersRead) {
+            'Collected' { 'The complete user list in this assessment holds no account with this name.' }
+            'Truncated' { 'The user list was cut short at its page limit and this account is not in the part that was read. That does not show the account is absent.' }
+            'Failed'    { 'The user list could not be read in this assessment.' }
+            default     { 'This results file does not record a completed user list, so the account could not be looked up.' }
+        }
+        & $row 'Work account in Microsoft Entra ID' $(if ($usersRead -eq 'Collected') { 'NotMet' } else { 'NotEstablished' }) $why $(if ($usersRead -eq 'Collected') { 'Create or correct the account name, then run a full assessment.' } else { 'Run a full assessment in which the user list completes.' })
+    } else {
+        $enabled = & $get 'AccountEnabled'
+        $type = [string](& $get 'UserType' '')
+        if ($type -eq 'Guest') { & $row 'Work account in Microsoft Entra ID' 'NotMet' 'The account is a guest. Microsoft states that guest accounts are not licensed to use Copilot.' 'Use a member account of this organization.' }
+        elseif ($enabled -eq $false) { & $row 'Work account in Microsoft Entra ID' 'NotMet' 'The account exists and sign-in is blocked.' 'Enable sign-in for the account.' }
+        elseif ($enabled -eq $true) { & $row 'Work account in Microsoft Entra ID' 'Met' 'A member account with sign-in enabled.' }
+        else { & $row 'Work account in Microsoft Entra ID' 'NotEstablished' 'The account exists; whether sign-in is enabled is not recorded.' 'Confirm the account is enabled.' }
+
+        $ids = @(& $get 'AssignedSkuIds' @())
+        $parts = @(& $get 'AssignedPartNumbers' @())
+        $unnamed = [int](& $get 'UnnamedLicenses' 0)
+        $copilot = @($parts | Where-Object { $_ -match $copilotRx })
+        $base = @($parts | Where-Object { $_ -notmatch $copilotRx })
+        $catalogRead = [bool](& $get 'SkuCatalogRead' $false)
+        $suffix = if ($unnamed -gt 0) { " $unnamed assigned license(s) could not be named from the recorded subscription list." } else { '' }
+        if ($ids.Count -eq 0) {
+            & $row 'Eligible Microsoft 365 base license' 'NotMet' 'No license is assigned to this account.' 'Assign a base license that Microsoft lists as a prerequisite for Microsoft Copilot.'
+            & $row 'Microsoft Copilot license' 'NotMet' 'No license is assigned to this account.' 'Purchase and assign a Microsoft Copilot license.'
+        } elseif (-not $catalogRead) {
+            & $row 'Eligible Microsoft 365 base license' 'NotEstablished' "$($ids.Count) license(s) are assigned; the subscription list was not read, so they cannot be named." 'Run a full assessment in which the subscription list is read.'
+            & $row 'Microsoft Copilot license' 'NotEstablished' 'The subscription list was not read, so whether one of the assigned licenses is Microsoft Copilot is unknown.' 'Run a full assessment in which the subscription list is read.'
+        } else {
+            if ($base.Count -gt 0) { & $row 'Eligible Microsoft 365 base license' 'Confirm' ("Assigned: $($base -join ', ').$suffix This review does not judge eligibility; compare with Microsoft's list of prerequisite licenses.") "Confirm one of these is on Microsoft's list of eligible prerequisite licenses." }
+            elseif ($unnamed -gt 0) { & $row 'Eligible Microsoft 365 base license' 'NotEstablished' ("No named base license.$suffix").Trim() 'Confirm the assigned licenses in the Microsoft 365 admin center.' }
+            else { & $row 'Eligible Microsoft 365 base license' 'NotMet' 'Only a Microsoft Copilot license is assigned; no base license was found.' 'Assign a base license that Microsoft lists as a prerequisite for Microsoft Copilot.' }
+            if ($copilot.Count -gt 0) { & $row 'Microsoft Copilot license' 'Met' "Assigned: $($copilot -join ', ')." }
+            elseif ($unnamed -gt 0) { & $row 'Microsoft Copilot license' 'NotEstablished' ("No assigned license is recognized as Microsoft Copilot.$suffix") 'Confirm the assigned licenses in the Microsoft 365 admin center.' }
+            else { & $row 'Microsoft Copilot license' 'NotMet' 'No assigned license is recognized as Microsoft Copilot.' 'Purchase and assign a Microsoft Copilot license.' }
+        }
+
+        $mfaRead = [string](& $get 'MfaRead' 'NotRecorded')
+        if ([bool](& $get 'MfaFound' $false)) {
+            $capable = & $get 'IsMfaCapable'; $registered = & $get 'IsMfaRegistered'
+            if ($capable -eq $true) { & $row 'Multifactor authentication registered' 'Met' 'The account has a usable multifactor method registered. Whether a policy requires it at sign-in is the tenant control AAD-1.2.' }
+            elseif ($registered -eq $true) { & $row 'Multifactor authentication registered' 'NotMet' 'A method is registered, but Microsoft does not report the account as able to complete multifactor authentication.' 'Have the user register a method they can use, such as Microsoft Authenticator.' }
+            else { & $row 'Multifactor authentication registered' 'NotMet' 'No multifactor method is registered for this account.' 'Have the user register a multifactor method before the license is assigned.' }
+        } else {
+            $why = if ($mfaRead -eq 'Collected') { 'The registration report was read and has no row for this account.' } elseif ($mfaRead -eq 'Failed') { 'The registration report could not be read (it needs Microsoft Entra ID P1 or P2).' } else { 'This results file does not record the registration report.' }
+            & $row 'Multifactor authentication registered' 'NotEstablished' $why 'Confirm the account''s registered methods in the Microsoft Entra admin center.'
+        }
+
+        $devRead = [string](& $get 'DevicesRead' 'NotRecorded')
+        $nc = & $get 'NonCompliantDevices'
+        if ($devRead -eq 'Collected' -and $null -ne $nc -and [int]$nc -gt 0) { & $row 'Managed device compliant' 'NotMet' "$([int]$nc) managed device(s) recorded for this account are not compliant." 'Bring the device into compliance in Intune before the license is assigned.' }
+        elseif ($devRead -eq 'Collected') { & $row 'Managed device compliant' 'NotEstablished' ("No non-compliant managed device is recorded for this account$(if ((& $get 'DevicesTruncated') -eq $true) { ' in the part of the device list that was read' }). The assessment keeps only non-compliant devices by account, so whether this person has a managed, compliant device is not shown.") 'Confirm the device this person will use is enrolled and compliant.' }
+        else { & $row 'Managed device compliant' 'NotRead' 'The Intune device list was not read in this assessment.' 'Confirm the device this person will use is enrolled and compliant.' }
+    }
+    $rowList = $rows.ToArray()
+    return [ordered]@{
+        UserPrincipalName = [string](& $get 'UserPrincipalName' '')
+        Found             = $found
+        Rows              = $rowList
+        ToAdd             = @($rowList | Where-Object { $_.Status -eq 'NotMet' } | ForEach-Object { [string]$_.ToAdd })
+        ToConfirm         = @($rowList | Where-Object { $_.Status -cin @('Confirm', 'NotEstablished', 'NotRead') } | ForEach-Object { [string]$_.ToAdd } | Where-Object { $_ })
+        NotChecked        = @($NotChecked)
+    }
 }

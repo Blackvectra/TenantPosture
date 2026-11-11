@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "name": "AI use readiness review catalog",
   "description": "Which assessed controls the AI use readiness review groups, how each relates to AI use of Microsoft 365 data, the organizational review areas, and the vendor statements the review quotes. A VIEW over saved results: nothing here changes a finding or a score. Relationship values: AiSpecific (the setting exists for Copilot or Copilot Studio), DirectAccess (the setting decides what an account, and so Copilot acting as that account, can read), SupportingGovernance (the setting limits sharing over time or the reach of a shortfall but does not itself decide access), General (the setting governs every application alike; the tool does not classify applications as AI).",
   "vendorFactsRetrieved": "2026-11-10",
@@ -10,64 +10,579 @@
     "General": "Governs every application alike; this tool does not classify applications as AI."
   },
   "controls": [
-    { "ControlId": "PPL-3.1", "Relationship": "AiSpecific", "Scope": "Microsoft Copilot (paid add-on): sensitivity labels and auto-labeling", "Explanation": "Microsoft documents that Copilot honors the usage rights of label-encrypted content and that labels and DLP help protect individual files from being summarized.", "Reference": { "Title": "Data protection and auditing for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing", "Retrieved": "2026-11-10" } },
-    { "ControlId": "PPL-3.2", "Relationship": "AiSpecific", "Scope": "Microsoft Copilot (paid add-on): DLP policy for Copilot interactions", "Explanation": "Microsoft documents that a DLP policy for Copilot can keep Copilot from summarizing labeled files and emails.", "Reference": { "Title": "Data protection and auditing for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing", "Retrieved": "2026-11-10" } },
-    { "ControlId": "PPL-3.4", "Relationship": "AiSpecific", "Scope": "Copilot Studio: agent publishing channels", "Explanation": "Where agents are published is not readable through Graph; this item is a manual review.", "Reference": null },
-    { "ControlId": "PPL-3.5", "Relationship": "AiSpecific", "Scope": "Microsoft Copilot: interaction audit logging", "Explanation": "Audit records of Copilot interactions are how an organization later answers what was asked and what was returned.", "Reference": { "Title": "Data protection and auditing for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing", "Retrieved": "2026-11-10" } },
-    { "ControlId": "PPL-4.1", "Relationship": "AiSpecific", "Scope": "Copilot Studio agents: access control", "Explanation": "Microsoft documents that an agent with no authentication can be used by any user who has its link, and that who in the organization can chat with it cannot then be controlled.", "Reference": { "Title": "Configure user authentication in Copilot Studio", "Url": "https://learn.microsoft.com/microsoft-copilot-studio/configuration-end-user-authentication", "Retrieved": "2026-11-10" } },
-    { "ControlId": "PPL-4.2", "Relationship": "AiSpecific", "Scope": "Copilot Studio agents: user authentication", "Explanation": "Microsoft documents that requiring sign-in is how an agent that reaches restricted information is kept to signed-in users.", "Reference": { "Title": "Configure user authentication in Copilot Studio", "Url": "https://learn.microsoft.com/microsoft-copilot-studio/configuration-end-user-authentication", "Retrieved": "2026-11-10" } },
-    { "ControlId": "PPL-4.3", "Relationship": "AiSpecific", "Scope": "Copilot Studio agents: HTTP request nodes", "Explanation": "An agent that calls a service over plain HTTP sends what it was asked, and what it fetched, unencrypted.", "Reference": null },
-    { "ControlId": "PPL-4.4", "Relationship": "AiSpecific", "Scope": "Copilot Studio agents: email tools", "Explanation": "An email tool whose recipients or content are filled by the AI rather than fixed by the maker can send organizational data where the maker did not decide.", "Reference": null },
-    { "ControlId": "PPL-4.5", "Relationship": "AiSpecific", "Scope": "Copilot Studio agents: connector credentials", "Explanation": "A connector tool that runs with the maker's credentials rather than the user's reaches whatever the maker can reach, for every user of the agent.", "Reference": { "Title": "Configure user authentication for tools", "Url": "https://learn.microsoft.com/microsoft-copilot-studio/configure-enduser-authentication", "Retrieved": "2026-11-10" } },
-    { "ControlId": "PPL-4.6", "Relationship": "AiSpecific", "Scope": "Copilot Studio agents: credentials in topics", "Explanation": "A secret written into a topic is readable by every maker of the agent and is not rotated by the platform.", "Reference": null },
-    { "ControlId": "PPL-4.7", "Relationship": "AiSpecific", "Scope": "Copilot Studio agents: MCP tool integrations", "Explanation": "A Model Context Protocol tool connects the agent to an external service under that service's own terms; which ones are approved is a manual review.", "Reference": null },
-    { "ControlId": "PPL-4.8", "Relationship": "AiSpecific", "Scope": "Copilot Studio agents: generative instructions", "Explanation": "A generative agent without custom instructions answers from the model's defaults rather than the organization's intent.", "Reference": null },
-    { "ControlId": "PPL-4.9", "Relationship": "AiSpecific", "Scope": "Copilot Studio agents: ownership", "Explanation": "An agent whose owner has left or is disabled has nobody accountable for what it does.", "Reference": null },
-    { "ControlId": "PPL-4.10", "Relationship": "AiSpecific", "Scope": "Copilot Studio agents: dormancy", "Explanation": "A published agent nobody uses is still reachable; it is reviewed only once a dormancy standard is approved.", "Reference": null },
-    { "ControlId": "AAD-6.4", "Relationship": "AiSpecific", "Scope": "Microsoft Entra: agent identity blueprints", "Explanation": "Whether any user can create agent identity blueprints decides who can create agent identities without an Agent ID role.", "Reference": null },
-    { "ControlId": "SPO-1.1", "Relationship": "DirectAccess", "Scope": "SharePoint and OneDrive: external sharing", "Explanation": "Microsoft documents that Copilot respects existing SharePoint and OneDrive permissions and that overshared content can be surfaced to anyone who has access.", "Reference": { "Title": "Data protection and auditing for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing", "Retrieved": "2026-11-10" } },
-    { "ControlId": "SPO-1.2", "Relationship": "DirectAccess", "Scope": "SharePoint and OneDrive: default sharing link type", "Explanation": "An anonymous default link widens who holds access to what is shared; Copilot surfaces what an account can read.", "Reference": { "Title": "Data, Privacy, and Security for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy", "Retrieved": "2026-11-10" } },
-    { "ControlId": "SPO-5.3", "Relationship": "DirectAccess", "Scope": "OneDrive: content sharing", "Explanation": "Who OneDrive content can be shared with decides who can read it, and so what Copilot can surface for them.", "Reference": { "Title": "Data, Privacy, and Security for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy", "Retrieved": "2026-11-10" } },
-    { "ControlId": "SPO-5.5", "Relationship": "DirectAccess", "Scope": "SharePoint: allowed external domains", "Explanation": "Limiting external sharing to allowed domains bounds which outside accounts can hold access.", "Reference": { "Title": "Data, Privacy, and Security for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy", "Retrieved": "2026-11-10" } },
-    { "ControlId": "SPO-5.6", "Relationship": "DirectAccess", "Scope": "SharePoint: external sharing by security group", "Explanation": "Restricting who may share externally bounds how access widens.", "Reference": { "Title": "Data, Privacy, and Security for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy", "Retrieved": "2026-11-10" } },
-    { "ControlId": "SPO-5.7", "Relationship": "DirectAccess", "Scope": "SharePoint: default link permission", "Explanation": "A view-only default link grants less than an edit link to whoever receives it.", "Reference": { "Title": "Data, Privacy, and Security for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy", "Retrieved": "2026-11-10" } },
-    { "ControlId": "AAD-4.3", "Relationship": "DirectAccess", "Scope": "Microsoft Entra: guest default permissions", "Explanation": "Microsoft documents that the permissions given to users outside the organization are part of what decides what Copilot surfaces for them.", "Reference": { "Title": "Data, Privacy, and Security for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy", "Retrieved": "2026-11-10" } },
-    { "ControlId": "PVW-1.4", "Relationship": "DirectAccess", "Scope": "Microsoft Purview: sensitivity labels published", "Explanation": "Microsoft documents that Copilot honors the usage rights of content encrypted by a sensitivity label.", "Reference": { "Title": "Data, Privacy, and Security for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy", "Retrieved": "2026-11-10" } },
-    { "ControlId": "PVW-4.3", "Relationship": "DirectAccess", "Scope": "Microsoft Purview: sensitivity labels defined and published", "Explanation": "Labels are the mechanism the Copilot-specific label controls build on.", "Reference": { "Title": "Data protection and auditing for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing", "Retrieved": "2026-11-10" } },
-    { "ControlId": "DEF-4.1", "Relationship": "DirectAccess", "Scope": "Microsoft Purview DLP: workload coverage", "Explanation": "Microsoft documents that DLP helps protect individual files from being summarized by Copilot; a policy covering the key workloads is the basis for that.", "Reference": { "Title": "Data protection and auditing for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing", "Retrieved": "2026-11-10" } },
-    { "ControlId": "DEF-4.2", "Relationship": "DirectAccess", "Scope": "Microsoft Purview DLP: sensitive information types", "Explanation": "A DLP policy that detects sensitive information types is what lets protection follow the content rather than its location.", "Reference": { "Title": "Data protection and auditing for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing", "Retrieved": "2026-11-10" } },
-    { "ControlId": "DEF-4.5", "Relationship": "DirectAccess", "Scope": "Microsoft Purview Endpoint DLP", "Explanation": "Endpoint DLP governs what leaves a managed device, including what is pasted into a browser-based AI tool; it does not identify which tools are AI.", "Reference": null },
-    { "ControlId": "SPO-1.4", "Relationship": "SupportingGovernance", "Scope": "SharePoint: guest access expiration", "Explanation": "Expiring guest access limits how long an outside account keeps what it was given.", "Reference": null },
-    { "ControlId": "SPO-2.2", "Relationship": "SupportingGovernance", "Scope": "SharePoint: external sharing link expiration", "Explanation": "An expiring link limits how long shared access lasts.", "Reference": null },
-    { "ControlId": "SPO-3.4", "Relationship": "SupportingGovernance", "Scope": "SharePoint: guest access expiration required", "Explanation": "Requiring expiration keeps guest access from accumulating.", "Reference": null },
-    { "ControlId": "SPO-5.2", "Relationship": "SupportingGovernance", "Scope": "SharePoint and OneDrive: Entra B2B integration", "Explanation": "B2B integration gives outside accounts a managed identity that lifecycle controls can act on.", "Reference": null },
-    { "ControlId": "SPO-5.4", "Relationship": "SupportingGovernance", "Scope": "SharePoint: guests re-sharing", "Explanation": "Keeping guests from sharing what they do not own stops access from spreading beyond the original grant.", "Reference": null },
-    { "ControlId": "AAD-4.1", "Relationship": "SupportingGovernance", "Scope": "Microsoft Entra: guest invitations", "Explanation": "Who may invite guests decides how outside accounts enter the directory.", "Reference": null },
-    { "ControlId": "PVW-1.3", "Relationship": "SupportingGovernance", "Scope": "Microsoft Purview DLP: policy active", "Explanation": "An enforced DLP policy is the precondition for the Copilot-specific DLP control.", "Reference": null },
-    { "ControlId": "AAD-6.1", "Relationship": "General", "Scope": "Microsoft Entra: user app registration", "Explanation": "Governs every application; this tool does not classify applications as AI.", "Reference": null },
-    { "ControlId": "AAD-6.2", "Relationship": "General", "Scope": "Microsoft Entra: user consent to applications", "Explanation": "Governs every application; this tool does not classify applications as AI.", "Reference": null },
-    { "ControlId": "AAD-6.3", "Relationship": "General", "Scope": "Microsoft Entra: admin consent workflow", "Explanation": "Governs every application; this tool does not classify applications as AI.", "Reference": null },
-    { "ControlId": "AAD-12.4", "Relationship": "General", "Scope": "Microsoft Entra: tenant-wide delegated consents", "Explanation": "Lists applications any account can act through; this tool does not classify them as AI.", "Reference": null },
-    { "ControlId": "AAD-15.1", "Relationship": "General", "Scope": "Microsoft Entra: application permissions that can take over the tenant", "Explanation": "An application permission is exercised with no signed-in user; the tool does not classify the holder as AI.", "Reference": null },
-    { "ControlId": "AAD-15.2", "Relationship": "General", "Scope": "Microsoft Entra: application permissions over tenant-wide data", "Explanation": "Lists applications that can read tenant-wide data without a user; the tool does not classify them as AI.", "Reference": null },
-    { "ControlId": "DEF-4.3", "Relationship": "General", "Scope": "Defender: risky OAuth application alerts", "Explanation": "Alerts on risky application consents, whatever the application.", "Reference": null },
-    { "ControlId": "TMS-2.2", "Relationship": "General", "Scope": "Teams: unverified app publishers", "Explanation": "Governs Teams apps from unverified publishers, whatever the app.", "Reference": null }
+    {
+      "ControlId": "PPL-3.1",
+      "Relationship": "AiSpecific",
+      "Scope": "Microsoft Copilot (paid add-on): sensitivity labels and auto-labeling",
+      "Explanation": "Microsoft documents that Copilot honors the usage rights of label-encrypted content and that labels and DLP help protect individual files from being summarized.",
+      "Reference": {
+        "Title": "Data protection and auditing for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "PPL-3.2",
+      "Relationship": "AiSpecific",
+      "Scope": "Microsoft Copilot (paid add-on): DLP policy for Copilot interactions",
+      "Explanation": "Microsoft documents that a DLP policy for Copilot can keep Copilot from summarizing labeled files and emails.",
+      "Reference": {
+        "Title": "Data protection and auditing for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "PPL-3.4",
+      "Relationship": "AiSpecific",
+      "Scope": "Copilot Studio: agent publishing channels",
+      "Explanation": "Where agents are published is not readable through Graph; this item is a manual review.",
+      "Reference": null
+    },
+    {
+      "ControlId": "PPL-3.5",
+      "Relationship": "AiSpecific",
+      "Scope": "Microsoft Copilot: interaction audit logging",
+      "Explanation": "Audit records of Copilot interactions are how an organization later answers what was asked and what was returned.",
+      "Reference": {
+        "Title": "Data protection and auditing for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "PPL-4.1",
+      "Relationship": "AiSpecific",
+      "Scope": "Copilot Studio agents: access control",
+      "Explanation": "Microsoft documents that an agent with no authentication can be used by any user who has its link, and that who in the organization can chat with it cannot then be controlled.",
+      "Reference": {
+        "Title": "Configure user authentication in Copilot Studio",
+        "Url": "https://learn.microsoft.com/microsoft-copilot-studio/configuration-end-user-authentication",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "PPL-4.2",
+      "Relationship": "AiSpecific",
+      "Scope": "Copilot Studio agents: user authentication",
+      "Explanation": "Microsoft documents that requiring sign-in is how an agent that reaches restricted information is kept to signed-in users.",
+      "Reference": {
+        "Title": "Configure user authentication in Copilot Studio",
+        "Url": "https://learn.microsoft.com/microsoft-copilot-studio/configuration-end-user-authentication",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "PPL-4.3",
+      "Relationship": "AiSpecific",
+      "Scope": "Copilot Studio agents: HTTP request nodes",
+      "Explanation": "An agent that calls a service over plain HTTP sends what it was asked, and what it fetched, unencrypted.",
+      "Reference": null
+    },
+    {
+      "ControlId": "PPL-4.4",
+      "Relationship": "AiSpecific",
+      "Scope": "Copilot Studio agents: email tools",
+      "Explanation": "An email tool whose recipients or content are filled by the AI rather than fixed by the maker can send organizational data where the maker did not decide.",
+      "Reference": null
+    },
+    {
+      "ControlId": "PPL-4.5",
+      "Relationship": "AiSpecific",
+      "Scope": "Copilot Studio agents: connector credentials",
+      "Explanation": "A connector tool that runs with the maker's credentials rather than the user's reaches whatever the maker can reach, for every user of the agent.",
+      "Reference": {
+        "Title": "Configure user authentication for tools",
+        "Url": "https://learn.microsoft.com/microsoft-copilot-studio/configure-enduser-authentication",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "PPL-4.6",
+      "Relationship": "AiSpecific",
+      "Scope": "Copilot Studio agents: credentials in topics",
+      "Explanation": "A secret written into a topic is readable by every maker of the agent and is not rotated by the platform.",
+      "Reference": null
+    },
+    {
+      "ControlId": "PPL-4.7",
+      "Relationship": "AiSpecific",
+      "Scope": "Copilot Studio agents: MCP tool integrations",
+      "Explanation": "A Model Context Protocol tool connects the agent to an external service under that service's own terms; which ones are approved is a manual review.",
+      "Reference": null
+    },
+    {
+      "ControlId": "PPL-4.8",
+      "Relationship": "AiSpecific",
+      "Scope": "Copilot Studio agents: generative instructions",
+      "Explanation": "A generative agent without custom instructions answers from the model's defaults rather than the organization's intent.",
+      "Reference": null
+    },
+    {
+      "ControlId": "PPL-4.9",
+      "Relationship": "AiSpecific",
+      "Scope": "Copilot Studio agents: ownership",
+      "Explanation": "An agent whose owner has left or is disabled has nobody accountable for what it does.",
+      "Reference": null
+    },
+    {
+      "ControlId": "PPL-4.10",
+      "Relationship": "AiSpecific",
+      "Scope": "Copilot Studio agents: dormancy",
+      "Explanation": "A published agent nobody uses is still reachable; it is reviewed only once a dormancy standard is approved.",
+      "Reference": null
+    },
+    {
+      "ControlId": "AAD-6.4",
+      "Relationship": "AiSpecific",
+      "Scope": "Microsoft Entra: agent identity blueprints",
+      "Explanation": "Whether any user can create agent identity blueprints decides who can create agent identities without an Agent ID role.",
+      "Reference": null
+    },
+    {
+      "ControlId": "SPO-1.1",
+      "Relationship": "DirectAccess",
+      "Scope": "SharePoint and OneDrive: external sharing",
+      "Explanation": "Microsoft documents that Copilot respects existing SharePoint and OneDrive permissions and that overshared content can be surfaced to anyone who has access.",
+      "Reference": {
+        "Title": "Data protection and auditing for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "SPO-1.2",
+      "Relationship": "DirectAccess",
+      "Scope": "SharePoint and OneDrive: default sharing link type",
+      "Explanation": "An anonymous default link widens who holds access to what is shared; Copilot surfaces what an account can read.",
+      "Reference": {
+        "Title": "Data, Privacy, and Security for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "SPO-5.3",
+      "Relationship": "DirectAccess",
+      "Scope": "OneDrive: content sharing",
+      "Explanation": "Who OneDrive content can be shared with decides who can read it, and so what Copilot can surface for them.",
+      "Reference": {
+        "Title": "Data, Privacy, and Security for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "SPO-5.5",
+      "Relationship": "DirectAccess",
+      "Scope": "SharePoint: allowed external domains",
+      "Explanation": "Limiting external sharing to allowed domains bounds which outside accounts can hold access.",
+      "Reference": {
+        "Title": "Data, Privacy, and Security for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "SPO-5.6",
+      "Relationship": "DirectAccess",
+      "Scope": "SharePoint: external sharing by security group",
+      "Explanation": "Restricting who may share externally bounds how access widens.",
+      "Reference": {
+        "Title": "Data, Privacy, and Security for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "SPO-5.7",
+      "Relationship": "DirectAccess",
+      "Scope": "SharePoint: default link permission",
+      "Explanation": "A view-only default link grants less than an edit link to whoever receives it.",
+      "Reference": {
+        "Title": "Data, Privacy, and Security for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "AAD-4.3",
+      "Relationship": "DirectAccess",
+      "Scope": "Microsoft Entra: guest default permissions",
+      "Explanation": "Microsoft documents that the permissions given to users outside the organization are part of what decides what Copilot surfaces for them.",
+      "Reference": {
+        "Title": "Data, Privacy, and Security for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "PVW-1.4",
+      "Relationship": "DirectAccess",
+      "Scope": "Microsoft Purview: sensitivity labels published",
+      "Explanation": "Microsoft documents that Copilot honors the usage rights of content encrypted by a sensitivity label.",
+      "Reference": {
+        "Title": "Data, Privacy, and Security for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "PVW-4.3",
+      "Relationship": "DirectAccess",
+      "Scope": "Microsoft Purview: sensitivity labels defined and published",
+      "Explanation": "Labels are the mechanism the Copilot-specific label controls build on.",
+      "Reference": {
+        "Title": "Data protection and auditing for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "DEF-4.1",
+      "Relationship": "DirectAccess",
+      "Scope": "Microsoft Purview DLP: workload coverage",
+      "Explanation": "Microsoft documents that DLP helps protect individual files from being summarized by Copilot; a policy covering the key workloads is the basis for that.",
+      "Reference": {
+        "Title": "Data protection and auditing for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "DEF-4.2",
+      "Relationship": "DirectAccess",
+      "Scope": "Microsoft Purview DLP: sensitive information types",
+      "Explanation": "A DLP policy that detects sensitive information types is what lets protection follow the content rather than its location.",
+      "Reference": {
+        "Title": "Data protection and auditing for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "ControlId": "DEF-4.5",
+      "Relationship": "DirectAccess",
+      "Scope": "Microsoft Purview Endpoint DLP",
+      "Explanation": "Endpoint DLP governs what leaves a managed device, including what is pasted into a browser-based AI tool; it does not identify which tools are AI.",
+      "Reference": null
+    },
+    {
+      "ControlId": "SPO-1.4",
+      "Relationship": "SupportingGovernance",
+      "Scope": "SharePoint: guest access expiration",
+      "Explanation": "Expiring guest access limits how long an outside account keeps what it was given.",
+      "Reference": null
+    },
+    {
+      "ControlId": "SPO-2.2",
+      "Relationship": "SupportingGovernance",
+      "Scope": "SharePoint: external sharing link expiration",
+      "Explanation": "An expiring link limits how long shared access lasts.",
+      "Reference": null
+    },
+    {
+      "ControlId": "SPO-3.4",
+      "Relationship": "SupportingGovernance",
+      "Scope": "SharePoint: guest access expiration required",
+      "Explanation": "Requiring expiration keeps guest access from accumulating.",
+      "Reference": null
+    },
+    {
+      "ControlId": "SPO-5.2",
+      "Relationship": "SupportingGovernance",
+      "Scope": "SharePoint and OneDrive: Entra B2B integration",
+      "Explanation": "B2B integration gives outside accounts a managed identity that lifecycle controls can act on.",
+      "Reference": null
+    },
+    {
+      "ControlId": "SPO-5.4",
+      "Relationship": "SupportingGovernance",
+      "Scope": "SharePoint: guests re-sharing",
+      "Explanation": "Keeping guests from sharing what they do not own stops access from spreading beyond the original grant.",
+      "Reference": null
+    },
+    {
+      "ControlId": "AAD-4.1",
+      "Relationship": "SupportingGovernance",
+      "Scope": "Microsoft Entra: guest invitations",
+      "Explanation": "Who may invite guests decides how outside accounts enter the directory.",
+      "Reference": null
+    },
+    {
+      "ControlId": "PVW-1.3",
+      "Relationship": "SupportingGovernance",
+      "Scope": "Microsoft Purview DLP: policy active",
+      "Explanation": "An enforced DLP policy is the precondition for the Copilot-specific DLP control.",
+      "Reference": null
+    },
+    {
+      "ControlId": "AAD-6.1",
+      "Relationship": "General",
+      "Scope": "Microsoft Entra: user app registration",
+      "Explanation": "Governs every application; this tool does not classify applications as AI.",
+      "Reference": null
+    },
+    {
+      "ControlId": "AAD-6.2",
+      "Relationship": "General",
+      "Scope": "Microsoft Entra: user consent to applications",
+      "Explanation": "Governs every application; this tool does not classify applications as AI.",
+      "Reference": null
+    },
+    {
+      "ControlId": "AAD-6.3",
+      "Relationship": "General",
+      "Scope": "Microsoft Entra: admin consent workflow",
+      "Explanation": "Governs every application; this tool does not classify applications as AI.",
+      "Reference": null
+    },
+    {
+      "ControlId": "AAD-12.4",
+      "Relationship": "General",
+      "Scope": "Microsoft Entra: tenant-wide delegated consents",
+      "Explanation": "Lists applications any account can act through; this tool does not classify them as AI.",
+      "Reference": null
+    },
+    {
+      "ControlId": "AAD-15.1",
+      "Relationship": "General",
+      "Scope": "Microsoft Entra: application permissions that can take over the tenant",
+      "Explanation": "An application permission is exercised with no signed-in user; the tool does not classify the holder as AI.",
+      "Reference": null
+    },
+    {
+      "ControlId": "AAD-15.2",
+      "Relationship": "General",
+      "Scope": "Microsoft Entra: application permissions over tenant-wide data",
+      "Explanation": "Lists applications that can read tenant-wide data without a user; the tool does not classify them as AI.",
+      "Reference": null
+    },
+    {
+      "ControlId": "DEF-4.3",
+      "Relationship": "General",
+      "Scope": "Defender: risky OAuth application alerts",
+      "Explanation": "Alerts on risky application consents, whatever the application.",
+      "Reference": null
+    },
+    {
+      "ControlId": "TMS-2.2",
+      "Relationship": "General",
+      "Scope": "Teams: unverified app publishers",
+      "Explanation": "Governs Teams apps from unverified publishers, whatever the app.",
+      "Reference": null
+    }
   ],
   "observations": [
-    { "ControlId": "PPL-3.3", "Why": "The share of enabled member accounts holding a Copilot seat is a licensing observation. It is never counted as a safeguard: assignments are not usage, and a smaller share is not a protection." }
+    {
+      "ControlId": "PPL-3.3",
+      "Why": "The share of enabled member accounts holding a Copilot seat is a licensing observation. It is never counted as a safeguard: assignments are not usage, and a smaller share is not a protection."
+    }
   ],
   "organizational": [
-    { "Id": "approved-tools", "Area": "Approved AI tools and business uses", "Question": "Which AI tools and which uses of them are approved, and who decided.", "EvidenceType": "Documentation or interview", "SuggestedRoles": [ "Business owner", "Security/IT administrator" ] },
-    { "Id": "sensitive-information", "Area": "Sensitive-information handling", "Question": "What information may not be entered into an AI tool, and how that rule is made known.", "EvidenceType": "Documentation", "SuggestedRoles": [ "Data owner", "Privacy/legal adviser" ], "GeneralWording": "The rule for confidential and personal information. If your organization handles regulated data (for example electronic protected health information), state the rule for it separately.", "HipaaWording": "The rule for electronic protected health information (ePHI) and other confidential information. This item reflects the HIPAA option selected for this review; the review does not assess HIPAA compliance." },
-    { "Id": "human-review", "Area": "Human review of AI outputs", "Question": "Which AI outputs a person checks before they are relied on or sent outside the organization.", "EvidenceType": "Documentation or interview", "SuggestedRoles": [ "Business owner" ] },
-    { "Id": "guidance-accountability", "Area": "Guidance and accountability", "Question": "What employees have been told about AI use, and who answers for the program.", "EvidenceType": "Documentation or interview", "SuggestedRoles": [ "Business owner", "Security/IT administrator" ] },
-    { "Id": "vendor-terms", "Area": "Vendor terms and contractual review", "Question": "Which AI services' terms were reviewed, by whom, and whether any agreement covers the data they process.", "EvidenceType": "Documentation (contracts, terms, any business associate or data processing agreement)", "SuggestedRoles": [ "Privacy/legal adviser", "Business owner" ] }
+    {
+      "Id": "approved-tools",
+      "Area": "Approved AI tools and business uses",
+      "Question": "Which AI tools and which uses of them are approved, and who decided.",
+      "EvidenceType": "Documentation or interview",
+      "SuggestedRoles": [
+        "Business owner",
+        "Security/IT administrator"
+      ]
+    },
+    {
+      "Id": "sensitive-information",
+      "Area": "Sensitive-information handling",
+      "Question": "What information may not be entered into an AI tool, and how that rule is made known.",
+      "EvidenceType": "Documentation",
+      "SuggestedRoles": [
+        "Data owner",
+        "Privacy/legal adviser"
+      ],
+      "GeneralWording": "The rule for confidential and personal information. If your organization handles regulated data (for example electronic protected health information), state the rule for it separately.",
+      "HipaaWording": "The rule for electronic protected health information (ePHI) and other confidential information. This item reflects the HIPAA option selected for this review; the review does not assess HIPAA compliance."
+    },
+    {
+      "Id": "human-review",
+      "Area": "Human review of AI outputs",
+      "Question": "Which AI outputs a person checks before they are relied on or sent outside the organization.",
+      "EvidenceType": "Documentation or interview",
+      "SuggestedRoles": [
+        "Business owner"
+      ]
+    },
+    {
+      "Id": "guidance-accountability",
+      "Area": "Guidance and accountability",
+      "Question": "What employees have been told about AI use, and who answers for the program.",
+      "EvidenceType": "Documentation or interview",
+      "SuggestedRoles": [
+        "Business owner",
+        "Security/IT administrator"
+      ]
+    },
+    {
+      "Id": "vendor-terms",
+      "Area": "Vendor terms and contractual review",
+      "Question": "Which AI services' terms were reviewed, by whom, and whether any agreement covers the data they process.",
+      "EvidenceType": "Documentation (contracts, terms, any business associate or data processing agreement)",
+      "SuggestedRoles": [
+        "Privacy/legal adviser",
+        "Business owner"
+      ]
+    }
   ],
   "vendorFacts": [
-    { "Id": "copilot-permissions", "Statement": "Microsoft documents that Microsoft Copilot only surfaces organizational data to which individual users have at least view permissions, and that this includes permissions given to users outside the organization.", "Source": { "Title": "Data, Privacy, and Security for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy", "Retrieved": "2026-11-10" } },
-    { "Id": "oversharing", "Statement": "Microsoft documents that Copilot respects existing SharePoint and OneDrive permissions, that content already overshared can be surfaced to anyone who has access, and that sensitivity labels and DLP help protect individual files.", "Source": { "Title": "Data protection and auditing for Microsoft Copilot", "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing", "Retrieved": "2026-11-10" } },
-    { "Id": "chat-eligibility", "Statement": "Microsoft documents that Microsoft Copilot Chat requires an eligible Microsoft 365 subscription and a Microsoft Entra ID account, and that a Microsoft Copilot license is not required for eligible users.", "Source": { "Title": "Microsoft Copilot requirements", "Url": "https://learn.microsoft.com/copilot/plan/microsoft-copilot-requirements", "Retrieved": "2026-11-10" } },
-    { "Id": "web-queries", "Statement": "Microsoft documents that web search queries generated by Copilot and Copilot Chat are sent to the Bing search service, which operates separately from Microsoft 365 under different data-handling practices, and that agents' own privacy statements and terms of use decide how they handle organizational data.", "Source": { "Title": "Enterprise data protection in Microsoft Copilot and Microsoft Copilot Chat", "Url": "https://learn.microsoft.com/copilot/plan/enterprise-data-protection", "Retrieved": "2026-11-10" } },
-    { "Id": "agent-no-auth", "Statement": "Microsoft documents that a Copilot Studio agent configured with no authentication can be used by any user who has its link, and that which users in the organization can chat with it cannot then be controlled.", "Source": { "Title": "Configure user authentication in Copilot Studio", "Url": "https://learn.microsoft.com/microsoft-copilot-studio/configuration-end-user-authentication", "Retrieved": "2026-11-10" } }
-  ]
+    {
+      "Id": "copilot-permissions",
+      "Statement": "Microsoft documents that Microsoft Copilot only surfaces organizational data to which individual users have at least view permissions, and that this includes permissions given to users outside the organization.",
+      "Source": {
+        "Title": "Data, Privacy, and Security for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/microsoft-365-copilot-privacy",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "Id": "oversharing",
+      "Statement": "Microsoft documents that Copilot respects existing SharePoint and OneDrive permissions, that content already overshared can be surfaced to anyone who has access, and that sensitivity labels and DLP help protect individual files.",
+      "Source": {
+        "Title": "Data protection and auditing for Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/copilot/plan/architecture-data-protection-auditing",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "Id": "chat-eligibility",
+      "Statement": "Microsoft documents that Microsoft Copilot Chat requires an eligible Microsoft 365 subscription and a Microsoft Entra ID account, and that a Microsoft Copilot license is not required for eligible users.",
+      "Source": {
+        "Title": "Microsoft Copilot requirements",
+        "Url": "https://learn.microsoft.com/copilot/plan/microsoft-copilot-requirements",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "Id": "web-queries",
+      "Statement": "Microsoft documents that web search queries generated by Copilot and Copilot Chat are sent to the Bing search service, which operates separately from Microsoft 365 under different data-handling practices, and that agents' own privacy statements and terms of use decide how they handle organizational data.",
+      "Source": {
+        "Title": "Enterprise data protection in Microsoft Copilot and Microsoft Copilot Chat",
+        "Url": "https://learn.microsoft.com/copilot/plan/enterprise-data-protection",
+        "Retrieved": "2026-11-10"
+      }
+    },
+    {
+      "Id": "agent-no-auth",
+      "Statement": "Microsoft documents that a Copilot Studio agent configured with no authentication can be used by any user who has its link, and that which users in the organization can chat with it cannot then be controlled.",
+      "Source": {
+        "Title": "Configure user authentication in Copilot Studio",
+        "Url": "https://learn.microsoft.com/microsoft-copilot-studio/configuration-end-user-authentication",
+        "Retrieved": "2026-11-10"
+      }
+    }
+  ],
+  "readiness": {
+    "basis": "The gate follows Microsoft's guidance to verify each protection before assigning Copilot licenses. Which controls block is the practice's approved standard (Config/tp-standards.json, CopilotReadinessBlockers), not Microsoft's wording.",
+    "sources": [
+      {
+        "Title": "Apply principles of Zero Trust to Microsoft Copilot",
+        "Url": "https://learn.microsoft.com/security/zero-trust/copilots/zero-trust-microsoft-365-copilot",
+        "Retrieved": "2026-11-11"
+      },
+      {
+        "Title": "Secure and govern Microsoft Copilot: Foundational deployment guidance",
+        "Url": "https://learn.microsoft.com/copilot/plan/secure-govern-copilot-foundational-deployment-guidance",
+        "Retrieved": "2026-11-11"
+      },
+      {
+        "Title": "Copilot controls security and governance",
+        "Url": "https://learn.microsoft.com/copilot/implement/copilot-controls-security-governance",
+        "Retrieved": "2026-11-11"
+      },
+      {
+        "Title": "Microsoft Copilot requirements",
+        "Url": "https://learn.microsoft.com/copilot/plan/microsoft-copilot-requirements",
+        "Retrieved": "2026-11-11"
+      }
+    ],
+    "blockerReasons": {
+      "AAD-1.2": "Without multifactor authentication, a stolen password gives an attacker everything the user can reach, at Copilot's search speed.",
+      "AAD-1.1": "Legacy authentication protocols cannot perform multifactor authentication, so they bypass it.",
+      "SPO-1.1": "Broad external sharing widens what is exposed; Copilot surfaces whatever an account can open.",
+      "SPO-1.2": "When new links default to anyone-with-the-link, content is overshared without anyone deciding to.",
+      "AAD-6.2": "Unrestricted user consent lets any user grant an application access to organizational data.",
+      "AAD-15.1": "An application holding tenant-takeover permissions reaches everything with no signed-in user.",
+      "PVW-1.1": "Without the unified audit log there is no record of what Copilot was asked or what it referenced.",
+      "PPL-3.5": "Copilot interaction auditing is the record an investigation of AI use would need.",
+      "PPL-4.1": "An agent open to everyone or to any tenant answers people the organization never approved.",
+      "PPL-4.2": "An agent without user authentication answers anyone who can reach it."
+    },
+    "notChecked": [
+      {
+        "Id": "internal-oversharing",
+        "Title": "Internal oversharing of sites and files",
+        "Why": "Copilot returns whatever the signed-in user can already open. This assessment reads tenant-level sharing settings; it does not read which sites and files are shared with whom, including content shared with everyone in the organization.",
+        "Reference": {
+          "Title": "Secure and govern Microsoft Copilot: Foundational deployment guidance",
+          "Url": "https://learn.microsoft.com/copilot/plan/secure-govern-copilot-foundational-deployment-guidance",
+          "Retrieved": "2026-11-11"
+        }
+      },
+      {
+        "Id": "restricted-content-discovery",
+        "Title": "Restricted Content Discovery and Restricted SharePoint Search",
+        "Why": "Microsoft's interim controls that keep named sites out of Copilot are not read.",
+        "Reference": {
+          "Title": "Apply principles of Zero Trust to Microsoft Copilot",
+          "Url": "https://learn.microsoft.com/security/zero-trust/copilots/zero-trust-microsoft-365-copilot",
+          "Retrieved": "2026-11-11"
+        }
+      },
+      {
+        "Id": "dspm-for-ai",
+        "Title": "Microsoft Purview Data Security Posture Management for AI",
+        "Why": "The data risk assessment and its recommendations are not read.",
+        "Reference": {
+          "Title": "Copilot controls security and governance",
+          "Url": "https://learn.microsoft.com/copilot/implement/copilot-controls-security-governance",
+          "Retrieved": "2026-11-11"
+        }
+      },
+      {
+        "Id": "copilot-web-search",
+        "Title": "Copilot web search setting",
+        "Why": "Whether Copilot may send queries to web search is an administrative setting this assessment does not read.",
+        "Reference": {
+          "Title": "Microsoft Copilot requirements",
+          "Url": "https://learn.microsoft.com/copilot/plan/microsoft-copilot-requirements",
+          "Retrieved": "2026-11-11"
+        }
+      },
+      {
+        "Id": "copilot-retention",
+        "Title": "Retention for Copilot interactions",
+        "Why": "Whether a retention policy covers Copilot prompts and responses is not read.",
+        "Reference": {
+          "Title": "Copilot controls security and governance",
+          "Url": "https://learn.microsoft.com/copilot/implement/copilot-controls-security-governance",
+          "Retrieved": "2026-11-11"
+        }
+      }
+    ],
+    "userNotChecked": [
+      {
+        "Id": "user-reach",
+        "Title": "What this account can reach",
+        "Why": "Group memberships, site permissions and mailbox delegations are not read per account, so the content Copilot could surface for this person is not established."
+      },
+      {
+        "Id": "user-apps",
+        "Title": "Microsoft 365 Apps, operating system and network",
+        "Why": "The installed apps, the device's operating system version and the network path to Copilot are outside this assessment."
+      },
+      {
+        "Id": "user-onedrive",
+        "Title": "OneDrive provisioned",
+        "Why": "Some Copilot features need the user's OneDrive; whether it is provisioned is not read per account."
+      }
+    ]
+  }
 }

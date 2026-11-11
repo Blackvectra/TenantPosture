@@ -219,6 +219,7 @@
         'Publish-TPAiUseReview',
         'Read-TPAiUseFacts',
         'Get-TPAiUseReviewScope',
+        'Read-TPAiUseUserFacts',
         'ConvertTo-TPPdf',
         'Get-TPModuleHealth',
         'Repair-TPModuleHealth',
