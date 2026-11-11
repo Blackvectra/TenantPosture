@@ -41,6 +41,7 @@ Four assessment entry points, and standalone offline tools that connect to nothi
 | `New-TPFleetDashboard.ps1` | **Offline, internal.** The fleet view for an MSP: every client's latest full run (score and maturity as recorded), trend, open Critical/High, baseline evidence coverage, what changed since the previous full run, and who is current, aging, overdue or never assessed. HTML, Markdown and a one-row-per-client CSV; `-Anonymize` labels clients Client A, B, .... See [MSP deliverables](#msp-deliverables-fleet-dashboard-proof-of-fix-onboarding-report) |
 | `New-TPRemediationProof.ps1` | **Offline, client-facing.** A proof-of-fix certificate from two results files of one tenant: each re-checked control's state before and after, with a verdict, both run times, tool versions and the files' SHA-256. Also `Invoke-TPAssessment.ps1 -ProofAgainst <before results>` |
 | `New-TPHipaaReport.ps1` | **Offline, client-facing.** The HIPAA Security Rule report as HTML and PDF from a saved full-run results file: what was verified in Microsoft 365, what needs attention, what could not be checked, and the documentation checklist. `-ClientName`, `-PreparedBy`, `-Profile`, `-NoPdf`. See [Client-facing HIPAA report](#client-facing-hipaa-report-pdf) |
+| `New-TPAiUseReview.ps1` | **Offline, client-facing.** The AI use readiness review as HTML (and PDF with `-Pdf`) from a saved full-run results file: what the assessment observed about Microsoft Copilot seats and Copilot Studio agents, which recorded settings support AI use of the tenant's data, which need attention, what the organization itself has to decide and record, and the next steps by what each needs. A Copilot deployment gate over the approved blocker controls (not ready / no blockers found in the controls checked / cannot be determined), and with `-User` what each named account still needs. No score. `-ClientName`, `-PreparedBy`, `-Profile`, `-HIPAA` (ePHI wording only), `-User`, `-Pdf`. See [AI use readiness review](#ai-use-readiness-review-client-facing) and [`docs/TP-AI-USE-REVIEW.md`](docs/TP-AI-USE-REVIEW.md) |
 | `Compare-TPTenantBaseline.ps1` | **Offline, internal.** Compares two tenants (a prospect and an existing client, say) against the NRG Security Baseline from two `-results.json` files. Any tier; only controls required at both are compared. Markdown, HTML and CSV; `-Anonymize` labels the tenants A and B. See [`docs/TP-TENANT-COMPARISON.md`](docs/TP-TENANT-COMPARISON.md) |
 
 ---
@@ -396,9 +397,10 @@ Invoke-TPBatchAssessment.ps1     ← GDAP batch runner (one auth, all tenants)
 Compare-TPTenantBaseline.ps1     ← Offline two-tenant baseline comparison (connects to nothing)
 New-TPFleetDashboard.ps1         ← Offline fleet dashboard across every client's saved runs (connects to nothing)
 New-TPRemediationProof.ps1       ← Offline proof-of-fix certificate from two runs of one tenant (connects to nothing)
+New-TPAiUseReview.ps1            ← Offline client-facing AI use readiness review from one full run (connects to nothing)
 Start-TPMcpServer.ps1            ← Local read-only MCP server over saved results (connects to nothing)
 TenantPosture.psm1               ← Module loader (recursive dot-source, path traversal check)
-TenantPosture.psd1               ← Module manifest (509 exports, dependency declarations)
+TenantPosture.psd1               ← Module manifest (514 exports, dependency declarations)
 
 Lib/                              ← Shared infrastructure
   Add-TPFinding.ps1              State management (findings, exceptions, coverage, raw data)
@@ -447,7 +449,7 @@ Config/
   schema/                         JSON Schemas for controls.json + clients.json (CI-enforced)
   framework-baselines/            Authoritative SCuBA (ScubaGear v2.0.0) + CIS Controls v8.1 ID lists (CI-enforced)
 
-Testing/                          146 Pester suites — the FULL suite gates every PR
+Testing/                          147 Pester suites — the FULL suite gates every PR
   TP.Security.Tests.ps1          OWASP/ASVS static + runtime invariants
   TP.FrameworkAccuracy.Tests.ps1 Framework citations vs authoritative baselines
   TP.GraphRequest.Tests.ps1      Graph response shape (StrictMode paging regression guard)
@@ -575,6 +577,28 @@ A report a healthcare client can keep and forward: how their Microsoft 365 envir
 Every one of the rule's 63 standards and implementation specifications lands in one group: **Verified in Microsoft 365** (every supporting setting the tool checks was in place), **Partly verified** (a standard's own checks passed, some of its specifications are not yet verified), **Needs attention** (a supporting setting is missing or partly in place, with severity; the summary lists the recommended next steps), **Not verified in this review** (the checks could not run), and **Your documentation** (a checklist of what Microsoft 365 cannot show: the risk analysis, policies, business associate agreements, training, contingency plans). Page one says what it is not before any number: not a HIPAA risk analysis and not a compliance determination; it supports the client's HIPAA program for the parts Microsoft 365 controls. Nothing in it says "compliant". It carries no finding detail, no remediation commands and no account names. A partial or quick run is refused.
 
 The PDF is printed by the Edge or Chrome already on the workstation, headless, with a throwaway profile and no network, and saved with the same owner-only permissions as every other output. If printing fails, the HTML is still written and prints to PDF from any browser (Ctrl+P, Save as PDF).
+
+### AI use readiness review (client-facing)
+
+A review a client can keep: how its Microsoft 365 configuration stood in relation to AI use of its data on the assessment date. Written from a saved full-run results file; connects to nothing and re-evaluates nothing.
+
+```powershell
+.\New-TPAiUseReview.ps1 -ResultsPath .\output\contoso-20261110-090000-results.json -ClientName 'Contoso Ltd' -Pdf
+# Healthcare client: the sensitive-information review area uses ePHI wording (wording only; HIPAA is not assessed)
+.\New-TPAiUseReview.ps1 -ResultsPath .\output\clinic-20261110-090000-results.json -ClientName 'Contoso Family Health' -HIPAA
+```
+
+Five sections. **Observed AI-related configuration**: Copilot and Copilot Studio entitlement from the recorded SKUs, the Copilot seat state and every count the collector recorded (purchased seats, consumed units, distinct holders, enabled members), each shown as a complete count, a lower bound ("at least N", from a read that did not finish), not established (a partial read that found none, which is not zero) or not read; the Copilot Studio agent inventory with how many environments were read in full, in part or not at all; and PPL-3.3's seat share as an observation, never a safeguard. **Safeguards in place** and **Items needing attention**: the controls of `Config/ai-use-review.json` (43 of the 253: Copilot and agent settings, the sharing, guest, external-access and DLP settings that decide what an account, and so Copilot acting as that account, can read, the governance settings that support them, and the general application controls) by their recorded verdict, each labeled by how it relates to AI use and, for a shortfall, what changing it does to users. **Organizational decisions and evidence gaps**: five areas only the organization can decide and record (approved tools, sensitive information, human review, guidance and accountability, vendor terms), each "Not recorded in this assessment" with suggested roles; controls the assessor declared covered by a third-party product (declared, not verified); and every reviewed control without a verdict, with the reason the scope classifier gives. **Prioritized next steps** by what each needs: current capabilities, client decisions, additional collection, licensing or a separate project.
+
+**Copilot deployment gate.** Above the five sections the page prints a technical gate over the controls approved as blockers in `Config/tp-standards.json` (`CopilotReadinessBlockers`; ten today: MFA for all users, legacy authentication blocked, external sharing, default sharing link, user app consent, takeover app permissions, the unified audit log, Copilot interaction auditing, and the two Copilot Studio agent access controls). One blocker recorded Gap or Partial reads **Not ready: blockers found**. A blocker with no verdict reads **Cannot be determined** and is never counted as a pass. Every applicable blocker in place reads **No blockers found in the controls checked**. Each outcome sits beside what the assessment does not read, first of all internal oversharing of sites and files, and the gate makes no safety determination. An empty list prints no verdict. The basis is Microsoft's guidance to verify each protection before assigning Copilot licenses; which controls block is the practice's own standard.
+
+**Named accounts (`-User`).** For up to 25 user principal names the page adds what each account needs before a Copilot license is assigned: a member account with sign-in enabled, the assigned base licenses by part number (named for you to confirm against Microsoft's eligible list; the review does not judge eligibility), a Copilot license, multifactor registration, and whether a non-compliant managed device is recorded for it. Each row is met, to add, confirm, not established or not read. What the account can reach is listed as not checked. Without `-User` the page names no account.
+
+```powershell
+.\New-TPAiUseReview.ps1 -ResultsPath .\output\contoso-20261110-090000-results.json -ClientName 'Contoso Ltd' -User pat@contoso.com
+```
+
+Page one says what it is not before any number: not an AI risk assessment, not a compliance determination, not a statement that AI use is safe, approved or governed, and not a measure of use. It has no score. The model and the page carry no finding detail, account, object id, agent or environment name, error text or tenant identifier; the facts are read through an allowlist. A partial (`-ControlId`) or quick (`-Quick`) run, or an incident-response output, is refused (exit 4); a full run whose reads failed is written with every gap visible. Vendor statements carry the date they were read from Microsoft Learn, kept apart from the assessment date and the catalog version. The PDF is optional and uses the same headless printer as the HIPAA report; when it cannot be printed the HTML is still written and the console says "HTML generated; PDF unavailable".
 
 ### Change impact: what fixing it would break — `-ChangeImpact`
 
@@ -742,7 +766,7 @@ This tool is hardened against the threats it assesses. Every production file has
 
 **controls.json content validation** — before any evaluator runs, the loader validates every control against allowlists for Severity, Workload, Category, ControlId format, prefix/workload consistency, injection patterns in Remediation, and duplicate IDs. Fail-closed: any violation throws.
 
-The full Pester suite — **146 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
+The full Pester suite — **147 suites** — covers all of the above plus framework-citation accuracy, docs-freshness enforcement, and an end-to-end HTML-report render, and gates every pull request in CI.
 
 ```powershell
 # Run the full test suite through the same gate CI uses. The gate parses every
@@ -800,7 +824,7 @@ Nine GitHub Actions workflows cover the repository. All run automatically on pus
 
 | Workflow | What it does |
 |---|---|
-| **CI** | Full Pester suite (146 suites) · PSScriptAnalyzer with SARIF upload · PowerShell security rules and InjectionHunter (any unreviewed finding fails) · CI modules installed by exact version and SHA-256 · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
+| **CI** | Full Pester suite (147 suites) · PSScriptAnalyzer with SARIF upload · PowerShell security rules and InjectionHunter (any unreviewed finding fails) · CI modules installed by exact version and SHA-256 · Export List Sync (psd1 ↔ psm1) · module-manifest validation · JSON-Schema enforcement of `controls.json` + `clients.json` |
 | **Secret Scan** | Gitleaks (full history) + TruffleHog (live-verified secrets) — both SHA-pinned; weekly scheduled sweep |
 | **CodeQL** | Scans the Actions workflow YAML for supply-chain weaknesses (PowerShell isn't CodeQL-supported; PSSA covers it) |
 | **Dependency Review** | Flags vulnerable dependency changes on PRs |
@@ -831,4 +855,4 @@ You may use, modify and redistribute it under that license, including commercial
 
 ---
 
-*TenantPosture v4.14.3 · 253 posture controls + EMAIL/SIGNIN IR heuristics · 509 exported functions · full Pester suite (146 suites) gating CI*
+*TenantPosture v4.14.3 · 253 posture controls + EMAIL/SIGNIN IR heuristics · 514 exported functions · full Pester suite (147 suites) gating CI*

@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- **[Client] AI use readiness review: Copilot deployment gate and named accounts (`Lib/Get-TPAiUseReview.ps1`,
+  `Config/ai-use-review.json` v1.1, `Config/tp-standards.json`).** The review now prints a technical gate over the
+  controls approved as blockers (`CopilotReadinessBlockers`, ten controls proposed 2026-11-11 for the owner to confirm):
+  a blocker recorded Gap or Partial is "Not ready: blockers found", a blocker with no verdict (no finding, an errored
+  check, a failed collector, an unlicensed setting) is "Cannot be determined" and never a pass, and every applicable
+  blocker in place is "No blockers found in the controls checked". Each outcome is printed beside what the assessment
+  does not read (internal oversharing first), with Microsoft's Zero Trust and deployment guidance as the basis; nothing
+  says safe, and an empty list prints no verdict. `New-TPAiUseReview.ps1 -User <upn>` adds, for up to 25 named accounts,
+  what each needs before a Copilot license is assigned (account, base licenses by part number for the preparer to
+  confirm, Copilot license, MFA registration, non-compliant managed devices), each as met, to add, confirm, not
+  established or not read; `Read-TPAiUseUserFacts` (one new export) materializes only the named accounts, and without
+  `-User` the page still names nobody.
+- **[Client] AI use readiness review (`New-TPAiUseReview.ps1`, `Config/ai-use-review.json`, `Lib/Get-TPAiUseReview.ps1`,
+  `Publishers/Publish-TPAiUseReview.ps1`).** A client-facing review written offline from one full-run results file: what
+  the assessment observed about Microsoft Copilot entitlement, seats and Copilot Studio agents (every count as a
+  complete count, a lower bound, not established or not read; missing inventory is never zero, and the licensing state
+  comes from `Get-TPCopilotLicensingState` with the older compatibility counts unread), which of 43 catalog controls
+  were recorded in place, which need attention (with the operational impact), which the assessor declared covered by a
+  third-party product, which produced no verdict and why (through `Get-TPAssessmentScope` on the saved file, with a
+  parity test against the live classifier), five organizational review areas the assessment cannot read ("Not recorded
+  in this assessment", suggested roles), and next steps by what each needs. No score; no claim of compliance, safety or
+  approval; no finding detail, account, agent or environment name, error text or tenant identifier (`Read-TPAiUseFacts`
+  is an allowlist over a bounded `JsonDocument`). Partial, quick and incident-response files are refused; `-HIPAA`
+  selects ePHI wording only; `-Pdf` prints through the existing headless printer and a failed print keeps the HTML.
+  Four exports added (`Get-TPAiUseReview`, `Publish-TPAiUseReview`, `Read-TPAiUseFacts`, `Get-TPAiUseReviewScope`).
+  `TP.AiUseReview.Tests.ps1` pins all of this; runbook `docs/TP-AI-USE-REVIEW.md`.
 - **[Fix] A failed Copilot license read is no longer "no Copilot" (D1, `Collectors/AI/Invoke-TPCollectM365Copilot.ps1`,
   `Lib/Get-TPCopilotLicensingState.ps1`, `Evaluators/Test-TPControlCopilot.ps1`).** The collector started
   `CopilotLicensedUserCount` at 0 and kept it when the `subscribedSkus` read failed, so PPL-3.1, PPL-3.2, PPL-3.3

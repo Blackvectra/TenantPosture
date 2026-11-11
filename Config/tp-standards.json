@@ -100,5 +100,20 @@
   "CopilotStudioDormantDays": {
     "_help": "PPL-4.10. A single whole number of days (1 to 3650): a published Copilot Studio agent whose record was not modified for longer is reported as dormant, for example [\"180\"]. Empty: no threshold is approved, so dormancy is not assessed. Maester v3.0.0 uses 180 days; that is Maester's value, not an approved NRG one.",
     "Values": []
+  },
+  "CopilotReadinessBlockers": {
+    "_help": "AI use readiness review, Copilot deployment gate. Control ids whose Gap or Partial reads 'Not ready: blockers found' and whose missing verdict reads 'Cannot be determined'. Proposed 2026-11-11 from Microsoft's Zero Trust guidance for Copilot and its deployment blueprint, and built at the owner's instruction of 2026-11-11; the owner confirms or edits this list. Empty: no gate is approved and the review prints no verdict.",
+    "Values": [
+      "AAD-1.2",
+      "AAD-1.1",
+      "SPO-1.1",
+      "SPO-1.2",
+      "AAD-6.2",
+      "AAD-15.1",
+      "PVW-1.1",
+      "PPL-3.5",
+      "PPL-4.1",
+      "PPL-4.2"
+    ]
   }
 }
