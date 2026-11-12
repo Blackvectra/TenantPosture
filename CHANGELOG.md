@@ -4,7 +4,7 @@
 
 - **[Client] AI use readiness review: the Copilot gate needs a recorded approval and complete evidence
   (`Lib/Get-TPStandards.ps1`, `Lib/Get-TPAiUseReview.ps1`, `Config/tp-standards.json`, `Config/ai-use-review.json`).**
-  `CopilotReadinessBlockers` now gates only when its node records `ApprovedBy` and a `yyyy-MM-dd` `ApprovedDate`, like
+  `CopilotReadinessBlockers` now gates only when its node records `ApprovedBy` and a `yyyy-MM-dd` `ApprovedDate` that is a real date no later than today, like
   the Intune baselines; a populated list without one is a proposal (`CopilotReadinessBlockersProposed`), and the page
   prints no verdict instead of calling it the practice's approved standard. The no-verdict summary names the cause
   (proposed, standards file unreadable, or no list). A Satisfied control is no longer a pass when any of several

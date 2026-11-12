@@ -102,7 +102,7 @@
     "Values": []
   },
   "CopilotReadinessBlockers": {
-    "_help": "AI use readiness review, Copilot deployment gate. Control ids whose Gap or Partial reads 'Not ready: blockers found' and whose missing verdict reads 'Cannot be determined'. Proposed 2026-11-11 from Microsoft's Zero Trust guidance for Copilot and its deployment blueprint, and built at the owner's instruction of 2026-11-11; the owner confirms or edits this list. The list gates only once ApprovedBy and ApprovedDate (yyyy-MM-dd) are recorded below; until then it is a proposal and the review prints no verdict. Empty: no gate is approved and the review prints no verdict.",
+    "_help": "AI use readiness review, Copilot deployment gate. Control ids whose Gap or Partial reads 'Not ready: blockers found' and whose missing verdict reads 'Cannot be determined'. Proposed 2026-11-11 from Microsoft's Zero Trust guidance for Copilot and its deployment blueprint, and built at the owner's instruction of 2026-11-11; the owner confirms or edits this list. The list gates only once ApprovedBy and ApprovedDate (yyyy-MM-dd, a real date no later than today) are recorded below; until then it is a proposal and the review prints no verdict. Empty: no gate is approved and the review prints no verdict.",
     "Values": [
       "AAD-1.2",
       "AAD-1.1",

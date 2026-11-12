@@ -826,6 +826,11 @@ Describe 'AI use review: Copilot deployment gate' {
         @($prop.CopilotReadinessBlockersProposed) | Should -Be @('SPO-1.1')
         (& $w @{ Values = @('SPO-1.1'); ApprovedBy = 'Owner'; ApprovedDate = '11/12/2026' }).CopilotReadinessBlockersState | Should -Be 'Proposed'
         (& $w @{ Values = @('SPO-1.1'); ApprovedBy = ''; ApprovedDate = '2026-11-12' }).CopilotReadinessBlockersState | Should -Be 'Proposed'
+        # A future or impossible date is not an approval; today's date is.
+        (& $w @{ Values = @('SPO-1.1'); ApprovedBy = 'Owner'; ApprovedDate = '2999-01-01' }).CopilotReadinessBlockersState | Should -Be 'Proposed'
+        (& $w @{ Values = @('SPO-1.1'); ApprovedBy = 'Owner'; ApprovedDate = [datetime]::UtcNow.AddDays(2).ToString('yyyy-MM-dd') }).CopilotReadinessBlockersState | Should -Be 'Proposed'
+        (& $w @{ Values = @('SPO-1.1'); ApprovedBy = 'Owner'; ApprovedDate = '2026-02-30' }).CopilotReadinessBlockersState | Should -Be 'Proposed'
+        (& $w @{ Values = @('SPO-1.1'); ApprovedBy = 'Owner'; ApprovedDate = [datetime]::UtcNow.ToString('yyyy-MM-dd') }).CopilotReadinessBlockersState | Should -Be 'Approved'
         $ok = & $w @{ Values = @('SPO-1.1'); ApprovedBy = 'Owner'; ApprovedDate = '2026-11-12' }
         $ok.CopilotReadinessBlockersState | Should -Be 'Approved'
         @($ok.CopilotReadinessBlockers) | Should -Be @('SPO-1.1')

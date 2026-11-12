@@ -54,7 +54,9 @@ function Get-TPStandards {
         $by = [string](Get-TPObjectField -Item $gNode -Key 'ApprovedBy' -Default '')
         $on = [string](Get-TPObjectField -Item $gNode -Key 'ApprovedDate' -Default '')
         $d = [datetime]::MinValue
-        $dateOk = [datetime]::TryParseExact($on.Trim(), 'yyyy-MM-dd', [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$d)
+        # A real date no later than today: an approval dated in the future has not happened.
+        $dateOk = [datetime]::TryParseExact($on.Trim(), 'yyyy-MM-dd', [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$d) -and
+            $d.Date -le [datetime]::UtcNow.Date
         if ([string]::IsNullOrWhiteSpace($by) -or -not $dateOk) {
             $std.CopilotReadinessBlockersProposed = @($std.CopilotReadinessBlockers)
             $std.CopilotReadinessBlockers = @()
