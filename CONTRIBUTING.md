@@ -1,21 +1,18 @@
-# Contributing
+# Maintainer guide
 
 TenantPosture is maintained by NextLayerSec LLC and released under the
-[Apache License, Version 2.0](LICENSE). Contributions from outside the
-maintaining team are welcome: new controls, corrections to what a control
-checks, framework citations, documentation, tests and fixes.
+[Apache License, Version 2.0](LICENSE). This guide is for the project's
+maintainers: how to set up, which checks to run, and how to add a control.
 
-Acceptance is at the maintainers' discretion. A pull request may be declined,
-or asked to change, for any reason, including scope, maintenance cost or fit
-with the project's direction. Opening one does not create an obligation to
-merge it.
+The project is not accepting outside contributions at this time, and no
+process for them is in place. That may change later; if it does, the process
+will be described here.
 
-A contribution must not include tenant data, client names, credentials,
-results files or vendor documents. That applies to code, tests, documentation,
-issues, discussions, screenshots and commit messages alike.
+Nothing committed to the repository may include tenant data, client names,
+credentials, results files or vendor documents. That applies to code, tests,
+documentation, issues, discussions, screenshots and commit messages alike.
 
-Please read the [Code of Conduct](CODE_OF_CONDUCT.md) first. For ideas on where
-to start, see the [roadmap](docs/ROADMAP.md).
+For planned and candidate work, see the [roadmap](docs/ROADMAP.md).
 
 **Before opening a pull request**, review:
 
@@ -103,9 +100,8 @@ Synthetic tests prove the logic; they do not prove the API returns the shape
 the collector expects. Say in the pull request that the change has not been run
 against a real tenant.
 
-**Validation against a real tenant is done by the maintainers only**, unless a
-maintainer has explicitly arranged otherwise with you beforehand. Do not run a
-contribution against a tenant you do not own or administer, and do not post
+**Validation against a real tenant is done by the maintainers only.** Do not
+run a change against a tenant you do not own or administer, and do not post
 output from any tenant.
 
 ## Adding a framework citation
@@ -176,16 +172,9 @@ Use the `security:` prefix for any fix that closes a vulnerability. The
 ## Review
 
 Every pull request is reviewed by a maintainer listed in
-[`.github/CODEOWNERS`](.github/CODEOWNERS) and must pass CI. Expect questions
-about what a check reads and what happens when the read fails; those two
-questions catch most defects in this codebase. Small, single-purpose pull
-requests are reviewed fastest.
-
-## Questions
-
-Use [Discussions](https://github.com/Blackvectra/TenantPosture/discussions) for
-"how do I" questions and design ideas. Use an issue for a bug or a specific
-request.
+[`.github/CODEOWNERS`](.github/CODEOWNERS) and must pass CI. The two questions
+that catch most defects in this codebase: what does the check read, and what
+happens when the read fails. Keep pull requests small and single-purpose.
 
 ## Reporting a security vulnerability
 
@@ -194,9 +183,6 @@ Use the [private security advisory flow](https://github.com/Blackvectra/TenantPo
 or email `support@nextlayersec.dev`. See [`SECURITY.md`](SECURITY.md) for the
 coordinated-disclosure policy and response times.
 
-## License of contributions
+## License
 
-The project is licensed under the [Apache License, Version 2.0](LICENSE). By
-opening a pull request you agree that your contribution is licensed under the
-same terms, as section 5 of that license provides. No separate contributor
-agreement is required.
+The project is licensed under the [Apache License, Version 2.0](LICENSE).

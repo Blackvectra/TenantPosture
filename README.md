@@ -847,9 +847,9 @@ docker build -f .oss-scanner/Dockerfile -t tenantposture .
 docker run --rm --network none tenantposture pwsh -NoProfile -Command 'Invoke-Pester -Path ./Testing, ./Email-IR/Testing'
 ```
 
-## Contributing
+## Maintaining
 
-Contributions are welcome. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) for the ground rules, setup and checks, the [roadmap](docs/ROADMAP.md) for where help is wanted, and the [Code of Conduct](CODE_OF_CONDUCT.md). Report a security vulnerability privately, as [`SECURITY.md`](SECURITY.md) describes.
+The project is not accepting outside contributions at this time. [`CONTRIBUTING.md`](CONTRIBUTING.md) is the maintainer guide (setup, checks, adding a control), and the [roadmap](docs/ROADMAP.md) lists candidate work. Report a security vulnerability privately, as [`SECURITY.md`](SECURITY.md) describes.
 
 ## License
 
