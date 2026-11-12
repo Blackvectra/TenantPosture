@@ -480,7 +480,7 @@
     }
   ],
   "readiness": {
-    "basis": "The gate follows Microsoft's guidance to verify each protection before assigning Copilot licenses. Which controls block is the practice's approved standard (Config/tp-standards.json, CopilotReadinessBlockers), not Microsoft's wording.",
+    "basis": "The gate follows Microsoft's guidance to verify each protection before assigning Copilot licenses. Which controls block is the practice's own standard, not Microsoft's wording.",
     "sources": [
       {
         "Title": "Apply principles of Zero Trust to Microsoft Copilot",

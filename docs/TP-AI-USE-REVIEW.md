@@ -44,7 +44,7 @@ approved as blockers (`Config/tp-standards.json`, `CopilotReadinessBlockers`):
 | Not ready: blockers found | At least one blocker control was recorded Gap or Partial. Each is listed with why it blocks and what changing it does to users. |
 | Cannot be determined from this assessment | No blocker failed, but at least one produced no verdict (no finding, an errored check, a failed collector, a license not held). A missing verdict is never a pass. |
 | No blockers found in the controls checked | Every blocker that applies to the tenant was recorded in place. An agent control with no agents present does not apply. |
-| No deployment gate is approved | The approved list is empty; no verdict is printed. |
+| No deployment gate is approved | The list is empty, or it has no recorded approval (`ApprovedBy` and `ApprovedDate` in the same node; a real date no later than today). No verdict is printed. |
 
 The gate makes no safety determination. Under every outcome the page lists what
 the assessment does not read and that bears directly on a deployment: internal
@@ -111,8 +111,9 @@ labeled by its relationship to AI use:
 | Supporting governance | Supports that governance (guest lifecycle, external access review, DLP policies). |
 | General | A general application or consent control that also bounds AI integrations. |
 
-A Satisfied finding whose collector did not complete (coverage Failed or
-Skipped) is not a safeguard: it is listed under "Not verified" as a conflict
+A Satisfied finding beside a collector that did not complete (any collector the
+control depends on with coverage Failed, Skipped or not collected, or a
+collector that reported failure) is not a safeguard: it is listed under "Not verified" as a conflict
 between two records.
 
 **3. Items needing attention.** Controls recorded Gap or Partial, AI-specific
@@ -193,6 +194,8 @@ nothing is written. Catalog membership is separate from `controls.json`: the
 - The PDF is printed by the headless browser on the workstation (Edge on
   Windows is the intended printer); printing has been exercised by the tests
   with Playwright's headless shell only.
+- The gate has no age limit: it judges whatever results file it is given, and
+  prints the assessment date. Check the date before relying on it.
 - The gate cannot see internal oversharing, Microsoft's first concern for a
   Copilot deployment. Closing that needs new collection.
 - Not built: an `-AiUseReview` switch on

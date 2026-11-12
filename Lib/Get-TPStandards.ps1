@@ -45,6 +45,18 @@ function Get-TPStandards {
         $vals = Get-TPObjectField -Item $node -Key 'Values' -Default $null
         $std[$k] = @(@($vals) | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { ([string]$_).Trim() })
     }
+    # The Copilot deployment gate's list is a proposal until it carries its own
+    # approval record: an approver and a real date no later than today. The
+    # record is returned beside the list; a populated list alone approves nothing.
+    $gateNode = Get-TPObjectField -Item $j -Key 'CopilotReadinessBlockers' -Default $null
+    $by = ([string](Get-TPObjectField -Item $gateNode -Key 'ApprovedBy' -Default '')).Trim()
+    $on = ([string](Get-TPObjectField -Item $gateNode -Key 'ApprovedDate' -Default '')).Trim()
+    $when = [datetime]::MinValue
+    $dateOk = $on -cmatch '\A\d{4}-\d{2}-\d{2}\z' -and
+        [datetime]::TryParseExact($on, 'yyyy-MM-dd', [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$when) -and
+        $when.Date -le [datetime]::UtcNow.Date
+    $std['CopilotReadinessApproval'] = [ordered]@{ ApprovedBy = $by; ApprovedDate = $on; Approved = [bool]($by -and $dateOk) }
+
     # The DMARC reporting address is the practice's own, so the active profile
     # (DmarcReportingAddresses in Config/branding.psd1 or Config/profiles/
     # <name>.psd1) supplies it when it names one; the shared file ships none.

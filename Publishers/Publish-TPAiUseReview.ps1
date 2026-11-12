@@ -130,6 +130,10 @@ function Publish-TPAiUseReview {
         $gateTone = switch ([string]$gate.Outcome) { 'BlockersFound' { 'bad' } 'NoBlockersInCheckedControls' { 'info' } default { 'warn' } }
         $body = '<div class="tp-banner tp-banner--' + $gateTone + '"><strong>' + (Esc $gate.Label) + '.</strong> ' + (Esc $gate.Summary) + '</div>'
         $body += '<p class="tp-small"><strong>What this gate is.</strong> ' + (Esc $gate.Statement) + ' ' + (Esc $gate.Basis) + '</p>'
+        $appr = Get-TPObjectField -Item $gate -Key 'Approval' -Default $null
+        if ([string]$gate.Outcome -cnotin @('NotConfigured', 'NotApproved') -and [string](Get-TPObjectField -Item $appr -Key 'Source' -Default '') -eq 'Standards') {
+            $body += '<p class="tp-small tp-muted">' + (Esc "Blocker list approved by $($appr.ApprovedBy) on $($appr.ApprovedDate).") + '</p>'
+        }
         $gateRows = {
             param([object[]] $rowsIn, [string] $pillStatus, [string] $pillText, [bool] $withImpact)
             $html = ''
@@ -143,7 +147,7 @@ function Publish-TPAiUseReview {
             }
             return $html
         }
-        if ([string]$gate.Outcome -ne 'NotConfigured') {
+        if ([string]$gate.Outcome -cnotin @('NotConfigured', 'NotApproved')) {
             $body += '<div class="tp-table-wrap"><table class="tp-table"><thead><tr><th>Blocker control</th><th>Result</th><th>What the assessment recorded</th></tr></thead><tbody>'
             $body += & $gateRows $gate.Blockers 'Bad' 'Blocker' $true
             $body += & $gateRows $gate.NotVerified 'Warn' 'No verdict' $false

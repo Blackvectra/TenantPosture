@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **[Fix] AI use readiness review: the Copilot deployment gate needs a recorded approval, and a pass needs its
+  evidence (`Config/tp-standards.json`, `Lib/Get-TPStandards.ps1`, `Lib/Get-TPAiUseReview.ps1`).** The gate treated
+  any populated `CopilotReadinessBlockers` list as approved and the client page called it "the practice's approved
+  standard" while the list was a proposal. The node now carries `ApprovedBy` and `ApprovedDate`; until both are set
+  (a real date no later than today) the review prints "No deployment gate is approved" and no verdict, and an
+  approved gate names the approver and date on the page. Three ways a blocker could pass on missing evidence are
+  closed: a control that depends on two collectors (AAD-1.2) was looked up under the joined name, so a failed
+  collector was never seen; a collector's own `Success = false` was read and never used; and coverage `NotCollected`
+  was not counted. Each is now an evidence conflict (no verdict) for the gate and for the review's safeguards alike.
+  The gate tests read the list from the standards file rather than a hard-coded copy. Not changed: which controls
+  block, whether Partial blocks, and any age limit on a results file; those are the owner's decisions.
 - **[Client] AI use readiness review: Copilot deployment gate and named accounts (`Lib/Get-TPAiUseReview.ps1`,
   `Config/ai-use-review.json` v1.1, `Config/tp-standards.json`).** The review now prints a technical gate over the
   controls approved as blockers (`CopilotReadinessBlockers`, ten controls proposed 2026-11-11 for the owner to confirm):

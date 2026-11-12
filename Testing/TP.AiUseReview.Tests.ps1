@@ -766,53 +766,66 @@ Describe 'AI use review: the standalone script' {
 
 Describe 'AI use review: Copilot deployment gate' {
     BeforeAll {
-        $script:Blockers = @('AAD-1.2', 'AAD-1.1', 'SPO-1.1', 'SPO-1.2', 'AAD-6.2', 'AAD-15.1', 'PVW-1.1', 'PPL-3.5', 'PPL-4.1', 'PPL-4.2')
+        # The list under test is whatever the standards file holds; the owner may edit it.
+        $script:StdFile = Join-Path $script:RepoRoot 'Config' 'tp-standards.json'
+        $script:Blockers = @((Get-TPStandards -Path $script:StdFile).CopilotReadinessBlockers)
+        $script:StdWith = {
+            param([string] $By, [string] $On, [object] $Values = $script:Blockers)
+            $p = Join-Path $script:Tmp ('std-' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.json')
+            (@{ CopilotReadinessBlockers = @{ ApprovedBy = $By; ApprovedDate = $On; Values = @($Values) } } | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath $p -Encoding utf8
+            $p
+        }
+        $script:AllPass = { @(foreach ($id in $script:Blockers) { & $script:Finding $id 'Satisfied' 'x' }) }
         $script:GateModel = {
             param([hashtable] $States, [hashtable] $Buckets = @{}, [object] $Ids = $script:Blockers)
             $f = @(foreach ($id in $script:Blockers) { $st = if ($States.ContainsKey($id)) { $States[$id] } else { 'Satisfied' }; if ($st) { & $script:Finding $id $st 'x' } })
             Get-TPAiUseReview -Findings $f -Metadata (& $script:FullMeta) -Facts (& $script:FactsWith $null) -ScopeBuckets $Buckets -BlockerControlIds $Ids
         }
     }
-    It 'the approved standard names ten controls that all exist, each with a reason' {
-        $std = @((Get-TPStandards).CopilotReadinessBlockers)
-        $std | Should -Be $script:Blockers
+    It 'every id in the standards file is a control with a reason, listed once' {
+        $std = $script:Blockers
+        $std.Count | Should -BeGreaterThan 0
+        @($std | Sort-Object -Unique).Count | Should -Be $std.Count
         foreach ($id in $std) { $script:Defs.ContainsKey($id) | Should -BeTrue; $script:Catalog.Readiness.BlockerReasons[$id] | Should -Not -BeNullOrEmpty -Because $id }
         @($script:Catalog.Readiness.NotChecked | ForEach-Object Id) | Should -Contain 'internal-oversharing'
         foreach ($src in $script:Catalog.Readiness.Sources) { $src.Url | Should -Match '^https://learn\.microsoft\.com/' }
     }
     It 'one shortfall on a blocker is "not ready", whatever else passed' {
-        $m = & $script:GateModel @{ 'SPO-1.2' = 'Partial' }
+        $one = $script:Blockers[0]
+        $m = & $script:GateModel @{ $one = 'Partial' }
         $m.Readiness.Outcome | Should -Be 'BlockersFound'
         $m.Readiness.Label | Should -Be 'Not ready: blockers found'
-        @($m.Readiness.Blockers | ForEach-Object ControlId) | Should -Be @('SPO-1.2')
-        $m.Readiness.Passed.Count | Should -Be 9
-        $m.Readiness.Summary | Should -Match '1 of the 10 blocker control'
+        @($m.Readiness.Blockers | ForEach-Object ControlId) | Should -Be @($one)
+        $m.Readiness.Passed.Count | Should -Be ($script:Blockers.Count - 1)
+        $m.Readiness.Summary | Should -Match "1 of the $($script:Blockers.Count) blocker control"
     }
     It 'a missing verdict is "cannot be determined", never a pass' -ForEach @(
         @{ Label = 'no finding'; State = $null }, @{ Label = 'an errored check'; State = 'Error' }, @{ Label = 'an unclassified not-applicable'; State = 'NotApplicable' }
     ) {
-        $m = & $script:GateModel @{ 'PVW-1.1' = $State }
+        $one = $script:Blockers[-1]
+        $m = & $script:GateModel @{ $one = $State }
         $m.Readiness.Outcome | Should -Be 'NotDetermined'
-        @($m.Readiness.NotVerified | ForEach-Object ControlId) | Should -Be @('PVW-1.1')
+        @($m.Readiness.NotVerified | ForEach-Object ControlId) | Should -Be @($one)
         $m.Readiness.Summary | Should -Match 'never counted as a pass'
     }
     It 'a shortfall beats a missing verdict' {
-        (& $script:GateModel @{ 'PVW-1.1' = $null; 'AAD-1.2' = 'Gap' }).Readiness.Outcome | Should -Be 'BlockersFound'
+        (& $script:GateModel @{ $script:Blockers[-1] = $null; $script:Blockers[0] = 'Gap' }).Readiness.Outcome | Should -Be 'BlockersFound'
     }
     It 'a Satisfied blocker beside a failed collector is no verdict' {
         $f = @(foreach ($id in $script:Blockers) { & $script:Finding $id 'Satisfied' 'x' })
         $facts = & $script:FactsWith $null
-        $facts.Coverage = @{ ($script:Defs['SPO-1.1'].CollectorDependency) = 'Failed' }
+        $facts.Coverage = @{ (@($script:Defs[$script:Blockers[0]].CollectorDependency -split ',')[0].Trim()) = 'Failed' }
         $m = Get-TPAiUseReview -Findings $f -Metadata (& $script:FullMeta) -Facts $facts -ScopeBuckets @{} -BlockerControlIds $script:Blockers
         $m.Readiness.Outcome | Should -Be 'NotDetermined'
         @($m.Readiness.NotVerified | ForEach-Object Reason | Sort-Object -Unique) | Should -Be @('EvidenceConflict')
     }
     It 'every blocker in place reads "no blockers found in the controls checked", beside what is not checked' {
-        $m = & $script:GateModel @{ 'PPL-4.1' = 'NotApplicable'; 'PPL-4.2' = 'NotApplicable' } @{ 'PPL-4.1' = 'NotApplicableToTenant'; 'PPL-4.2' = 'NotApplicableToTenant' }
+        $na = $script:Blockers[-1]
+        $m = & $script:GateModel @{ $na = 'NotApplicable' } @{ $na = 'NotApplicableToTenant' }
         $m.Readiness.Outcome | Should -Be 'NoBlockersInCheckedControls'
         $m.Readiness.Label | Should -Be 'No blockers found in the controls checked'
-        $m.Readiness.DoesNotApply.Count | Should -Be 2
-        $m.Readiness.Passed.Count | Should -Be 8
+        $m.Readiness.DoesNotApply.Count | Should -Be 1
+        $m.Readiness.Passed.Count | Should -Be ($script:Blockers.Count - 1)
         $m.Readiness.Summary | Should -Match 'only the controls checked'
         $m.Readiness.Statement | Should -Match 'makes no safety determination'
         @($m.Readiness.NotChecked).Count | Should -BeGreaterThan 3
@@ -827,12 +840,66 @@ Describe 'AI use review: Copilot deployment gate' {
         $dup = & $script:GateModel @{} @{} @('SPO-1.1', 'spo-1.1', 'SPO-1.1')
         $dup.Readiness.Total | Should -Be 1
     }
+    It 'a populated list with no approval record prints no verdict, whatever the findings say' {
+        $shipped = Get-TPStandards -Path $script:StdFile
+        $shipped.CopilotReadinessApproval.Approved | Should -BeFalse -Because 'the shipped list is a proposal until the owner records an approval'
+        $script:M.Readiness.Outcome | Should -Be 'NotApproved'
+        $script:M.Readiness.Label | Should -Be 'No deployment gate is approved'
+        $script:M.Readiness.ProposedCount | Should -Be $script:Blockers.Count
+        $script:M.Readiness.Total | Should -Be 0
+        $script:Html | Should -Match 'has no recorded approval'
+        $script:Html | Should -Not -Match 'Blocker control</th>|approved standard|approved as blockers'
+        $script:Html | Should -Match 'Internal oversharing of sites and files'
+        foreach ($case in @(@('', ''), @('M. Levorson', ''), @('', '2026-11-01'), @('M. Levorson', 'November 1'), @('M. Levorson', '2999-01-01'), @('M. Levorson', '2026-02-30'))) {
+            $m = Get-TPAiUseReview -Findings (& $script:AllPass) -Metadata (& $script:FullMeta) -Facts (& $script:FactsWith $null) -ScopeBuckets @{} -StandardsPath (& $script:StdWith $case[0] $case[1])
+            $m.Readiness.Outcome | Should -Be 'NotApproved' -Because "approver '$($case[0])', date '$($case[1])'"
+        }
+    }
+    It 'an approver and a real past date approve the list, and the page names both' {
+        $m = Get-TPAiUseReview -Findings (& $script:AllPass) -Metadata (& $script:FullMeta) -Facts (& $script:FactsWith $null) -ScopeBuckets @{} -StandardsPath (& $script:StdWith 'M. Levorson' '2026-11-01')
+        $m.Readiness.Outcome | Should -Be 'NoBlockersInCheckedControls'
+        $m.Readiness.Approval.Source | Should -Be 'Standards'
+        $page = Get-Content -LiteralPath (Publish-TPAiUseReview -Model $m -OutputPath (Join-Path $script:Tmp 'approved.html')).Html -Raw
+        $page | Should -Match 'Blocker list approved by M\. Levorson on 2026-11-01'
+        (Get-TPAiUseReview -Findings (& $script:AllPass) -Metadata (& $script:FullMeta) -Facts (& $script:FactsWith $null) -ScopeBuckets @{} -StandardsPath (& $script:StdWith 'M. Levorson' '2026-11-01' @())).Readiness.Outcome | Should -Be 'NotConfigured'
+        (Get-TPAiUseReview -Findings (& $script:AllPass) -Metadata (& $script:FullMeta) -Facts (& $script:FactsWith $null) -ScopeBuckets @{} -StandardsPath (Join-Path $script:Tmp 'no-such-standards.json')).Readiness.Outcome | Should -Be 'NotConfigured'
+    }
+    It 'a pass does not stand when ANY collector the control depends on failed' {
+        $multi = @($script:Defs.Values | Where-Object { $_.CollectorDependency -match ',' } | Select-Object -First 1)[0]
+        $multi | Should -Not -BeNullOrEmpty -Because 'controls.json has controls that depend on two collectors'
+        $deps = @($multi.CollectorDependency -split ',' | ForEach-Object { $_.Trim() })
+        foreach ($d in $deps) {
+            $facts = & $script:FactsWith $null
+            $facts.Coverage = @{ $d = 'Failed' }
+            $m = Get-TPAiUseReview -Findings @(& $script:Finding $multi.ControlId 'Satisfied' 'x') -Metadata (& $script:FullMeta) -Facts $facts -ScopeBuckets @{} -BlockerControlIds @($multi.ControlId)
+            $m.Readiness.Outcome | Should -Be 'NotDetermined' -Because "$($multi.ControlId) depends on $d"
+            $m.Readiness.NotVerified[0].Reason | Should -Be 'EvidenceConflict'
+        }
+    }
+    It 'a pass does not stand beside a collector that reported failure or was not collected' -ForEach @(
+        @{ Label = 'Success flag false'; Cov = @{}; Raw = $true }, @{ Label = 'coverage NotCollected'; Cov = 'NotCollected'; Raw = $false }, @{ Label = 'coverage Skipped'; Cov = 'Skipped'; Raw = $false }
+    ) {
+        $id = $script:Blockers[0]
+        $dep = @($script:Defs[$id].CollectorDependency -split ',')[0].Trim()
+        $facts = & $script:FactsWith $null
+        if ($Raw) { $facts.RawDataSuccess = @{ $dep = $false } } else { $facts.Coverage = @{ $dep = $Cov } }
+        $m = Get-TPAiUseReview -Findings (& $script:AllPass) -Metadata (& $script:FullMeta) -Facts $facts -ScopeBuckets @{} -BlockerControlIds $script:Blockers
+        $m.Readiness.Outcome | Should -Be 'NotDetermined'
+        @($m.Readiness.NotVerified | ForEach-Object ControlId) | Should -Contain $id
+        @($m.Readiness.NotVerified | ForEach-Object Reason | Sort-Object -Unique) | Should -Be @('EvidenceConflict')
+    }
+    It 'a collector that succeeded, with coverage Collected, leaves the pass standing' {
+        $facts = & $script:FactsWith $null
+        foreach ($id in $script:Blockers) { foreach ($d in @($script:Defs[$id].CollectorDependency -split ',' | ForEach-Object { $_.Trim() })) { $facts.Coverage[$d] = 'Collected'; $facts.RawDataSuccess[$d] = $true } }
+        (Get-TPAiUseReview -Findings (& $script:AllPass) -Metadata (& $script:FullMeta) -Facts $facts -ScopeBuckets @{} -BlockerControlIds $script:Blockers).Readiness.Outcome | Should -Be 'NoBlockersInCheckedControls'
+    }
     It 'the main scenario is not ready, and the page shows the gate with what is not checked and never says safe' {
-        $script:M.Readiness.Outcome | Should -Be 'BlockersFound'
-        @($script:M.Readiness.Blockers | ForEach-Object ControlId | Sort-Object) | Should -Be @('AAD-1.1', 'PPL-4.1', 'SPO-1.1')
-        @($script:M.Readiness.NotVerified | ForEach-Object ControlId | Sort-Object) | Should -Be @('AAD-1.2', 'PVW-1.1')
+        $main = Get-TPAiUseReview -Findings @($script:Rec.Findings) -Metadata $script:Rec.Metadata -Facts $script:Facts -ScopeBuckets $script:Scope.Buckets -BlockerControlIds @('AAD-1.2', 'AAD-1.1', 'SPO-1.1', 'SPO-1.2', 'PVW-1.1', 'PPL-4.1')
+        $main.Readiness.Outcome | Should -Be 'BlockersFound'
+        @($main.Readiness.Blockers | ForEach-Object ControlId | Sort-Object) | Should -Be @('AAD-1.1', 'PPL-4.1', 'SPO-1.1')
+        @($main.Readiness.NotVerified | ForEach-Object ControlId | Sort-Object) | Should -Be @('AAD-1.2', 'PVW-1.1')
         Mock -ModuleName 'TenantPosture' Find-TPPdfBrowser -MockWith { $null }
-        $html = Get-Content -LiteralPath (Publish-TPAiUseReview -Model $script:M -OutputPath (Join-Path $script:Tmp 'gate.html')).Html -Raw
+        $html = Get-Content -LiteralPath (Publish-TPAiUseReview -Model $main -OutputPath (Join-Path $script:Tmp 'gate.html')).Html -Raw
         $html | Should -Match 'id="readiness"'
         $html | Should -Match 'Not ready: blockers found'
         $html | Should -Match 'Internal oversharing of sites and files'
@@ -945,7 +1012,7 @@ Describe 'AI use review: named accounts' {
         $out = Join-Path $script:Tmp 'out-users'; $null = New-Item -ItemType Directory -Path $out -Force
         $log = & pwsh -NoProfile -NonInteractive -File (Join-Path $script:RepoRoot 'New-TPAiUseReview.ps1') -ResultsPath $script:UserPath -OutputPath $out -ClientName 'Contoso' -User 'needs@contoso.example' 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $log
-        $log | Should -Match 'Copilot deployment gate: Not ready: blockers found'
+        $log | Should -Match 'Copilot deployment gate: No deployment gate is approved'
         $log | Should -Match 'names 1 account'
         (Get-Content -LiteralPath (Get-ChildItem -LiteralPath $out -Filter '*.html')[0].FullName -Raw) | Should -Match 'needs@contoso\.example'
         (& $script:Hash $script:UserPath) | Should -Be $before
