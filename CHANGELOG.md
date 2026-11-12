@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **[Docs] Contributor guide, code of conduct, roadmap, and a vendor-evidence reference for Copilot in a government
+  cloud.** `CONTRIBUTING.md` is rewritten to match the code (it named paths and a function that no longer exist and
+  called the project internal): ground rules, setup without a tenant, the four checks to run, and current steps for
+  adding a control or a citation. `CODE_OF_CONDUCT.md` is new. `docs/ROADMAP.md` lists what is planned, what suits a
+  first contribution, what needs a real tenant and what waits on the owner. `docs/TP-COPILOT-VENDOR-EVIDENCE.md`
+  explains what an SSDF attestation letter, a FedRAMP Marketplace package overview and Microsoft's Copilot DPIA
+  template each establish and do not, and where each sits beside the AI use readiness review. No code changed.
 - **[Client] AI use readiness review: Copilot deployment gate and named accounts (`Lib/Get-TPAiUseReview.ps1`,
   `Config/ai-use-review.json` v1.1, `Config/tp-standards.json`).** The review now prints a technical gate over the
   controls approved as blockers (`CopilotReadinessBlockers`, ten controls proposed 2026-11-11 for the owner to confirm):
