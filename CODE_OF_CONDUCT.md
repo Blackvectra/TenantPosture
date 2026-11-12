@@ -30,9 +30,10 @@ project elsewhere.
 
 ## Reporting
 
-Report a concern privately to `support@nextlayersec.dev`. Reports are read by
-the maintainers and kept confidential. Do not use a public issue for a conduct
-report.
+Conduct reporting contact: **TBD: owner to confirm.**
+
+Until a contact is published here, do not use a public issue, discussion or
+pull request for a conduct report. Reports are kept confidential.
 
 ## Enforcement
 

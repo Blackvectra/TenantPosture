@@ -5,6 +5,15 @@ TenantPosture is maintained by NextLayerSec LLC and released under the
 maintaining team are welcome: new controls, corrections to what a control
 checks, framework citations, documentation, tests and fixes.
 
+Acceptance is at the maintainers' discretion. A pull request may be declined,
+or asked to change, for any reason, including scope, maintenance cost or fit
+with the project's direction. Opening one does not create an obligation to
+merge it.
+
+A contribution must not include tenant data, client names, credentials,
+results files or vendor documents. That applies to code, tests, documentation,
+issues, discussions, screenshots and commit messages alike.
+
 Please read the [Code of Conduct](CODE_OF_CONDUCT.md) first. For ideas on where
 to start, see the [roadmap](docs/ROADMAP.md).
 
@@ -34,7 +43,8 @@ was learned from a real defect.
    published source or from `Config/tp-standards.json`, which holds only values
    the owner approved.
 5. **No client data.** Never commit a results file, a tenant id, a domain, an
-   account name or a working `Config/clients.json`. Tests use synthetic data.
+   account or client name, a credential, a working `Config/clients.json`, or a
+   vendor's document. Tests use synthetic data.
 6. **US English** in findings, remediation text, configuration strings and docs.
 
 ---
@@ -89,9 +99,14 @@ no tests and reports no failures. To iterate on one suite, run
 
 **Control ID format:** `<WORKLOAD>-<SECTION>.<SEQUENCE>`, for example `AAD-2.5`.
 
-A control that has not been run against a real tenant says so in its pull
-request. Synthetic tests prove the logic; they do not prove the API returns the
-shape the collector expects.
+Synthetic tests prove the logic; they do not prove the API returns the shape
+the collector expects. Say in the pull request that the change has not been run
+against a real tenant.
+
+**Validation against a real tenant is done by the maintainers only**, unless a
+maintainer has explicitly arranged otherwise with you beforehand. Do not run a
+contribution against a tenant you do not own or administer, and do not post
+output from any tenant.
 
 ## Adding a framework citation
 

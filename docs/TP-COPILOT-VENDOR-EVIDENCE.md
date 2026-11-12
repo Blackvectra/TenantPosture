@@ -1,93 +1,149 @@
 # Vendor evidence for a Copilot deployment in a government cloud
 
-This is a reference for an MSP preparing a government-cloud client for Microsoft
-365 Copilot. It explains what three kinds of Microsoft-side document establish,
-what they do not, and where each fits beside the
-[AI use readiness review](TP-AI-USE-REVIEW.md).
+This is a reference for an MSP preparing a government-cloud client for
+Microsoft Copilot. It describes three kinds of vendor-side document, what the
+public record establishes about each, and what none of them establishes for a
+specific tenant.
 
 The short version: these documents are about **Microsoft's service**. The
-assessment and the review are about **the client's tenant**. A client needs
-both, and neither substitutes for the other.
+assessment and the [AI use readiness review](TP-AI-USE-REVIEW.md) are about
+**the client's tenant**. A client needs both, and neither substitutes for the
+other.
 
-The documents themselves are not in this repository. Obtain current copies from
-the Microsoft Service Trust Portal and the FedRAMP Marketplace; they are revised
-and re-issued, and a copy on file goes stale.
+**How this note is sourced.** Every statement of fact below cites a public
+Microsoft or United States government page, read on 2026-11-12. Where a
+document is distributed only through a signed-in portal, this note says so and
+does not restate its contents. The documents themselves are not in this
+repository and must not be added to it.
 
-## The three documents
+## 1. FedRAMP authorization of the Microsoft 365 government clouds
 
-### 1. Third-party SSDF attestation letter
+**What the public record says**
 
-A letter from Microsoft's FedRAMP assessor (a third-party assessment
-organization, 3PAO) stating that Microsoft follows the Secure Software
-Development Framework practices of NIST SP 800-218 when it builds Microsoft
-365, based on the FedRAMP and DoD annual assessment.
+- Microsoft states that Office 365 U.S. Government (GCC and GCC High) hold
+  authorizations from US agencies, and that Office 365 U.S. Government Defense
+  holds a provisional authorization from DISA.
+  [Microsoft Learn: FedRAMP](https://learn.microsoft.com/en-us/compliance/regulatory/offering-fedramp)
+- The same page lists the in-scope services for each environment. "Microsoft
+  Copilot" appears in the lists for GCC, GCC High and DoD.
+  [Microsoft Learn: FedRAMP](https://learn.microsoft.com/en-us/compliance/regulatory/offering-fedramp), section "Office 365 applicability and in-scope services"
+- The FedRAMP Marketplace entry for package FR1824057433 is titled "Microsoft
+  365 Government Community Cloud-High" and shows a High certification profile,
+  type Rev5, status FedRAMP Certified.
+  [FedRAMP Marketplace: FR1824057433](https://www.fedramp.gov/marketplace/products/FR1824057433/)
+- Microsoft says its audit reports are available through its FedRAMP audit
+  documents link, which leads to the Service Trust Portal.
+  [Microsoft Learn: FedRAMP](https://learn.microsoft.com/en-us/compliance/regulatory/offering-fedramp), section "Office 365 audits, reports, and certificates"
 
-| | |
-|---|---|
-| Establishes | How Microsoft develops and builds the software: separated and protected build environments, multifactor authentication for those environments, source code supply chain steps, provenance, vulnerability checks before release and a disclosure program. |
-| Covers | The product lines the letter names. The letter reviewed for this note named Microsoft 365 GCC, GCC High and DoD. |
-| Does not establish | Anything about a client's tenant configuration. Anything specific to Copilot. Anything about commercial Microsoft 365. |
-| Validity | The letter states its own term (one year from signature in the copy reviewed), conditional on Microsoft's continuous monitoring. Record the signature date. |
-| Not the same as | The CISA/OMB self-attestation form a software producer submits to CISA's repository. The letter says so itself. |
+**Not confirmed from a public page**
 
-### 2. FedRAMP Marketplace package overview
+- The detailed list of services inside a package and the name of the
+  independent assessor. A package overview document may list them; the public
+  Marketplace page read for this note did not. Read the current package
+  documentation before stating either.
+- Whether Copilot Studio is inside an authorization. The public in-scope lists
+  name "Microsoft Copilot"; do not infer agent coverage from that.
 
-Microsoft's overview of a FedRAMP package: package id, certification type,
-independent assessor, and the list of services inside the authorization with
-their security category.
+**What it does not establish for a specific tenant**
 
-| | |
-|---|---|
-| Establishes | Which services are inside the authorization boundary and at what category. The GCC High overview reviewed for this note listed **Microsoft 365 Copilot** as a certified service at High, and listed SharePoint Advanced Management, Purview DLP, audit, retention, Insider Risk Management and Communication Compliance among the included capabilities. |
-| Covers | One cloud environment per package. GCC, GCC High and DoD are separate; check the package that matches the client's tenant. |
-| Does not establish | That a feature is licensed, enabled or configured in the client's tenant. That a service not named in the list is authorized: the overview reviewed did not name Copilot Studio, so do not infer agent coverage from it. |
-| Check | The package id against the FedRAMP Marketplace entry, and the generated date on the overview. |
+- That Copilot is licensed, assigned or enabled in the client's tenant.
+- That the tenant is configured securely. Microsoft says the customer remains
+  responsible: "you need to achieve your own authorizations for components
+  outside these services", and it points customers to its own configuration
+  guidance.
+  [Microsoft Learn: FedRAMP](https://learn.microsoft.com/en-us/compliance/regulatory/offering-fedramp), section "Frequently asked questions"
+- Anything about a different cloud. GCC, GCC High and DoD are separate
+  environments; a document for one says nothing about another, or about a
+  commercial tenant.
 
-### 3. Build-your-own DPIA template for Microsoft 365 Copilot
+## 2. Third-party SSDF attestation letter
 
-Microsoft's template for a Data Protection Impact Assessment under the GDPR,
-written for public sector customers. It follows the Irish Data Protection
-Commission's sample format and carries illustrative answers.
+**What the public record says**
 
-| | |
-|---|---|
-| Establishes | Nothing by itself. It is a template: Microsoft says it is informational, is not legal advice, and must be adapted to how the customer has configured and uses Copilot. |
-| Useful for | Its structure, and its list of risk areas with Microsoft's own example mitigations: breach notification, external access control, unintended internal access, business continuity, audit and monitoring, cloud policy enforcement, and data governance. |
-| Applies to | Organizations subject to the GDPR or UK GDPR. For other clients it is a useful structure, not a requirement. |
-| Does not establish | Any required setting or threshold. It says the customer, as data controller, conducts the risk assessment and operates the tenant-side measures. |
+- The Secure Software Development Framework is NIST SP 800-218, "Secure
+  Software Development Framework (SSDF) Version 1.1: Recommendations for
+  Mitigating the Risk of Software Vulnerabilities", published February 2022.
+  [NIST SP 800-218](https://csrc.nist.gov/pubs/sp/800/218/final)
+- CISA's Secure Software Development Attestation Form is the form by which
+  software producers serving the federal government confirm specific security
+  practices, submitted by email or through the Repository for Software
+  Attestations and Artifacts. CISA marks that page as archived content that may
+  not reflect current policy.
+  [CISA: Secure Software Development Attestation Form](https://www.cisa.gov/secure-software-attestation-form)
+
+**Not confirmed from a public page**
+
+- The contents of any particular attestation letter: which product lines it
+  names, which practices it lists, who signed it and how long it remains in
+  effect. A letter of this kind is obtained from the vendor (for Microsoft,
+  through the Service Trust Portal, which requires sign-in). This note does not
+  restate one. Read the current letter and record its date, scope and term.
+- How an assessor's letter relates to the producer's own attestation form. Read
+  what the letter itself says about that.
+
+**What it does not establish for a specific tenant**
+
+- Anything about the tenant. The framework concerns how a vendor develops and
+  builds software, not how a customer configures the service.
+- Anything specific to Copilot, unless the letter names it.
+
+## 3. Microsoft's DPIA guidance and templates
+
+**What the public record says**
+
+- Under the GDPR, a data controller prepares a Data Protection Impact
+  Assessment for processing likely to result in a high risk to individuals.
+  Microsoft says nothing inherent in its products necessarily requires one:
+  whether a DPIA is needed "depends on the details and context of how you, as
+  the data controller, deploy, configure, and use" the service.
+  [Microsoft Learn: DPIA guidance for Office 365](https://learn.microsoft.com/compliance/regulatory/gdpr-dpia-office365)
+- Microsoft publishes a customizable DPIA document as "a modifiable
+  illustrative template" and says it "shouldn't be construed as legal advice".
+  [Microsoft Learn: DPIA guidance for Office 365](https://learn.microsoft.com/compliance/regulatory/gdpr-dpia-office365), Part 3
+- The required content of a DPIA (purposes, necessity and proportionality,
+  risks, and the measures to address them) is summarized on
+  [Microsoft Learn: Data Protection Impact Assessment for the GDPR](https://learn.microsoft.com/compliance/regulatory/gdpr-data-protection-impact-assessments).
+
+**Not confirmed from a public page**
+
+- A Copilot-specific DPIA template for public sector customers. Microsoft
+  distributes documents of that kind outside the public pages read for this
+  note, so its contents are not restated here. If a client holds one, use the
+  client's current copy.
+
+**What it does not establish for a specific tenant**
+
+- Nothing, by itself. A template is a starting point: the controller completes
+  the assessment for its own configuration and use.
+- Any required setting or threshold.
+- That a DPIA is required. That depends on the client's obligations; the GDPR
+  does not apply to every organization.
 
 ## Where each fits beside the review
 
-| Review section | Vendor document that informs it | What still comes from the tenant |
+| Review section | What vendor evidence can inform | What still comes from the tenant |
 |---|---|---|
-| Copilot deployment gate | None. The gate judges tenant settings only. | Every blocker control's verdict. |
-| 1. Observed AI-related configuration | Marketplace overview: confirms Copilot is in the authorized boundary for that cloud. | Whether Copilot is licensed and assigned in this tenant. |
-| 2 and 3. Safeguards and items needing attention | DPIA template: Microsoft's example mitigations name multifactor authentication or security defaults, protected administrator accounts, audit logging, least privilege with access reviews, and DLP. | Whether each of those is in place. |
-| 4. Organizational decisions: vendor terms and contractual review | SSDF letter and marketplace overview are the kind of evidence a client files here. | The client's own record that it reviewed them. The review shows this area as "Not recorded in this assessment"; it does not read or verify vendor documents. |
-| 4. Organizational decisions: sensitive information, human review, accountability | DPIA template sections on purpose limitation, accuracy, data subject rights and sign-off. | The client's decisions and who made them. |
-| Not checked: internal oversharing | DPIA template treats "unintended internal access" as its own risk. Marketplace overview lists SharePoint Advanced Management, the tooling Microsoft points to for it. | Which sites and files are shared with whom. The assessment does not read this today. |
+| Copilot deployment gate | Nothing. The gate judges tenant settings only. | Every blocker control's verdict. |
+| 1. Observed AI-related configuration | Whether Microsoft lists Copilot as in scope for the client's cloud. | Whether Copilot is licensed and assigned in this tenant. |
+| 2 and 3. Safeguards and items needing attention | Nothing directly. | Whether each setting is in place. |
+| 4. Organizational decisions: vendor terms and contractual review | Authorization records and attestation letters are the kind of evidence a client files here. | The client's own record that it reviewed them. The review shows this area as "Not recorded in this assessment"; it does not read or verify vendor documents. |
+| 4. Organizational decisions: sensitive information, human review, accountability | A completed DPIA, where the client is required to have one. | The client's decisions and who made them. |
 
 ## How to use this with a client
 
-1. Confirm which cloud the client's tenant is in. A GCC High document says
-   nothing about a GCC or commercial tenant.
-2. Collect current copies of the vendor documents and record each title, date
-   and source. Note the SSDF letter's signature date and term.
+1. Confirm which cloud the client's tenant is in.
+2. Have the client obtain current copies of the vendor documents from the
+   vendor and record each title, date and source. Do not store them in this
+   repository or attach them to an issue or pull request.
 3. Run a full assessment and the AI use readiness review for the tenant.
-4. Put the two side by side using the table above. Vendor documents answer
-   "is the service authorized and how is it built". The review answers "how is
-   this tenant configured".
-5. Have the client record its organizational decisions. If the client is
-   subject to the GDPR, the DPIA template is Microsoft's starting point for that
-   record.
+4. Keep the two apart when reporting: vendor documents speak to the service,
+   the review speaks to the tenant.
+5. Have the client record its own organizational decisions.
 
 ## Limits of this note
 
-- It was written from one copy of each document, read in November 2026. Titles,
-  package contents and terms change. Read the current copy before relying on
-  any statement here.
+- The cited pages were read on 2026-11-12 and change. Re-read them before
+  relying on any statement here.
 - It is not legal or compliance advice, and it makes no determination about any
-  client.
-- The review does not record vendor documents today. Recording client-held
-  evidence, shown as client-held and not verified by the tool, is on the
-  [roadmap](ROADMAP.md).
+  client or tenant.
+- The review does not record vendor documents.
