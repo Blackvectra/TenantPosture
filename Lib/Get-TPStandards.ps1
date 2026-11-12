@@ -30,7 +30,7 @@ function Get-TPStandards {
 
     $std = [ordered]@{ DmarcReportingAddresses = @(); CommonAttachmentFileTypes = @(); PriorityUsers = @(); RequiredConditionalAccessTemplates = @()
                        DistributionListMaxMembers = @(); DistributionListMemberJoinRestriction = @(); CopilotStudioDormantDays = @()
-                       CopilotReadinessBlockers = @() }
+                       CopilotReadinessBlockers = @(); CopilotReadinessBlockersProposed = @(); CopilotReadinessBlockersState = 'Unreadable' }
     # An explicit -Path is the whole truth for that call; only the shared default file is
     # completed by the active profile below.
     $usingDefaultFile = -not $Path
@@ -39,11 +39,27 @@ function Get-TPStandards {
     try {
         $j = Get-Content -LiteralPath $Path -Raw -Encoding utf8 | ConvertFrom-Json -Depth 10
     } catch { return $std }
+    $std.CopilotReadinessBlockersState = 'NotConfigured'
     foreach ($k in @($std.Keys)) {
         $node = Get-TPObjectField -Item $j -Key $k -Default $null
         if ($null -eq $node) { continue }
         $vals = Get-TPObjectField -Item $node -Key 'Values' -Default $null
         $std[$k] = @(@($vals) | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { ([string]$_).Trim() })
+    }
+    # The Copilot gate list counts as approved only with a recorded approval (ApprovedBy and
+    # a valid ApprovedDate on its node), like the Intune baselines. A populated list without
+    # one is a proposal: it is kept as CopilotReadinessBlockersProposed and never gates.
+    if (@($std.CopilotReadinessBlockers).Count -gt 0) {
+        $gNode = Get-TPObjectField -Item $j -Key 'CopilotReadinessBlockers' -Default $null
+        $by = [string](Get-TPObjectField -Item $gNode -Key 'ApprovedBy' -Default '')
+        $on = [string](Get-TPObjectField -Item $gNode -Key 'ApprovedDate' -Default '')
+        $d = [datetime]::MinValue
+        $dateOk = [datetime]::TryParseExact($on.Trim(), 'yyyy-MM-dd', [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$d)
+        if ([string]::IsNullOrWhiteSpace($by) -or -not $dateOk) {
+            $std.CopilotReadinessBlockersProposed = @($std.CopilotReadinessBlockers)
+            $std.CopilotReadinessBlockers = @()
+            $std.CopilotReadinessBlockersState = 'Proposed'
+        } else { $std.CopilotReadinessBlockersState = 'Approved' }
     }
     # The DMARC reporting address is the practice's own, so the active profile
     # (DmarcReportingAddresses in Config/branding.psd1 or Config/profiles/

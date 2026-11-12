@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **[Client] AI use readiness review: the Copilot gate needs a recorded approval and complete evidence
+  (`Lib/Get-TPStandards.ps1`, `Lib/Get-TPAiUseReview.ps1`, `Config/tp-standards.json`, `Config/ai-use-review.json`).**
+  `CopilotReadinessBlockers` now gates only when its node records `ApprovedBy` and a `yyyy-MM-dd` `ApprovedDate`, like
+  the Intune baselines; a populated list without one is a proposal (`CopilotReadinessBlockersProposed`), and the page
+  prints no verdict instead of calling it the practice's approved standard. The no-verdict summary names the cause
+  (proposed, standards file unreadable, or no list). A Satisfied control is no longer a pass when any of several
+  collectors it depends on (`AAD-1.2`: `AAD-CAPolicies,AAD-AuthPolicies`) did not complete, when its collector's
+  RawData records `Success = false`, or when coverage reads `NotCollected`. The not-checked note on Copilot retention
+  no longer contradicts PPL-3.5. The blocker-list test reads the standards file instead of pinning ten ids. No blocker
+  list, verdict rule (Partial still blocks) or freshness window changed.
 - **[Client] AI use readiness review: Copilot deployment gate and named accounts (`Lib/Get-TPAiUseReview.ps1`,
   `Config/ai-use-review.json` v1.1, `Config/tp-standards.json`).** The review now prints a technical gate over the
   controls approved as blockers (`CopilotReadinessBlockers`, ten controls proposed 2026-11-11 for the owner to confirm):
