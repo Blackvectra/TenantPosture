@@ -591,6 +591,7 @@ function Get-TPAiUseReview {
     $byControl = @{}
     foreach ($k in @($worst.Keys)) { $byControl[[string]$k] = $worst[$k] }
     $coverage = Get-TPObjectField -Item $Facts -Key 'Coverage' -Default $null
+    $rawOk = Get-TPObjectField -Item $Facts -Key 'RawDataSuccess' -Default $null
     $buckets = if ($null -ne $ScopeBuckets) { $ScopeBuckets } else { @{} }
     $bucketOf = { param([string] $cid) [string](Get-TPObjectField -Item $buckets -Key $cid -Default '') }
 
@@ -601,7 +602,7 @@ function Get-TPAiUseReview {
         NotSelected           = 'The control was not selected for this run.'
         NotEvaluatedThisMode  = 'The control was not evaluated in this run mode.'
         CheckErrored          = 'The check errored; it produced no verdict.'
-        EvidenceConflict      = 'The finding is recorded as satisfied, but the collector that supplies its evidence did not complete (coverage Failed or Skipped). The two records disagree, so nothing is claimed either way.'
+        EvidenceConflict      = 'The finding is recorded as satisfied, but the collector that supplies its evidence did not complete (coverage Failed, Skipped or NotCollected, or its collector recorded a failure). The two records disagree, so nothing is claimed either way.'
         LicenseNotHeld        = 'The tenant does not hold the license this setting needs, so it was not scored.'
         NotCollected          = 'The data this control needs was not collected in this run.'
         ManualReview          = 'This item has no automated check; it is reviewed manually.'
@@ -617,12 +618,22 @@ function Get-TPAiUseReview {
         $f = $byControl[$cid]
         $state = if ($null -ne $f) { [string](Get-TPObjectField -Item $f -Key 'State' -Default '') } else { '' }
         $dep = [string](Get-TPObjectField -Item $def -Key 'CollectorDependency' -Default '')
-        $cov = if ($dep) { [string](Get-TPObjectField -Item $coverage -Key $dep -Default '') } else { '' }
+        # A control can depend on several collectors ('A,B'): each is looked up on its own, and
+        # the worst status stands. A collector whose RawData records Success = false counts as
+        # Failed even when its coverage line says otherwise.
+        $rank = @{ Failed = 4; Skipped = 3; NotCollected = 2; Partial = 1; Collected = 0 }
+        $cov = ''
+        foreach ($d in @($dep -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+            $c = [string](Get-TPObjectField -Item $coverage -Key $d -Default '')
+            $ok = Get-TPObjectField -Item $rawOk -Key $d -Default $null
+            if ($ok -is [bool] -and -not $ok) { $c = 'Failed' }
+            if ($c -and (-not $cov -or $rank[$c] -gt $rank[$cov])) { $cov = $c }
+        }
         $bucket = & $bucketOf $cid
         $group = 'NotVerified'; $reason = 'NotAssessed'
         switch ($state) {
             ''          { $reason = switch ($bucket) { 'NotSelected' { 'NotSelected' } 'NotEvaluatedThisMode' { 'NotEvaluatedThisMode' } default { 'NoFinding' } } }
-            'Satisfied' { if ($cov -cin @('Failed', 'Skipped')) { $reason = 'EvidenceConflict' } else { $group = 'Verified'; $reason = 'Satisfied' } }
+            'Satisfied' { if ($cov -cin @('Failed', 'Skipped', 'NotCollected')) { $reason = 'EvidenceConflict' } else { $group = 'Verified'; $reason = 'Satisfied' } }
             'Gap'       { $group = 'Attention'; $reason = 'Shortfall' }
             'Partial'   { $group = 'Attention'; $reason = 'Shortfall' }
             'Error'     { $reason = 'CheckErrored' }
@@ -675,8 +686,11 @@ function Get-TPAiUseReview {
     # placement as the catalog. Asymmetric on purpose: one shortfall is "not
     # ready"; "no blockers" needs every blocker to have passed (or not apply), and
     # still never says safe, because what this assessment does not read is listed.
+    $gateState = 'Approved'
     if (-not $PSBoundParameters.ContainsKey('BlockerControlIds') -or $null -eq $BlockerControlIds) {
-        $BlockerControlIds = @((Get-TPStandards).CopilotReadinessBlockers)
+        $stdAll = Get-TPStandards
+        $BlockerControlIds = @($stdAll.CopilotReadinessBlockers)
+        $gateState = [string](Get-TPObjectField -Item $stdAll -Key 'CopilotReadinessBlockersState' -Default 'NotConfigured')
     }
     $gate = [ordered]@{ Blockers = [System.Collections.Generic.List[object]]::new(); Passed = [System.Collections.Generic.List[object]]::new(); NotVerified = [System.Collections.Generic.List[object]]::new(); DoesNotApply = [System.Collections.Generic.List[object]]::new(); Invalid = [System.Collections.Generic.List[string]]::new() }
     $seenBlocker = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
@@ -717,10 +731,15 @@ function Get-TPAiUseReview {
         'BlockersFound'               { [string]::Format([cultureinfo]::InvariantCulture, '{0} of the {1} blocker control(s) were recorded as a gap or only partly in place. Resolve them before assigning Microsoft Copilot licenses.', $gate.Blockers.Count, $gateTotal) }
         'NoBlockersInCheckedControls' { [string]::Format([cultureinfo]::InvariantCulture, 'Every blocker control that applies to this tenant was recorded in place ({0} of {1}; {2} do not apply). This covers only the controls checked: the items listed as not checked, the organizational decisions and anything changed since the assessment date are outside it.', $gate.Passed.Count, $gateTotal, $gate.DoesNotApply.Count) }
         'NotDetermined'               { [string]::Format([cultureinfo]::InvariantCulture, 'No blocker control was recorded as a shortfall, but {0} of the {1} produced no verdict, so the gate is neither passed nor failed. A missing verdict is never counted as a pass.', ($gate.NotVerified.Count + $gate.Invalid.Count), ($gateTotal + $gate.Invalid.Count)) }
-        default                       { 'No list of blocker controls is approved (Config/tp-standards.json, CopilotReadinessBlockers), so this review prints no deployment verdict.' }
+        default                       { switch ($gateState) {
+            'Proposed'   { 'A list of blocker controls is proposed but has no recorded approval (Config/tp-standards.json, CopilotReadinessBlockers: ApprovedBy and ApprovedDate), so this review prints no deployment verdict.' }
+            'Unreadable' { 'The standards file (Config/tp-standards.json) is missing or could not be read, so no blocker list was loaded and this review prints no deployment verdict.' }
+            default      { 'No list of blocker controls is approved (Config/tp-standards.json, CopilotReadinessBlockers), so this review prints no deployment verdict.' }
+        } }
     }
     $readiness = [ordered]@{
         Outcome      = $outcome
+        GateState    = $gateState
         Label        = $gateLabel
         Summary      = $gateSummary
         Statement    = 'This is a technical gate over the Microsoft 365 settings listed here. It makes no safety determination about deploying Microsoft Copilot, and it does not replace the organizational decisions in section 4.'

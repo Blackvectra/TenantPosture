@@ -559,7 +559,7 @@
       {
         "Id": "copilot-retention",
         "Title": "Retention for Copilot interactions",
-        "Why": "Whether a retention policy covers Copilot prompts and responses is not read.",
+        "Why": "Only whether a retention policy names Copilot interactions is read (PPL-3.5); whether its scope and duration meet the organization's retention obligations is not judged.",
         "Reference": {
           "Title": "Copilot controls security and governance",
           "Url": "https://learn.microsoft.com/copilot/implement/copilot-controls-security-governance",
