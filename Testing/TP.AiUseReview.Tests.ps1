@@ -176,7 +176,7 @@ BeforeAll {
     $script:Rec   = Read-TPRunRecord -Path $script:MainPath
     $script:Facts = Read-TPAiUseFacts -Path $script:MainPath
     $script:Scope = Get-TPAiUseReviewScope -Path $script:MainPath
-    $script:M = Get-TPAiUseReview -Findings @($script:Rec.Findings) -Metadata $script:Rec.Metadata -Facts $script:Facts -ScopeBuckets $script:Scope.Buckets -ClientName 'Contoso <script>alert(1)</script> & Co' -PreparedBy 'NextLayerSec, LLC'
+    $script:M = Get-TPAiUseReview -Findings @($script:Rec.Findings) -Metadata $script:Rec.Metadata -Facts $script:Facts -ScopeBuckets $script:Scope.Buckets -ClientName 'Contoso <script>alert(1)</script> & Co' -PreparedBy 'NextLayerSec, LLC' -BlockerControlIds @('AAD-1.2', 'AAD-1.1', 'SPO-1.1', 'SPO-1.2', 'AAD-6.2', 'AAD-15.1', 'PVW-1.1', 'PPL-3.5', 'PPL-4.1', 'PPL-4.2')
     $script:GroupOf = { param([string] $id) @($script:M.Groups.Keys | Where-Object { @($script:M.Groups[$_] | ForEach-Object ControlId) -contains $id }) }
     $script:ItemOf  = { param([string] $id) @($script:M.Groups.Values | ForEach-Object { $_ } | Where-Object { $_.ControlId -eq $id })[0] }
 
@@ -773,9 +773,10 @@ Describe 'AI use review: Copilot deployment gate' {
             Get-TPAiUseReview -Findings $f -Metadata (& $script:FullMeta) -Facts (& $script:FactsWith $null) -ScopeBuckets $Buckets -BlockerControlIds $Ids
         }
     }
-    It 'the approved standard names ten controls that all exist, each with a reason' {
-        $std = @((Get-TPStandards).CopilotReadinessBlockers)
-        $std | Should -Be $script:Blockers
+    It 'every listed blocker (approved or proposed) is a real control with a reason' {
+        $s = Get-TPStandards -Path (Join-Path $script:RepoRoot 'Config' 'tp-standards.json')
+        $std = @(@($s.CopilotReadinessBlockers) + @($s.CopilotReadinessBlockersProposed))
+        $std.Count | Should -BeGreaterThan 0
         foreach ($id in $std) { $script:Defs.ContainsKey($id) | Should -BeTrue; $script:Catalog.Readiness.BlockerReasons[$id] | Should -Not -BeNullOrEmpty -Because $id }
         @($script:Catalog.Readiness.NotChecked | ForEach-Object Id) | Should -Contain 'internal-oversharing'
         foreach ($src in $script:Catalog.Readiness.Sources) { $src.Url | Should -Match '^https://learn\.microsoft\.com/' }
@@ -816,6 +817,49 @@ Describe 'AI use review: Copilot deployment gate' {
         $m.Readiness.Summary | Should -Match 'only the controls checked'
         $m.Readiness.Statement | Should -Match 'makes no safety determination'
         @($m.Readiness.NotChecked).Count | Should -BeGreaterThan 3
+    }
+    It 'a populated list gates only with a recorded approval' {
+        $w = { param($node) $p = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N') + '.json'); @{ CopilotReadinessBlockers = $node } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $p -Encoding utf8; Get-TPStandards -Path $p }
+        $prop = & $w @{ Values = @('SPO-1.1') }
+        $prop.CopilotReadinessBlockersState | Should -Be 'Proposed'
+        @($prop.CopilotReadinessBlockers).Count | Should -Be 0
+        @($prop.CopilotReadinessBlockersProposed) | Should -Be @('SPO-1.1')
+        (& $w @{ Values = @('SPO-1.1'); ApprovedBy = 'Owner'; ApprovedDate = '11/12/2026' }).CopilotReadinessBlockersState | Should -Be 'Proposed'
+        (& $w @{ Values = @('SPO-1.1'); ApprovedBy = ''; ApprovedDate = '2026-11-12' }).CopilotReadinessBlockersState | Should -Be 'Proposed'
+        # A future or impossible date is not an approval; today's date is.
+        (& $w @{ Values = @('SPO-1.1'); ApprovedBy = 'Owner'; ApprovedDate = '2999-01-01' }).CopilotReadinessBlockersState | Should -Be 'Proposed'
+        (& $w @{ Values = @('SPO-1.1'); ApprovedBy = 'Owner'; ApprovedDate = [datetime]::UtcNow.AddDays(2).ToString('yyyy-MM-dd') }).CopilotReadinessBlockersState | Should -Be 'Proposed'
+        (& $w @{ Values = @('SPO-1.1'); ApprovedBy = 'Owner'; ApprovedDate = '2026-02-30' }).CopilotReadinessBlockersState | Should -Be 'Proposed'
+        (& $w @{ Values = @('SPO-1.1'); ApprovedBy = 'Owner'; ApprovedDate = [datetime]::UtcNow.ToString('yyyy-MM-dd') }).CopilotReadinessBlockersState | Should -Be 'Approved'
+        $ok = & $w @{ Values = @('SPO-1.1'); ApprovedBy = 'Owner'; ApprovedDate = '2026-11-12' }
+        $ok.CopilotReadinessBlockersState | Should -Be 'Approved'
+        @($ok.CopilotReadinessBlockers) | Should -Be @('SPO-1.1')
+        (Get-TPStandards -Path (Join-Path $TestDrive 'missing.json')).CopilotReadinessBlockersState | Should -Be 'Unreadable'
+        $shipped = Get-TPStandards -Path (Join-Path $script:RepoRoot 'Config' 'tp-standards.json')
+        $shipped.CopilotReadinessBlockersState | Should -BeIn @('Proposed', 'Approved', 'NotConfigured')
+    }
+    It 'the no-verdict summary names why: proposed, unreadable or empty' {
+        foreach ($c in @(@{ S = 'Proposed'; R = 'no recorded approval' }, @{ S = 'Unreadable'; R = 'missing or could not be read' }, @{ S = 'NotConfigured'; R = 'No list of blocker controls is approved' })) {
+            $st = [ordered]@{ CopilotReadinessBlockers = @(); CopilotReadinessBlockersProposed = @('SPO-1.1'); CopilotReadinessBlockersState = $c.S }
+            Mock -ModuleName 'TenantPosture' Get-TPStandards -MockWith { $st }.GetNewClosure()
+            $m = Get-TPAiUseReview -Findings @() -Metadata (& $script:FullMeta) -Facts (& $script:FactsWith $null) -ScopeBuckets @{}
+            $m.Readiness.Outcome | Should -Be 'NotConfigured'
+            $m.Readiness.GateState | Should -Be $c.S
+            $m.Readiness.Summary | Should -Match $c.R
+        }
+    }
+    It 'a satisfied blocker is never a pass when any collector it depends on did not complete' {
+        $f = @(& $script:Finding 'AAD-1.2' 'Satisfied' 'x')
+        $run = { param($cov, $ok) $fx = & $script:FactsWith $null; $fx.Coverage = $cov; $fx.RawDataSuccess = $ok
+                 Get-TPAiUseReview -Findings $f -Metadata (& $script:FullMeta) -Facts $fx -ScopeBuckets @{} -BlockerControlIds @('AAD-1.2') }
+        (& $run @{ 'AAD-CAPolicies' = 'Collected'; 'AAD-AuthPolicies' = 'Collected' } @{}).Readiness.Outcome | Should -Be 'NoBlockersInCheckedControls'
+        foreach ($bad in @('Failed', 'Skipped', 'NotCollected')) {
+            $m = & $run @{ 'AAD-CAPolicies' = 'Collected'; 'AAD-AuthPolicies' = $bad } @{}
+            $m.Readiness.Outcome | Should -Be 'NotDetermined' -Because "second collector $bad"
+            $m.Readiness.NotVerified[0].Reason | Should -Be 'EvidenceConflict'
+        }
+        (& $run @{ 'AAD-CAPolicies' = 'Collected'; 'AAD-AuthPolicies' = 'Collected' } @{ 'AAD-AuthPolicies' = $false }).Readiness.Outcome | Should -Be 'NotDetermined'
+        (& $run @{ 'AAD-CAPolicies' = 'Collected'; 'AAD-AuthPolicies' = 'Collected' } @{ 'AAD-AuthPolicies' = $true }).Readiness.Outcome | Should -Be 'NoBlockersInCheckedControls'
     }
     It 'no approved list prints no verdict; an id that is not a control is never a pass' {
         $none = & $script:GateModel @{} @{} @()
@@ -945,7 +989,8 @@ Describe 'AI use review: named accounts' {
         $out = Join-Path $script:Tmp 'out-users'; $null = New-Item -ItemType Directory -Path $out -Force
         $log = & pwsh -NoProfile -NonInteractive -File (Join-Path $script:RepoRoot 'New-TPAiUseReview.ps1') -ResultsPath $script:UserPath -OutputPath $out -ClientName 'Contoso' -User 'needs@contoso.example' 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $log
-        $log | Should -Match 'Copilot deployment gate: Not ready: blockers found'
+        # The shipped list has no recorded approval, so the script prints no verdict.
+        $log | Should -Match 'Copilot deployment gate: No deployment gate is approved'
         $log | Should -Match 'names 1 account'
         (Get-Content -LiteralPath (Get-ChildItem -LiteralPath $out -Filter '*.html')[0].FullName -Raw) | Should -Match 'needs@contoso\.example'
         (& $script:Hash $script:UserPath) | Should -Be $before
