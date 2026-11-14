@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **[Docs] Maintainer guide, roadmap, and a vendor-evidence reference for Copilot in a government cloud.**
+  `CONTRIBUTING.md` is rewritten as a maintainer guide that matches the code (it named paths and a function that no
+  longer exist): ground rules, setup without a tenant, the four checks to run, and current steps for adding a control
+  or a citation. It states that the project is not accepting outside contributions at this time, that nothing
+  committed may carry tenant data, client names, credentials, results files or vendor documents, and that validation
+  against a real tenant is maintainer-only. `docs/ROADMAP.md` lists candidate areas, with undecided policy marked
+  pending owner decision. `docs/TP-COPILOT-VENDOR-EVIDENCE.md` describes, from public Microsoft and government pages
+  only, what FedRAMP authorization records, an SSDF attestation letter and Microsoft's DPIA guidance establish and
+  what none of them establishes for a specific tenant. No code changed.
 - **[Client] AI use readiness review: the Copilot gate needs a recorded approval and complete evidence
   (`Lib/Get-TPStandards.ps1`, `Lib/Get-TPAiUseReview.ps1`, `Config/tp-standards.json`, `Config/ai-use-review.json`).**
   `CopilotReadinessBlockers` now gates only when its node records `ApprovedBy` and a `yyyy-MM-dd` `ApprovedDate` that is a real date no later than today, like
