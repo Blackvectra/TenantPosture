@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **[Docs] Stale figures corrected.** The operational-impact catalog covers 253 controls, not 230 (`README.md`,
+  `CLAUDE.md`); `controls.json` holds 253 tenant controls, not 202 (`CLAUDE.md`, `docs/WHAT-CAN-I-RUN.md`);
+  `CLAUDE.md` no longer gives an entry-point count, a per-file evaluator count or "7 publishers" that the code
+  outgrew; and the README's License section says the project is not accepting outside contributions at this time,
+  matching the maintainer guide. No code changed.
+
 - **[Docs] Maintainer guide, roadmap, and a vendor-evidence reference for Copilot in a government cloud.**
   `CONTRIBUTING.md` is rewritten as a maintainer guide that matches the code (it named paths and a function that no
   longer exist): ground rules, setup without a tenant, the four checks to run, and current steps for adding a control
