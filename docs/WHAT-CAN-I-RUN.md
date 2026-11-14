@@ -360,7 +360,7 @@ docs/            this file, and the policy docs
 | File | What it holds |
 |---|---|
 | `clients.json` | Your client list — TenantId, DelegatedOrg, skip flags |
-| `controls.json` | The 202 tenant controls and every framework citation |
+| `controls.json` | The 253 tenant controls and every framework citation |
 | `device-controls.json` | The 39 endpoint checks (`DEV-*`) |
 | `device-baseline.json` | The 29-item build standard |
 | `nist-physical.json` | The 31 physical / media / device controls |

@@ -649,7 +649,7 @@ It writes `<tenant>-<yyyyMMdd-HHmmss>-distribution-lists.txt` (read it) and `.cs
     -SSPAnswers .\Config\ssp\example.com.psd1
 ```
 
-Every requirement is a row that answers four questions in order: **is this in place**, **what proves it**, **how do we close it**, and **what will closing it do to the business**. The last one is the reason the document exists. Every other deliverable here answers "what is wrong"; a client reading a gap list asks "if we fix that, what breaks?" — and until now the tool had no answer, so remediation got scheduled on guesswork or not scheduled at all. [`Config/operational-impact.json`](Config/operational-impact.json) holds that answer for all 230 controls and it renders beside every action, with what users notice, what it costs administrators, what actually goes wrong, and whether it can be backed out.
+Every requirement is a row that answers four questions in order: **is this in place**, **what proves it**, **how do we close it**, and **what will closing it do to the business**. The last one is the reason the document exists. Every other deliverable here answers "what is wrong"; a client reading a gap list asks "if we fix that, what breaks?" — and until now the tool had no answer, so remediation got scheduled on guesswork or not scheduled at all. [`Config/operational-impact.json`](Config/operational-impact.json) holds that answer for all 253 controls and it renders beside every action, with what users notice, what it costs administrators, what actually goes wrong, and whether it can be backed out.
 
 The join needs no mapping table: a CMMC practice ID embeds its 800-171 requirement number (`IA.L2-3.5.3` → `3.5.3`), and every control already carries a CMMC citation. The endpoint checks use the explicit `Nist171` array in `device-controls.json`.
 
@@ -855,7 +855,7 @@ The project is not accepting outside contributions at this time. [`CONTRIBUTING.
 
 Licensed under the [Apache License, Version 2.0](LICENSE). Copyright 2026 Matthew Levorson / NextLayerSec LLC; see [NOTICE](NOTICE).
 
-You may use, modify and redistribute it under that license, including commercially. Contributions are accepted under the same license. Assessment reports produced by running the tool belong to the organization they were produced for.
+You may use, modify and redistribute it under that license, including commercially. The project is not accepting outside contributions at this time; see [`CONTRIBUTING.md`](CONTRIBUTING.md). Assessment reports produced by running the tool belong to the organization they were produced for.
 
 ---
 
