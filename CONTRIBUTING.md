@@ -56,7 +56,7 @@ git clone https://github.com/Blackvectra/TenantPosture.git
 cd TenantPosture
 
 # Test and analysis modules, by exact version and hash (the same way CI installs them)
-./tools/Install-TPPinnedModule.ps1 -Name Pester, PSScriptAnalyzer -Destination ./.modules
+./tools/Install-TPPinnedModule.ps1 -Name Pester, PSScriptAnalyzer, InjectionHunter -Destination ./.modules
 $env:PSModulePath = "$PWD/.modules$([IO.Path]::PathSeparator)$env:PSModulePath"
 ```
 
