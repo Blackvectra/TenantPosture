@@ -112,8 +112,8 @@ The summary names the error types that bound its results:
 
 - **False Negative**, for every scan: a rule that finds nothing is not proof
   of absence.
-- **Constraint**, for the active scan: each rule stops at its time cap, and
-  `POST /api/scan` is excluded.
+- **Constraint**, for the active scan: each rule stops at its time cap. No
+  route is excluded (the server has no route that starts an assessment).
 - **Sampling Error**, for the fuzzer: it tries a fixed number of seeded cases.
 - **Gray Positive**, for the active scan: every unknown path and method gets
   the same 404.

@@ -141,14 +141,16 @@ Describe 'Runtime scans: the dynamic scan of the web GUI and the image scan' {
             $script:Dast | Should -Match "if: always\(\) && hashFiles\('zap-active/zap-active-report\.\*'\) != ''"
         }
 
-        It 'never scans POST /api/scan, which starts a real assessment, and still scans its status route' {
-            $script:Plan | Should -Match "excludePaths:\s+- 'http://127\\\.0\\\.0\\\.1:8765/api/scan\(\\\?\.\*\)\?'"
-            $exclude = 'http://127\.0\.0\.1:8765/api/scan(\?.*)?'
-            # ZAP anchors an exclusion to the whole URL.
-            'http://127.0.0.1:8765/api/scan' | Should -Match "^$exclude$"
-            'http://127.0.0.1:8765/api/scan/000000000000/status' | Should -Not -Match "^$exclude$"
+        It 'excludes nothing: the server has no route that starts an assessment, so every route is attacked' {
+            # POST /api/scan started a real assessment and had to be kept out of
+            # the scan. The route is gone, and so is the exclusion; the old paths
+            # are requested so the scan sees them answer the fixed 404.
+            $script:Plan | Should -Not -Match '(?m)^\s*excludePaths:'
             $script:Plan | Should -Match 'requestor'
+            $script:Plan | Should -Match '(?m)^\s+- url: http://127\.0\.0\.1:8765/api/scan\s*$'
             $script:Plan | Should -Match '/api/scan/000000000000/status'
+            $server = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib/Start-TPWebServer.ps1') -Raw
+            $server | Should -Not -Match "Add-PodeRoute\s+-Method\s+(?!Get\b|Connect,)" -Because 'a route that is not a GET would need its own decision about the active scan'
         }
 
         It 'records the output folder before the scan and fails if it gained anything' {

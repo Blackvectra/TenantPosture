@@ -5,9 +5,10 @@
 # Author: Matthew Levorson
 #
 # The one definition of "a domain name this tool will act on". The web GUI's
-# scan route, the run listing's labels and Invoke-TPAssessment.ps1 -TenantDomain
-# all answer the same question, and three private regexes had drifted: the scan
-# route took anything of letters, digits, dots and hyphens, the entry point took
+# run listing labels and Invoke-TPAssessment.ps1 -TenantDomain answer the same
+# question. Three private regexes had drifted while the GUI could still start a
+# scan (that route is gone; the GUI is a viewer now): its scan route took
+# anything of letters, digits, dots and hyphens, the entry point took
 # "a..b.com", and the path guard refused any name with ".." in it, so a scan could
 # be started for a folder the GUI could then never open.
 #
@@ -18,8 +19,9 @@
 # underscore, no whitespace, no internationalized (non-ASCII) form: an IDN is
 # given in its xn-- form, which the labels already allow.
 #
-# Two properties follow from the shape and are tested, because the GUI turns an
-# accepted name into a folder name: an accepted name never contains ".." and never
+# Two properties follow from the shape and are tested, because an accepted name
+# is used as a folder name (the batch runner writes output\<domain>\, and the
+# GUI serves it): an accepted name never contains ".." and never
 # starts with a dot or hyphen, so it is always a valid path segment too.
 #
 # The pattern is anchored with \A and \z, never ^ and $: in .NET `$` also matches

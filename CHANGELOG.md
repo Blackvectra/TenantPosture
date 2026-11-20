@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **[Security] The web GUI is a viewer only, and answers to no name but its own (`Lib/Start-TPWebServer.ps1`,
+  `Lib/Test-TPWebRequestAllowed.ps1`, `Lib/Get-TPWebApiError.ps1`, `Web/`).** Two features were removed to cut what
+  the loopback socket exposes. **Scan launch:** `POST /api/scan` started an assessment (a child process and a tenant
+  sign-in) from an HTTP request, `GET /api/scan/<id>/status` reported on it, and `GET /api/clients` fed the picker;
+  all three routes, the scan form, the client list and the progress panel are gone. Every named route is now a GET,
+  none starts a process, and `-Web` lists past runs and shows their reports. Run an assessment from the command line
+  (`Invoke-TPAssessment.ps1`, `Invoke-TPBatchAssessment.ps1`); nothing else about a run changes, and runs an earlier
+  GUI started are still listed. **`-AllowedHost`:** the `Start-TPWebServer` parameter that added Host names for a port
+  forward or tunnel is gone, so the server answers only to `127.0.0.1:<port>` and `localhost:<port>`; passing it is
+  now a parameter error. The error codes `DomainRequired`, `InvalidDomain` and `UnknownRunId` went with the routes
+  that returned them. The request policy keeps its rule for non-GET requests, for any write route added later. The
+  active ZAP scan no longer excludes any route. Tests pin the exact route list, each route's method, and the absence
+  of process, job and write commands in every route body. Not run here: the real-server tests, which need Pode and
+  run in the Windows CI job.
+
 - **[Security] MCP server: invisible tag characters no longer reach the AI client (`Mcp/Protect-TPMcpOutput.ps1`).**
   The output filter removed format characters with `\p{Cf}`, which a .NET regex applies to UTF-16 code units, so a
   format character above the Basic Multilingual Plane passed through: the Unicode tag block (U+E0000 to U+E007F) can

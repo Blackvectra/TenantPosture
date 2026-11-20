@@ -1,4 +1,6 @@
-// TenantPosture GUI frontend.
+// TenantPosture GUI frontend. A viewer: it lists past runs and opens their
+// reports. It starts no scan and sends no request but GET (an assessment is run
+// from the command line).
 // Vanilla JS. No frameworks, no bundler. CSP-friendly (no eval, no inline
 // handlers, all wiring via addEventListener). Tested against the CSP
 // emitted by Lib/Start-TPWebServer.ps1.
@@ -23,41 +25,6 @@
     return res.json();
   }
 
-  // ─────────────────────── client list ─────────────────────────
-  async function loadClients() {
-    setStatus('Loading clients…');
-    let clients = [];
-    try { clients = await jsonFetch('/api/clients'); }
-    catch (e) { setStatus('Client list unavailable'); return; }
-
-    const list = $('client-list');
-    list.replaceChildren();
-    clients.forEach(function (c) {
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.setAttribute('role', 'button');
-      card.setAttribute('tabindex', '0');
-
-      const title = document.createElement('div');
-      title.className = 'card-title';
-      title.textContent = c.name || c.domain;
-      card.appendChild(title);
-
-      const meta = document.createElement('div');
-      meta.className = 'card-meta';
-      const bits = [c.domain, c.clientType].filter(Boolean).join(' · ');
-      meta.textContent = bits;
-      card.appendChild(meta);
-
-      card.addEventListener('click', function () { triggerScan(c.domain, c.name); });
-      card.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); triggerScan(c.domain, c.name); }
-      });
-      list.appendChild(card);
-    });
-    setStatus('Ready');
-  }
-
   // ─────────────────────── prior runs ─────────────────────────
   // Where the multi-page report site for a run is served. `folder` is the
   // address segment from /api/runs (the tenant folder, or the reserved segment
@@ -72,7 +39,7 @@
     return { folder: r.folder || r.tenant, id: r.id, tenant: r.tenant, timestamp: r.timestamp, hasSite: !!r.hasSite };
   }
 
-  // Returns the list it rendered so a caller can find the run it just made.
+  // Returns the list it rendered.
   async function loadRuns() {
     let runs = [];
     try { runs = await jsonFetch('/api/runs'); }
@@ -143,102 +110,6 @@
     return runs;
   }
 
-  // ─────────────────────── scan trigger ────────────────────────
-  function showProgressPanel(name) {
-    $('panel-progress').hidden = false;
-    $('progress-tenant').textContent = name ? ' ' + name : '';
-    $('progress-fill').style.width = '0%';
-    $('progress-log').textContent = '';
-  }
-
-  // The scan is pinned to a tenant DOMAIN. People type the account they sign in with, so a user
-  // name (admin@contoso.com) is reduced to its domain instead of being refused.
-  function normalizeDomain(value) {
-    let v = String(value || '').trim().toLowerCase();
-    const at = v.lastIndexOf('@');
-    if (at >= 0) v = v.slice(at + 1);
-    return v;
-  }
-
-  async function triggerScan(domain, displayName) {
-    domain = normalizeDomain(domain);
-    if (!domain) { setStatus('Enter a tenant domain first'); return; }
-    if (!/^[a-z0-9.\-]+$/.test(domain)) {
-      setStatus('Enter the tenant domain, for example contoso.com (letters, numbers, dots and hyphens only)');
-      return;
-    }
-    if (!confirm('Run a full assessment of ' + (displayName || domain) + '?')) return;
-
-    showProgressPanel(displayName || domain);
-    setStatus('Starting scan…');
-
-    let runId;
-    try {
-      const r = await fetch('/api/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: domain })
-      });
-      if (!r.ok) {
-        // Every refusal under /api/ is { error, message }; show the fixed
-        // sentence, and only fall back to the status when the body is not it.
-        let msg = 'HTTP ' + r.status;
-        try { const j = await r.json(); if (j && typeof j.message === 'string') msg = j.message; } catch (_) { /* keep the status */ }
-        throw new Error(msg);
-      }
-      runId = (await r.json()).runId;
-    } catch (e) {
-      setStatus('Could not start scan: ' + e.message);
-      return;
-    }
-
-    setStatus('Scanning…');
-    pollScan(runId, domain);
-  }
-
-  async function pollScan(runId, domain) {
-    let backoffMs = 1000;
-    while (true) {
-      let s;
-      try { s = await jsonFetch('/api/scan/' + encodeURIComponent(runId) + '/status'); }
-      catch (e) { setStatus('Lost contact with server'); break; }
-
-      // Update bar
-      const pct = Math.max(0, Math.min(100, Number(s.percent) || 0));
-      $('progress-fill').style.width = pct + '%';
-      // Replace the log; we always render the trailing tail returned by the server.
-      $('progress-log').textContent = (s.lines || []).join('\n');
-      $('progress-log').scrollTop = $('progress-log').scrollHeight;
-
-      if (s.status === 'completed') {
-        setStatus('Scan complete');
-        const runs = await loadRuns();
-        if (s.resultId) {
-          // A scan started here writes under output\<domain>\. The folder keeps
-          // the case it was first created with (NTFS ignores case, so scanning
-          // Contoso.com into an existing contoso.com folder reuses it), so the
-          // run is found by its id and a case-insensitive folder, and opened
-          // under the folder name the server reports. The list also says
-          // whether it has a report site.
-          const want = String(domain).toLowerCase();
-          const made = runs.find(function (r) {
-            return r.id === s.resultId && String(r.folder).toLowerCase() === want;
-          });
-          const run = made ? toRun(made)
-                           : { folder: domain, id: s.resultId, tenant: domain, hasSite: false };
-          run.timestamp = '(just now)';
-          openReport(run);
-        }
-        break;
-      }
-      if (s.status === 'failed') {
-        setStatus('Scan failed — see log');
-        break;
-      }
-      await new Promise(function (res) { setTimeout(res, backoffMs); });
-    }
-  }
-
   // ─────────────────────── report viewer ───────────────────────
   // `run` is a row from /api/runs: { folder, id, tenant, timestamp, hasSite }.
   async function openReport(run) {
@@ -295,18 +166,8 @@
 
   // ─────────────────────── wire-up ─────────────────────────────
   document.addEventListener('DOMContentLoaded', function () {
-    $('btn-refresh-clients').addEventListener('click', loadClients);
     $('btn-refresh-runs').addEventListener('click', loadRuns);
     $('btn-close-report').addEventListener('click', closeReport);
-    $('btn-run-adhoc').addEventListener('click', function () {
-      const v = $('adhoc-domain').value.trim();
-      triggerScan(v, v);
-    });
-    $('adhoc-domain').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); $('btn-run-adhoc').click(); }
-    });
-
-    loadClients();
     loadRuns();
   });
 })();

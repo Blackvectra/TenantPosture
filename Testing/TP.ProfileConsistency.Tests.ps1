@@ -156,10 +156,14 @@ Describe 'Profile consistency' {
             $onboard | Should -Match 'Resolve-TPProfilePath'
         }
 
-        It 'the web server passes its profile to the scan it launches, since TP_PROFILE is no longer left set' {
+        It 'the web server launches no scan, so it has no profile to hand to one' {
+            # It used to pass -Profile to the scan it started, since TP_PROFILE is
+            # no longer left set. The GUI is a viewer now and starts nothing; it
+            # reads the active profile only for the logo origin its policy allows.
             $web = Get-Content -LiteralPath (Join-Path $script:Root 'Lib' 'Start-TPWebServer.ps1') -Raw
-            $web | Should -Match ([regex]::Escape('@(''-Profile'', $profileName)'))
-            $web | Should -Match ([regex]::Escape('ProfileName = $activeProfileName'))
+            $web | Should -Not -Match ([regex]::Escape('''-Profile'''))
+            $web | Should -Not -Match 'activeProfileName'
+            $web | Should -Match 'Get-TPWebLogoOrigin -ScriptDir \$ScriptDir'
         }
     }
 

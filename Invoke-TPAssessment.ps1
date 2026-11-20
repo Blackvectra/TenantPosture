@@ -55,8 +55,8 @@ param(
     # thumbprint from Config/clients.json by domain, so unattended scans don't
     # need the GUIDs pasted every time. Also the target for -RegisterApp.
     # The pattern is Get-TPDomainNamePattern (Lib/Test-TPDomainName.ps1), the
-    # one definition of a domain name the web GUI's scan route and run listing
-    # use too; a parameter attribute binds before any module loads, so it is a
+    # one definition of a domain name, which the web GUI's run listing
+    # uses too; a parameter attribute binds before any module loads, so it is a
     # copy and TP.WebServer.Tests.ps1 fails if the two differ. Options = None
     # makes it case-sensitive (the default admits the Kelvin sign as a letter).
     [ValidatePattern('\A\z|\A(?=.{1,253}\z)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}\z', Options = 'None')]
@@ -462,8 +462,9 @@ param(
 
     # Launch the local web GUI instead of running a scan in the terminal.
     # The GUI is a local Pode-backed server (loopback only, never exposed
-    # to the network) that lets the operator pick a tenant, trigger scans,
-    # watch progress, and view reports in a browser. See Lib/Start-TPWebServer.ps1
+    # to the network) that lists past runs and shows their reports in a
+    # browser. It is a viewer: it starts no scan and signs in to nothing; an
+    # assessment is run from the command line. See Lib/Start-TPWebServer.ps1
     # and Web/. No tenant data leaves the workstation.
     [switch] $Web,
 
@@ -670,7 +671,7 @@ if ($ControlId -or $ExcludeControlId) {
     $selConflicts = @(
         @{ On = [bool]$Quick;                 Text = '-Quick drops evaluators by severity and -ControlId selects controls by ID; choose one.' }
         @{ On = [bool]$FromResults;           Text = '-FromResults republishes what an earlier run assessed; selecting controls there would hide results that run produced. Re-run against the tenant with -ControlId instead.' }
-        @{ On = [bool]$Web;                   Text = '-Web starts the GUI, which launches its own runs; -ControlId applies to a command-line run.' }
+        @{ On = [bool]$Web;                   Text = '-Web starts the report viewer, which assesses nothing; -ControlId applies to a command-line run.' }
         @{ On = [bool]$RegisterApp;           Text = '-RegisterApp onboards a tenant and assesses nothing.' }
         @{ On = [bool]$DistributionListsOnly; Text = '-DistributionListsOnly runs the distribution-list scan, which has its own DL-* checks.' }
         @{ On = [bool]$DeviceResults;         Text = '-DeviceResults adds the DEV-* endpoint checks, which are not in Config/controls.json and cannot be selected; run the endpoint checks in a full assessment.' }
@@ -731,8 +732,8 @@ if ($ProofAgainst) {
 }
 
 # -Web short-circuits the terminal flow: hand control to the local Pode-backed
-# web GUI, which handles tenant selection, scan triggering, progress display,
-# and report viewing in a browser. The server binds to 127.0.0.1 only —
+# web GUI, which lists past runs and shows their reports in a browser. It
+# starts no scan. The server binds to 127.0.0.1 only —
 # never exposed to the network — and exits cleanly on Ctrl+C.
 if ($Web) {
     Start-TPWebServer -Port $WebPort -ScriptDir $scriptDir -OutputRoot $OutputPath

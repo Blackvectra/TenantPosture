@@ -10,11 +10,12 @@
 # nothing. The job also fails if the output folder gained an entry, which
 # would mean a request started an assessment.
 #
-# Excluded: POST /api/scan. An accepted request starts a real assessment in a
-# child process (sign-in included) against the domain in its body, so a
-# scanner trying values would launch assessments; its validation is pinned
-# by Testing/TP.WebServer.Tests.ps1 instead. Its status route,
-# /api/scan/<id>/status, is scanned. ${TP_ZAP_OUT} is the report folder.
+# Excluded: nothing. The server is a viewer: every route is a GET and none
+# starts a process, so every route is attacked. (The GUI used to start an
+# assessment from POST /api/scan, which had to be kept out of the scan; that
+# route and the client list were removed.) The old paths stay among the
+# requests below so the scan shows they answer the fixed 404.
+# ${TP_ZAP_OUT} is the report folder.
 
 env:
   contexts:
@@ -23,8 +24,6 @@ env:
         - http://127.0.0.1:8765/
       includePaths:
         - 'http://127\.0\.0\.1:8765.*'
-      excludePaths:
-        - 'http://127\.0\.0\.1:8765/api/scan(\?.*)?'
   parameters:
     failOnError: true
     failOnWarning: false
@@ -50,6 +49,7 @@ jobs:
       - url: http://127.0.0.1:8765/site/_flat/SCANTENANT-20261016-110000/index.html
       - url: http://127.0.0.1:8765/site/_flat/SCANTENANT-20261016-110000/AAD.html
       - url: http://127.0.0.1:8765/site/_flat/SCANTENANT-20261016-110000/ActionPlan.csv
+      - url: http://127.0.0.1:8765/api/scan
       - url: http://127.0.0.1:8765/api/scan/000000000000/status
       - url: http://127.0.0.1:8765/api/runs?tenant=contoso.example
 

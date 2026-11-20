@@ -8,8 +8,7 @@
       "The repository and its supply chain: the PowerShell source, the CI workflows, the pinned modules and scanner images."
     ],
     "excluded": [
-      "Microsoft 365 tenants: the tool assesses them and never probes them; no scan here targets one.",
-      "POST /api/scan under attack payloads: an accepted request starts a real assessment against the domain in its body. Its input validation is tested by Testing/TP.WebServer.Tests.ps1."
+      "Microsoft 365 tenants: the tool assesses them and never probes them; no scan here targets one."
     ],
     "index": "Routes enumerated from the server's own Add-PodeRoute registrations (parsed, not guessed), plus ZAP's spider and the requestor seeds in .zap/active-scan.yaml; MCP tools from Get-TPMcpToolDefinitions.",
     "channels": {
@@ -32,7 +31,7 @@
       "Evidence": ["SECURITY.md", "docs/security/THREAT-MODEL.md", "CLAUDE.md (Security Requirements)", "this file's scope block"],
       "Gap": "" },
     { "Id": "A.2", "Name": "Logistics", "Status": "Complete",
-      "Evidence": ["Fixture data only (tools/New-TPWebScanFixture.ps1)", "POST /api/scan excluded and the output folder compared before and after (tools/Test-TPZapActiveScan.ps1)", "ZAP rule and scan time caps in .zap/active-scan.yaml", "Fuzz seed and iteration count in tools/TPFuzz.ps1"],
+      "Evidence": ["Fixture data only (tools/New-TPWebScanFixture.ps1)", "No route excluded (the GUI is a viewer; no route starts an assessment) and the output folder compared before and after (tools/Test-TPZapActiveScan.ps1)", "ZAP rule and scan time caps in .zap/active-scan.yaml", "Fuzz seed and iteration count in tools/TPFuzz.ps1"],
       "Gap": "" },
     { "Id": "A.3", "Name": "Active Detection Verification", "Status": "NotApplicable",
       "Evidence": ["Lib/Start-TPWebServer.ps1"],
@@ -82,7 +81,7 @@
   ],
   "errorTypes": [
     { "Type": "False Negative", "AppliesTo": "Every scan", "Note": "A rule that finds nothing is not proof that nothing is there; the baseline scan is passive and the active scan tries known payloads only." },
-    { "Type": "Constraint", "AppliesTo": "ZAP active scan", "Note": "Each rule stops at its time cap (.zap/active-scan.yaml), and POST /api/scan is not attacked at all." },
+    { "Type": "Constraint", "AppliesTo": "ZAP active scan", "Note": "Each rule stops at its time cap (.zap/active-scan.yaml). No route is excluded." },
     { "Type": "Sampling Error", "AppliesTo": "Fuzzer", "Note": "Each run tries a fixed number of seeded cases per parser; other inputs exist. TP_FUZZ_ITERATIONS raises the count for a longer run." },
     { "Type": "Gray Positive", "AppliesTo": "ZAP active scan", "Note": "The server answers every unknown path and method with the same fixed 404, so a scanner reading only status codes cannot tell a missing route from a refused one." }
   ]
