@@ -16,10 +16,13 @@
 #   its own host, so the server refuses every request whose Host header is not
 #   one it is meant to be reached as. This is the check that closes it.
 #
-#   Cross-site request forgery. A page can make the browser POST a form to the
-#   scan route on 127.0.0.1:<port> with a perfectly good Host. It cannot send
-#   a JSON body, set a custom content type, or pass a CORS preflight (the server
-#   sends no CORS headers). So anything but GET/HEAD must carry
+#   Cross-site request forgery. A page can make the browser POST a form to
+#   127.0.0.1:<port> with a perfectly good Host. The server has no route that
+#   changes anything (the scan-launch route was removed; every route is a GET),
+#   so there is nothing for such a request to reach today. The rule stays so
+#   that a write route added later is covered from its first commit: a page
+#   cannot send a JSON body, set a custom content type, or pass a CORS preflight
+#   (the server sends no CORS headers), so anything but GET/HEAD must carry
 #   application/json, must come from this server's own origin when the browser
 #   says where it came from, and must not be marked cross-site by Fetch Metadata.
 #
@@ -58,11 +61,7 @@ function Test-TPWebRequestAllowed {
         # The port the server listens on, and the scheme it serves (the server,
         # which chooses its protocol, says which; the policy hard-codes neither).
         [Parameter(Mandatory)] [ValidateRange(1, 65535)] [int] $Port,
-        [Parameter()] [ValidateSet('http', 'https')] [string] $Scheme = 'http',
-
-        # Further names the GUI may be reached as, for a port forward or tunnel
-        # (host or host:port; a bare host is taken to use $Port). Empty by default.
-        [Parameter()] [AllowNull()] [string[]] $AllowedHost = @()
+        [Parameter()] [ValidateSet('http', 'https')] [string] $Scheme = 'http'
     )
 
     Set-StrictMode -Version Latest
@@ -72,7 +71,10 @@ function Test-TPWebRequestAllowed {
         [pscustomobject]@{ Allowed = $false; HttpStatus = 403; Reason = $Reason; Message = 'Forbidden.' }
     }
 
-    # The names this server answers to. Exact match, case-insensitive: no
+    # The names this server answers to: the loopback address and localhost on its
+    # own port, and no other. There is no option that adds one (a tunnel or port
+    # forward would hand the GUI to whoever can reach the other end, which is what
+    # the loopback bind exists to prevent). Exact match, case-insensitive: no
     # wildcards, no suffix match, no trailing-dot variants. Ordinal comparison,
     # never -in / -eq: those are culture-aware and ignore characters such as a
     # soft hyphen or a NUL appended to the header, so a Host that is not ours
@@ -80,10 +82,6 @@ function Test-TPWebRequestAllowed {
     $hosts = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     [void]$hosts.Add("127.0.0.1:$Port")
     [void]$hosts.Add("localhost:$Port")
-    foreach ($extra in @($AllowedHost)) {
-        if ([string]::IsNullOrWhiteSpace($extra)) { continue }
-        [void]$hosts.Add($(if ($extra -match ':\d+\z') { $extra } else { "${extra}:$Port" }))
-    }
 
     if ([string]::IsNullOrEmpty($HostHeader) -or -not $hosts.Contains($HostHeader)) { return (& $deny 'HostNotAllowed') }
 

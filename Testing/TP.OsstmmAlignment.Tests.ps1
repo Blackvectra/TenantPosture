@@ -108,7 +108,8 @@ Describe 'OSSTMM 3 alignment of the tool''s own testing' {
         $text = & $script:Summarize ''
         $text | Should -Match "\| Visibility \| 1 \|"
         $text | Should -Match "\| Access \| $named \|"
-        $text | Should -Match '\| `/api/scan` \| Post \|'
+        $text | Should -Match '\| `/api/runs` \| Get \|'
+        $text | Should -Not -Match '\| Post \|' -Because 'the server is a viewer: no named route takes anything but GET'
     }
 
     It 'types each alert by its reviewed rule and an unreviewed rule as an Anomaly, on every site in the report' {

@@ -59,9 +59,13 @@ Describe 'Entry points pin the scan to the requested tenant' {
         $script:Entry = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Invoke-TPAssessment.ps1') -Raw
         $script:Web   = Get-Content -LiteralPath (Join-Path $script:RepoRoot 'Lib/Start-TPWebServer.ps1') -Raw
     }
-    It 'the Web GUI launches scans with -TenantDomain, never a fabricated UPN' {
-        $script:Web | Should -Not -Match '-UserPrincipalName\s+"scan@'
-        $script:Web | Should -Match '-TenantDomain \$domain'
+    It 'the Web GUI launches no scan at all, so it has no tenant to pin and no account to invent' {
+        # It used to start one with -TenantDomain (and, before that, a made-up
+        # "scan@<domain>" account). The GUI is a viewer now; an assessment is
+        # started from the command line, which pins the tenant below.
+        $script:Web | Should -Not -Match '-UserPrincipalName'
+        $script:Web | Should -Not -Match '-TenantDomain'
+        $script:Web | Should -Not -Match 'Invoke-TPAssessment\.ps1''' -Because 'the server names the entry script only in comments, never as something to run'
     }
     It 'the entry script passes the resolved tenant to Connect-TPServices' {
         $script:Entry | Should -Match "\`$connectParams\['ExpectedTenantId'\]\s*=\s*\`$targetTenantId"

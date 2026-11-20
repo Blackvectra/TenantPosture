@@ -188,7 +188,7 @@ Every run now classifies the tenant into a **Tenant Security Maturity Tier** (In
 | `-NonInteractive` | Never prompts. Missing modules end the run with exit code 1 instead of an install prompt. |
 | `-WhatIfConnections` | Connects, prints the connection table, and stops before collecting anything. |
 | `-KeepSession` | Leaves the shared sign-in connected afterwards. The batch runner passes it. |
-| `-Web`, `-WebPort` | Opens the local web GUI instead of a terminal run (loopback only, port 8765 by default). |
+| `-Web`, `-WebPort` | Opens the local report viewer instead of a terminal run (loopback only, port 8765 by default). It shows past runs and starts no assessment. |
 <!-- parameter-reference:end -->
 
 ### MSP Batch Run (GDAP)
@@ -273,11 +273,17 @@ login via GDAP — the same multi-tenant model as the batch assessment.
 
 ### Local Web GUI
 
-For operators who prefer clicking over typing, `-Web` boots a local browser
-GUI instead of the terminal flow. The GUI is a Pode-backed loopback server
-on `127.0.0.1:8765`; it never exposes itself to the network and never sends
-tenant data anywhere. Pick a tenant, click "Run scan", watch progress live,
-and view the existing HTML report inline.
+`-Web` opens a local report viewer in your browser instead of running the
+terminal flow. It is a Pode-backed loopback server on `127.0.0.1:8765`; it never
+exposes itself to the network and never sends tenant data anywhere. It lists the
+runs already in the output folder and shows each one's HTML report inline.
+
+It is a viewer only. It starts no assessment, signs in to nothing and accepts no
+request that changes anything: every route is a GET. Run an assessment from the
+command line (`Invoke-TPAssessment.ps1`, `Invoke-TPBatchAssessment.ps1`) and
+refresh the list. Earlier versions could start a scan from the page; that was
+removed so that nothing a web page can reach on the loopback port can start a
+tenant sign-in.
 
 ```powershell
 # One-time install (free, MIT-licensed PSGallery module)
@@ -290,17 +296,16 @@ Install-Module Pode -MinimumVersion 2.10.0 -Scope CurrentUser
 .\Invoke-TPAssessment.ps1 -Web -WebPort 9000
 ```
 
-The GUI consumes the same `Config/clients.json` as the CLI, scans run via the
-same module functions, and reports land in the same `output\` folder, so CLI and
-GUI workflows can be mixed freely:
+The viewer reads the same `output\` folder the command line writes to, and
+names runs from the same `Config/clients.json`:
 
 - **The folder is the command line's.** The GUI reads `<repo>\output`, the folder
   `Invoke-TPAssessment.ps1` and the batch runner write to by default, whatever
   directory it was started from (it used to read the current directory's `output`
   and listed nothing when started from anywhere else). With
   `Invoke-TPAssessment.ps1 -OutputPath D:\reports -Web` it shows `D:\reports`.
-- **Recent runs lists both layouts.** A scan started from the GUI (and the batch
-  runner) writes `output\<domain>\`; a command-line run writes flat files into
+- **Recent runs lists both layouts.** The batch runner (and a scan an earlier
+  version started from the GUI) writes `output\<domain>\`; a command-line run writes flat files into
   `output\`. Both are listed once each, newest first, and a command-line run is
   marked "command line". A flat run is named the way its client is named in
   `Config/clients.json` (found by tenant id, then by routing domain), because a
@@ -329,14 +334,17 @@ a web page open in your own browser, so the server also decides per request:
 - A request whose `Host` header is not `127.0.0.1:<port>` or `localhost:<port>` is
   refused with 403, on every route. This is what stops DNS rebinding, where a
   page on another site makes its own name resolve to `127.0.0.1` to read the GUI
-  (reports, the run list, the report site). If you reach the GUI through a port
-  forward or tunnel, add that name with `-AllowedHost` (for example
-  `Start-TPWebServer -AllowedHost localhost:9000`); leave it empty otherwise.
-- Anything but GET and HEAD must be `application/json`, must come from this
-  server's own origin when the browser says where it came from, and must not be
-  marked cross-site by the browser. A cross-site form cannot meet that, so a web
-  page cannot start a scan on your machine. The server sends no CORS headers, so
-  no preflight is ever granted.
+  (reports, the run list, the report site). There is no option that adds a name:
+  the viewer is not meant to be reached through a port forward or tunnel, which
+  would hand every report to whoever can reach the other end (`-AllowedHost` was
+  removed).
+- No route accepts anything but GET, so there is nothing for a cross-site form to
+  post to. The rule that guarded the old scan route is kept for any write route
+  added later: anything but GET and HEAD must be `application/json`, must come
+  from this server's own origin when the browser says where it came from, and
+  must not be marked cross-site by the browser; such a request then finds no
+  route and gets the 404 below. The server sends no CORS headers, so no
+  preflight is ever granted.
 - Every response is `Cache-Control: no-store` (reports are tenant data and are not
   written to the browser's disk cache) and `Cross-Origin-Resource-Policy:
   same-origin`.
@@ -345,19 +353,16 @@ a web page open in your own browser, so the server also decides per request:
 code and a fixed sentence that never echoes the request:
 
 ```json
-{ "error": "InvalidDomain", "message": "The domain is not a valid domain name." }
+{ "error": "InvalidPath", "message": "Invalid path segment." }
 ```
 
-The codes are `DomainRequired` and `InvalidDomain` (400), `InvalidPath` (400),
-`NotFound` and `UnknownRunId` (404) and `Forbidden` (403). Branch on `error`, never
+The codes are `InvalidPath` (400), `NotFound` (404) and `Forbidden` (403). Branch on `error`, never
 on the sentence. Outside `/api/` (the static files and the report site) a refusal
 is a plain-text sentence. A path no route serves, or a method a route does not
 allow, is answered the same way (`NotFound` under `/api/`, `Not found.` elsewhere)
 by a wildcard route registered last, so it carries the security headers and goes
 through the request policy; the only answer Pode still sends on its own is for a
-request it cannot parse at all. The domain a scan is started for must be a fully
-qualified hostname (two or more labels, no trailing dot); the same rule is applied
-by `Invoke-TPAssessment.ps1 -TenantDomain`.
+request it cannot parse at all.
 
 The server is read-only toward tenants: listing runs and serving report files
 makes no Graph or Exchange call (only a scan you start from the page does, in its

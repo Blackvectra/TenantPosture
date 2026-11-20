@@ -32,7 +32,10 @@ Untrusted input, in order of concern:
    are read with `Import-PowerShellDataFile`; they must never be executed.
 4. **The local web GUI** (`Invoke-TPAssessment.ps1 -Web`, `Lib/Start-TPWebServer.ps1`,
    `Web/`, `Lib/*Web*.ps1`): a
-   Pode server bound to loopback that lists runs and serves report files. Its
+   Pode server bound to loopback that lists runs and serves report files, and
+   nothing else: every route is a GET and none starts a process (the route that
+   started an assessment, and the option that let it answer to a tunnel name,
+   were removed). Its
    threat is a web page in the operator's browser (DNS rebinding, cross-site
    requests, path traversal through run ids and folder names), not the network.
 5. **Command-line parameters and environment** (`-TenantDomain`, `-Profile`,

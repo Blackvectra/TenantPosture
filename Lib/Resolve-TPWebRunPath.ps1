@@ -26,8 +26,8 @@
 # Graph scopes / cmdlets used: none.
 
 # The path segment that stands for "the output folder itself". An underscore
-# prefix keeps it out of the set of names the GUI can create for a tenant (the
-# scan route accepts only letters, digits, dots and hyphens). Even so a real
+# prefix keeps it out of the set of names a tenant folder can have (a domain
+# name holds only letters, digits, dots and hyphens). Even so a real
 # folder with this name is never listed or served as a tenant folder, so the
 # segment cannot be ambiguous.
 function Get-TPWebFlatSegment {

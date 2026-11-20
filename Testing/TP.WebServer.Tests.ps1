@@ -302,7 +302,7 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             $script:ServerSrc | Should -Match '-Port \$cfg\.Port'
             $script:ServerSrc | Should -Match '-Scheme \$cfg\.Scheme'
             $script:ServerSrc | Should -Match "Scheme\s+=\s+'http'" -Because 'the server chooses the protocol, so the server says which scheme'
-            $script:ServerSrc | Should -Match '-AllowedHost \$cfg\.AllowedHost'
+            $script:ServerSrc | Should -Not -Match 'AllowedHost' -Because 'the server answers to 127.0.0.1 and localhost only; the option that added names was removed'
         }
     }
 
@@ -367,14 +367,36 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             (Get-Content -LiteralPath $script:IndexLib -Raw) | Should -Match '\$uri\.Scheme -eq .https.'
         }
 
-        It 'POST /api/scan validates the domain with the one domain-name rule, and keeps no pattern of its own' {
-            # The domain is fed to the child scan job and becomes a folder name:
-            # the rule that accepts it must be the rule the listing, the path
-            # guard and the entry script agree with. The route had a regex of its
-            # own, which accepted "a..b.com" and a trailing line feed.
-            $script:ServerSrc | Should -Match '(?s)''/api/scan''.*?Test-TPDomainName\s+-Value\s+\$domain'
-            $script:ServerSrc | Should -Not -Match '\$domain\s+-(not)?c?match' `
-                -Because 'a second definition of a valid domain is how the first drifted'
+        It 'the server is a viewer: its routes are exactly the read routes, every one a GET, and none starts a process' {
+            # The GUI used to start an assessment from POST /api/scan, in a child
+            # process, and list the clients for its picker. Both are gone: nothing
+            # a web page can reach on this socket starts a sign-in or changes
+            # anything. A route added later has to be added here on purpose.
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:ServerPath, [ref]$null, [ref]$null)
+            $routes = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Add-PodeRoute' }, $true))
+            $seen = [System.Collections.Generic.List[string]]::new()
+            foreach ($route in $routes) {
+                $path = $null; $method = $null; $block = $null
+                $els = $route.CommandElements
+                for ($i = 0; $i -lt $els.Count - 1; $i++) {
+                    if ($els[$i] -isnot [System.Management.Automation.Language.CommandParameterAst]) { continue }
+                    if ($els[$i].ParameterName -eq 'Path')        { $path   = $els[$i + 1].Value }
+                    if ($els[$i].ParameterName -eq 'Method')      { $method = $els[$i + 1].Extent.Text }
+                    if ($els[$i].ParameterName -eq 'ScriptBlock') { $block  = $els[$i + 1] }
+                }
+                $seen.Add([string]$path)
+                # The wildcard answers every method with "not found"; every other route reads.
+                if ($path -cne '/*') { $method | Should -BeExactly 'Get' -Because "route $path" }
+                $inner = @($block.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true) |
+                    ForEach-Object { $_.GetCommandName() } | Where-Object { $_ })
+                foreach ($banned in 'Start-Job', 'Start-ThreadJob', 'Start-Process', 'Invoke-Expression', 'Invoke-Command', 'Set-Content', 'Out-File', 'New-Item', 'Remove-Item', 'Move-Item', 'Copy-Item') {
+                    $inner | Should -Not -Contain $banned -Because "route $path only reads"
+                }
+                $block.Extent.Text | Should -Not -Match 'Invoke-TPAssessment|Diagnostics\.Process|\$PID' -Because "route $path starts nothing"
+            }
+            @($seen | Sort-Object) | Should -Be @(@('/', '/*', '/api/runs', '/api/runs/:tenant/:id/report', '/site/:tenant/:id/:page', '/static/app.css', '/static/app.js') | Sort-Object)
+            $script:ServerSrc | Should -Not -Match "Set-PodeState -Name 'scans'"
+            $script:ServerSrc | Should -Not -Match '/api/scan|/api/clients'
         }
 
         It 'no route uses Set-PodeResponseStatus (it renders Pode''s own error page and cuts the body written after it)' {
@@ -403,7 +425,7 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
                     ForEach-Object { $_.GetCommandName() } | Where-Object { $_ })
                 $inner | Should -Not -Contain 'Write-PodeTextResponse' -Because "route $path"
             }
-            $api | Should -BeGreaterOrEqual 5 -Because 'a route list that did not parse would pass this vacuously'
+            $api | Should -Be 2 -Because 'the run list and the report route; a route list that did not parse would pass this vacuously'
         }
     }
 
@@ -450,11 +472,17 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             $script:AppJsSrc | Should -Not -Match 'insertAdjacentHTML'
         }
 
-        It 'app.js shows the API''s fixed sentence for a refused scan, not the raw response body' {
-            # Every refusal under /api/ is { error, message }; printing the body
-            # would show JSON, and printing text() of an error page would show markup.
-            $script:AppJsSrc | Should -Match 'j\.message' -Because 'the GUI shows the message field'
-            $script:AppJsSrc | Should -Not -Match 'new Error\(await r\.text\(\)\)'
+        It 'app.js only reads: it starts no scan and sends no request but GET' {
+            # The scan form, the client picker and the progress panel are gone
+            # with the routes behind them.
+            $script:AppJsSrc | Should -Not -Match '/api/scan|/api/clients'
+            $script:AppJsSrc | Should -Not -Match "method\s*:" -Because 'every fetch is a default GET'
+            $script:AppJsSrc | Should -Not -Match "'POST'|'PUT'|'DELETE'|'PATCH'"
+            $script:AppJsSrc | Should -Not -Match 'triggerScan|pollScan|loadClients'
+            foreach ($gone in 'adhoc-domain', 'btn-run-adhoc', 'client-list', 'panel-progress', 'progress-log') {
+                $script:IndexSrc | Should -Not -Match $gone -Because 'the page offers nothing that starts a scan'
+            }
+            $script:IndexSrc | Should -Not -Match '<form|<input' -Because 'the viewer takes no typed input'
         }
 
         It 'the report-site link addresses the run by folder + id, encoded, and opens in a new tab without an opener' {
@@ -464,18 +492,6 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             $script:AppJsSrc | Should -Match "\.rel\s*=\s*'noopener'"
             $script:IndexSrc | Should -Match '<a id="link-report-site"[^>]*rel="noopener"' `
                 -Because 'the server forbids framing (frame-ancestors none), so the site opens in its own tab'
-        }
-
-        It 'a finished scan is found by its id and a case-insensitive folder, and opened under the folder name the server reports' {
-            # NTFS ignores case: scanning Contoso.com into an existing contoso.com
-            # folder reuses it, the server reports 'contoso.com', and a strict
-            # comparison with what was typed missed the run, so the Report site
-            # link was not shown for a run that had a site.
-            $script:AppJsSrc | Should -Not -Match 'r\.folder\s*===\s*domain'
-            $script:AppJsSrc | Should -Match 'String\(domain\)\.toLowerCase\(\)'
-            $script:AppJsSrc | Should -Match 'String\(r\.folder\)\.toLowerCase\(\)\s*===\s*want'
-            $script:AppJsSrc | Should -Match 'r\.id\s*===\s*s\.resultId'
-            $script:AppJsSrc | Should -Match 'made\s*\?\s*toRun\(made\)' -Because 'the folder name on disk, not the typed one, addresses the run'
         }
 
         It 'opening a report no longer builds its URL from the display label' {
@@ -556,13 +572,6 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             $script:Src | Should -Match 'Start-PodeServer[^\r\n]*-ScriptBlock\s+\$serverBlock'
         }
 
-        It 'reads clients.json as $raw.clients, not the wrapper object' {
-            # clients.json is { "clients": [ ... ] }. Enumerating the wrapper
-            # yielded one row whose ClientName/TenantDomain do not exist, so
-            # the picker showed a single blank client.
-            $script:Src | Should -Match '@\(\$raw\.clients\)'
-        }
-
         It 'loads the run-index helpers into the route runspaces with Use-PodeScript' {
             # Route bodies run in default-session-state runspaces: a module
             # function is not visible there unless Use-PodeScript brings it in.
@@ -582,7 +591,7 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             $fn  = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Start-TPWebServer' }, $true)
             $script:ScriptDirParam  = $fn.Body.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'ScriptDir' }
             $script:OutputRootParam = $fn.Body.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'OutputRoot' }
-            $script:AllowedHostParam = $fn.Body.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'AllowedHost' }
+            $script:ServerParamNames = @($fn.Body.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })
             . $script:ServerPath
         }
 
@@ -611,19 +620,15 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             $script:Src | Should -Match 'GetUnresolvedProviderPathFromPSPath\(\$OutputRoot\)'
         }
 
-        It '-AllowedHost accepts a host or host:port and refuses anything else, before the server starts' {
-            # Parameter validation runs at bind time, so these need no Pode.
-            foreach ($bad in 'a b', 'a/b', '*', '*.example.com', 'http://evil', 'evil.com:99999x', 'evil.com:', ':8765', '-x.com', "evil.com`n", 'a@b.com') {
-                $err = $null
-                try { Start-TPWebServer -AllowedHost $bad -NoBrowser } catch { $err = $_ }
-                $err | Should -Not -BeNullOrEmpty -Because "'$bad' is not a host name"
-                $err.FullyQualifiedErrorId | Should -Match 'ParameterArgumentValidationError' -Because 'refused by parameter validation, before any server code runs'
-            }
-            # And the names that are fine are accepted by the same validation.
-            foreach ($good in 'localhost', 'tunnel.test:9000', 'a-b.example.com', '127.0.0.1:8765') {
-                $attr = ($script:AllowedHostParam.Attributes | Where-Object { $_.TypeName.Name -eq 'ValidatePattern' }).PositionalArguments[0].Value
-                $good | Should -Match $attr -Because "'$good' is a host name"
-            }
+        It 'has no option that adds a name the server answers to (no tunnel, no port forward)' {
+            # -AllowedHost widened the Host allow-list for a tunnel. A tunnel hands
+            # the GUI, and every report behind it, to whoever reaches the other end,
+            # which is what binding to loopback exists to prevent.
+            $script:ServerParamNames | Should -Be @('Port', 'ScriptDir', 'OutputRoot', 'NoBrowser')
+            $policySrc = Get-Content -LiteralPath (Join-Path (Split-Path -Parent $script:ServerPath) 'Test-TPWebRequestAllowed.ps1') -Raw
+            $policySrc | Should -Match 'function Test-TPWebRequestAllowed'
+            $policySrc | Should -Not -Match 'AllowedHost' -Because 'the policy has no list of extra names to add to'
+            { Start-TPWebServer -AllowedHost 'tunnel.test:9000' -NoBrowser } | Should -Throw -ErrorId 'NamedParameterNotFound,Start-TPWebServer'
         }
 
         It 'does not default it from $PSCommandPath, which is Lib itself' {
@@ -1030,13 +1035,11 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
             BeforeAll {
                 # The statuses are written out here, independently of the table.
                 $script:ExpectedApiErrors = @{
-                    DomainRequired = 400; InvalidDomain = 400; UnknownRunId = 404
                     InvalidPath = 400; NotFound = 404; Forbidden = 403
                 }
             }
 
             It 'has exactly the codes the routes use, each with its status: <Code>' -ForEach @(
-                @{ Code = 'DomainRequired'; Status = 400 }, @{ Code = 'InvalidDomain'; Status = 400 }, @{ Code = 'UnknownRunId'; Status = 404 },
                 @{ Code = 'InvalidPath';    Status = 400 }, @{ Code = 'NotFound';      Status = 404 }, @{ Code = 'Forbidden';    Status = 403 }) {
                 $e = Get-TPWebApiError -Code $Code
                 $e.HttpStatus | Should -Be $Status
@@ -1464,17 +1467,11 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
                 (& $script:Policy @{ HostHeader = '127.0.0.1:8765'; Origin = 'http://evil.example.com'; SecFetchSite = 'cross-site' }).Allowed | Should -BeTrue
             }
 
-            It '-AllowedHost adds names for a tunnel: a bare host takes the server port, host:port is exact, anything else is still refused' {
-                $extra = @('tunnel.test:9000', 'alias.test')
-                (& $script:Policy @{ HostHeader = 'tunnel.test:9000'; AllowedHost = $extra }).Allowed | Should -BeTrue
-                (& $script:Policy @{ HostHeader = 'alias.test:8765';  AllowedHost = $extra }).Allowed | Should -BeTrue
-                (& $script:Policy @{ HostHeader = 'tunnel.test:9001'; AllowedHost = $extra }).Allowed | Should -BeFalse
-                (& $script:Policy @{ HostHeader = 'tunnel.test';      AllowedHost = $extra }).Allowed | Should -BeFalse
-                (& $script:Policy @{ HostHeader = 'alias.test:9000';  AllowedHost = $extra }).Allowed | Should -BeFalse
-                (& $script:Policy @{ HostHeader = 'evil.example.com:8765'; AllowedHost = $extra }).Allowed | Should -BeFalse
-                # And an allowed tunnel name is an allowed Origin for the JSON POST.
-                (& $script:Policy @{ Method = 'POST'; HostHeader = 'tunnel.test:9000'; ContentType = 'application/json'; Origin = 'http://tunnel.test:9000'; AllowedHost = $extra }).Allowed | Should -BeTrue
-                (& $script:Policy @{ Method = 'POST'; HostHeader = 'tunnel.test:9000'; ContentType = 'application/json'; Origin = 'http://127.0.0.1:8765'; AllowedHost = $extra }).Allowed | Should -BeTrue
+            It 'no name but the loopback address and localhost is ever ours, for a read or a write' {
+                foreach ($name in 'tunnel.test:9000', 'tunnel.test:8765', 'alias.test:8765', 'localhost.evil.example:8765', '127.0.0.1.evil.example:8765') {
+                    (& $script:Policy @{ HostHeader = $name }).Reason | Should -Be 'HostNotAllowed' -Because $name
+                    (& $script:Policy @{ Method = 'POST'; HostHeader = $name; ContentType = 'application/json'; Origin = "http://$name" }).Reason | Should -Be 'HostNotAllowed' -Because $name
+                }
             }
 
             It 'the scheme comes from the server, not the policy: https origins are accepted only when the server says https' {
@@ -1485,11 +1482,6 @@ Describe 'TenantPosture Web GUI invariants — Lib/Start-TPWebServer.ps1 + Web/'
                 $http = @{ Method = 'POST'; HostHeader = '127.0.0.1:8765'; ContentType = 'application/json'; Origin = 'http://127.0.0.1:8765' }
                 (& $script:Policy ($http + @{ Scheme = 'https' })).Reason | Should -Be 'OriginNotAllowed'
                 { Test-TPWebRequestAllowed -Method GET -HostHeader 'localhost:8765' -Port 8765 -Scheme 'ftp' } | Should -Throw
-            }
-
-            It 'a blank or null -AllowedHost entry adds nothing' {
-                (& $script:Policy @{ HostHeader = ':8765'; AllowedHost = @('', '  ', $null) }).Allowed | Should -BeFalse
-                (& $script:Policy @{ HostHeader = '127.0.0.1:8765'; AllowedHost = $null }).Allowed | Should -BeTrue
             }
 
             It 'the port must be a real port' {
@@ -1625,10 +1617,6 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
             $script:PortD = Get-Random -Minimum 29001 -Maximum 31000
             $script:D = & $script:Boot @{ Cwd = $script:Install; Port = $script:PortD; ScriptDir = '.' }
 
-            # Server C: extra names for a tunnel.
-            $script:PortC = Get-Random -Minimum 26001 -Maximum 29000
-            $script:C = & $script:Boot @{ Cwd = $script:Elsewhere; Port = $script:PortC; OutputRoot = $script:Fx.Out; Extra = "-AllowedHost 'tunnel.test:9000','alias.test'" }
-
             $script:Base = "http://127.0.0.1:$($script:Port)"
             $script:Get = {
                 param([string] $Path)
@@ -1637,7 +1625,7 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
         }
 
         AfterAll {
-            foreach ($s in @($script:A, $script:B, $script:C, $script:D)) {
+            foreach ($s in @($script:A, $script:B, $script:D)) {
                 if ($s -and $s.Proc -and -not $s.Proc.HasExited) {
                     Stop-Process -Id $s.Proc.Id -Force -ErrorAction SilentlyContinue
                 }
@@ -1692,16 +1680,6 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
                 (Invoke-WebRequest -Uri "http://127.0.0.1:$($script:PortB)/static/app.js" -TimeoutSec 5 -UseBasicParsing).StatusCode | Should -Be 200
                 (& $script:Raw $script:PortB "/api/runs/_flat/$($script:FxB.Id)/report").Body | Should -Match 'FLAT-REPORT-MARKER'
             }
-        }
-
-        It 'serves /api/clients as a JSON array, never null' {
-            # $clients is built by a pipeline; when it yields nothing the
-            # variable is $null, which serializes as JSON null, and app.js
-            # calls .forEach on it outside its try.
-            $r = Invoke-WebRequest -Uri "http://127.0.0.1:$($script:Port)/api/clients" -TimeoutSec 5 -UseBasicParsing
-            $r.StatusCode | Should -Be 200
-            $r.Content.Trim() | Should -Not -Be 'null'
-            { $r.Content | ConvertFrom-Json -ErrorAction Stop } | Should -Not -Throw
         }
 
         It 'serves /api/runs as a JSON array' {
@@ -1867,14 +1845,12 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
         }
 
         Context 'only requests meant for this server are answered' {
-            # Every refused state-changing request below uses a domain that is
-            # INVALID on purpose: the route would reject it with 400, so even a
-            # request that got past the guard could not start a scan.
+            # The server has no route that changes anything, so a state-changing
+            # request below has nothing to reach even when the policy lets it by.
 
             It 'refuses a request whose Host header is not ours, on every route (DNS rebinding): <HostCase> <Path>' -ForEach @(
                 @{ Path = '/';                                                     HostCase = 'evil.example.com' }
                 @{ Path = '/static/app.js';                                        HostCase = 'evil.example.com' }
-                @{ Path = '/api/clients';                                          HostCase = 'evil.example.com' }
                 @{ Path = '/api/runs';                                             HostCase = 'evil.example.com' }
                 @{ Path = '/api/runs/_flat/CLITENANT-20261002-114907/report';      HostCase = 'evil.example.com' }
                 @{ Path = '/site/_flat/CLITENANT-20261002-114907/index.html';      HostCase = 'evil.example.com' }
@@ -1921,7 +1897,6 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
             It 'every kind of answer is no-store and same-origin-only: <Path>' -ForEach @(
                 @{ Path = '/' }
                 @{ Path = '/static/app.js' }
-                @{ Path = '/api/clients' }
                 @{ Path = '/api/runs' }
                 @{ Path = '/api/runs/_flat/CLITENANT-20261002-114907/report' }
                 @{ Path = '/site/_flat/CLITENANT-20261002-114907/index.html' }
@@ -1948,37 +1923,37 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
                 @{ Label = 'JSON from a null origin';        Headers = @{ 'Content-Type' = 'application/json'; Origin = 'null' };                                      Body = '{"domain":"bad domain!"}' }
                 @{ Label = 'JSON marked cross-site';         Headers = @{ 'Content-Type' = 'application/json'; 'Sec-Fetch-Site' = 'cross-site' };                      Body = '{"domain":"bad domain!"}' }
                 @{ Label = 'no content type at all';         Headers = @{};                                                                                           Body = '{"domain":"bad domain!"}' }) {
-                $r = & $script:Raw $script:Port '/api/scan' 'POST' $Headers $Body
+                $r = & $script:Raw $script:Port '/api/runs' 'POST' $Headers $Body
                 $r.Status | Should -Be 403
                 ($r.Body | ConvertFrom-Json).error | Should -BeExactly 'Forbidden'
             }
 
             It 'a state-changing request with a foreign Host is refused before its content is looked at' {
-                $r = & $script:Raw $script:Port '/api/scan' 'POST' @{ Host = 'evil.example.com'; 'Content-Type' = 'application/json'; Origin = 'http://evil.example.com' } '{"domain":"bad domain!"}'
+                $r = & $script:Raw $script:Port '/api/runs' 'POST' @{ Host = 'evil.example.com'; 'Content-Type' = 'application/json'; Origin = 'http://evil.example.com' } '{"domain":"bad domain!"}'
                 $r.Status | Should -Be 403
                 ($r.Body | ConvertFrom-Json).error | Should -BeExactly 'Forbidden'
             }
 
             It 'a preflight is never granted' {
-                $r = & $script:Raw $script:Port '/api/scan' 'OPTIONS' @{ Origin = 'http://evil.example.com'; 'Access-Control-Request-Method' = 'POST'; 'Access-Control-Request-Headers' = 'content-type' }
+                $r = & $script:Raw $script:Port '/api/runs' 'OPTIONS' @{ Origin = 'http://evil.example.com'; 'Access-Control-Request-Method' = 'POST'; 'Access-Control-Request-Headers' = 'content-type' }
                 $r.Status | Should -BeIn @(403, 405)
                 $r.Headers.ContainsKey('access-control-allow-origin') | Should -BeFalse
                 $r.Headers.ContainsKey('access-control-allow-methods') | Should -BeFalse
             }
 
-            It 'the GUI''s own request gets through to the route: same-origin JSON reaches the validator, which says 400 for the invalid domain' {
-                # 400 is the ROUTE's answer to an invalid domain, so no scan was started.
-                $own = @{ 'Content-Type' = 'application/json'; Origin = $script:Base; 'Sec-Fetch-Site' = 'same-origin' }
-                (& $script:Raw $script:Port '/api/scan' 'POST' $own '{"domain":"bad domain!"}').Status | Should -Be 400
-                # A client that is not a browser sends no Origin and is a normal caller.
-                (& $script:Raw $script:Port '/api/scan' 'POST' @{ 'Content-Type' = 'application/json' } '{"domain":"bad domain!"}').Status | Should -Be 400
-                # localhost is the same server.
-                $viaName = @{ Host = "localhost:$($script:Port)"; 'Content-Type' = 'application/json'; Origin = "http://localhost:$($script:Port)" }
-                (& $script:Raw $script:Port '/api/scan' 'POST' $viaName '{"domain":"bad domain!"}').Status | Should -Be 400
-            }
-
-            It 'refusing leaves no scan behind: the status route knows no run' {
-                (& $script:Raw $script:Port '/api/scan/does-not-exist/status').Status | Should -Be 404
+            It 'no request starts a scan: the scan and client routes are gone, for the GUI''s own origin too: <Label>' -ForEach @(
+                @{ Label = 'same-origin JSON POST to the old scan route'; Target = '/api/scan'; Method = 'POST'; Headers = @{ 'Content-Type' = 'application/json'; 'Sec-Fetch-Site' = 'same-origin' }; Body = '{"domain":"client.example.com"}' }
+                @{ Label = 'a non-browser JSON POST to the old scan route'; Target = '/api/scan'; Method = 'POST'; Headers = @{ 'Content-Type' = 'application/json' }; Body = '{"domain":"client.example.com"}' }
+                @{ Label = 'the old status route'; Target = '/api/scan/000000000000/status'; Method = 'GET'; Headers = @{}; Body = '' }
+                @{ Label = 'the old client list'; Target = '/api/clients'; Method = 'GET'; Headers = @{}; Body = '' }
+                @{ Label = 'a JSON POST to the run list'; Target = '/api/runs'; Method = 'POST'; Headers = @{ 'Content-Type' = 'application/json' }; Body = '{}' }) {
+                $r = & $script:Raw $script:Port $Target $Method $Headers $Body
+                $r.Status | Should -Be 404
+                $j = $r.Body | ConvertFrom-Json
+                $j.error | Should -BeExactly 'NotFound'
+                $r.Body | Should -Not -Match 'client\.example' -Because 'a refusal never echoes the request'
+                # Nothing was created for the domain the request named.
+                Test-Path -LiteralPath (Join-Path $script:Fx.Out 'client.example.com') | Should -BeFalse
             }
         }
 
@@ -2030,7 +2005,7 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
             It 'a method a route does not allow goes through the request policy and the headers: <Label>' -ForEach @(
                 @{ Label = 'POST to the index (not JSON: refused by the policy)'; Target = '/'; Headers = @{}; Status = 403 }
                 @{ Label = 'POST to an asset as JSON (no route: 404)'; Target = '/static/app.js'; Headers = @{ 'Content-Type' = 'application/json' }; Status = 404 }
-                @{ Label = 'OPTIONS preflight to the scan route (refused, no CORS header)'; Target = '/api/scan'; Headers = @{ 'Origin' = 'http://evil.example'; 'Access-Control-Request-Method' = 'POST' }; Status = 403 }) {
+                @{ Label = 'OPTIONS preflight to the run list (refused, no CORS header)'; Target = '/api/runs'; Headers = @{ 'Origin' = 'http://evil.example'; 'Access-Control-Request-Method' = 'POST' }; Status = 403 }) {
                 $r = & $script:Raw $script:Port $Target $(if ($Label -like 'OPTIONS*') { 'OPTIONS' } else { 'POST' }) $Headers
                 $r.Status | Should -Be $Status
                 $r.Headers['content-security-policy'] | Should -Not -BeNullOrEmpty
@@ -2102,71 +2077,6 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
         }
 
         Context 'a refusal under /api/ is JSON with a stable code; outside /api/ it is text' {
-            # Server B is an installation folder with no entry script: if a domain
-            # that must be refused were ever accepted, the scan it started would
-            # fail at once instead of reaching a tenant. Server A, started from the
-            # repository's own ScriptDir, is not used for a request that could start one.
-            BeforeAll {
-                $script:PostScan = {
-                    param([string] $Body)
-                    & $script:Raw $script:PortB '/api/scan' 'POST' @{ 'Content-Type' = 'application/json' } $Body
-                }
-            }
-
-            It 'refuses a domain the one rule refuses with 400 InvalidDomain and a fixed sentence: <Label>' -ForEach @(
-                @{ Label = 'a..b.com (the entry script accepted it)';       Body = '{"domain":"a..b.com"}';        Echo = 'a..b' }
-                @{ Label = 'a trailing line feed (a $ anchor accepted it)'; Body = '{"domain":"fabrikam.org\n"}';    Echo = 'fabrikam' }
-                @{ Label = 'a space and a bang';                           Body = '{"domain":"bad domain!"}';     Echo = 'bad domain' }
-                @{ Label = 'one label';                                    Body = '{"domain":"localhost"}';       Echo = 'localhost' }
-                @{ Label = 'a leading hyphen';                             Body = '{"domain":"-x.com"}';          Echo = '-x.com' }
-                @{ Label = 'two dots';                                     Body = '{"domain":".."}';              Echo = '..' }
-                @{ Label = 'a trailing dot';                               Body = '{"domain":"client.example.com."}'; Echo = 'client.example' }) {
-                $r = & $script:PostScan $Body
-                $r.Status | Should -Be 400
-                $r.Headers['content-type'] | Should -Match '^application/json'
-                $j = $r.Body | ConvertFrom-Json
-                @($j.PSObject.Properties.Name) | Should -Be @('error', 'message')
-                $j.error   | Should -BeExactly 'InvalidDomain'
-                $j.message | Should -BeExactly 'The domain is not a valid domain name.'
-                $r.Body | Should -Not -Match ([regex]::Escape($Echo)) -Because 'a refusal never echoes the request'
-                $r.Body | Should -Not -Match '<html' -Because 'Pode''s own error page is not the answer'
-            }
-
-            It 'asks for a domain with 400 DomainRequired when there is none: <Label>' -ForEach @(
-                @{ Label = 'an empty string'; Body = '{"domain":""}' }
-                @{ Label = 'only spaces';     Body = '{"domain":"   "}' }
-                @{ Label = 'no domain field'; Body = '{}' }) {
-                $r = & $script:PostScan $Body
-                $r.Status | Should -Be 400
-                $j = $r.Body | ConvertFrom-Json
-                $j.error   | Should -BeExactly 'DomainRequired'
-                $j.message | Should -BeExactly 'A domain is required.'
-            }
-
-            It 'a valid domain is accepted: the route answers 200 with a run id, and the status route knows it' {
-                $r = & $script:PostScan '{"domain":"Client-One.example.com"}'
-                $r.Status | Should -Be 200
-                $runId = ($r.Body | ConvertFrom-Json).runId
-                $runId | Should -Match '^[0-9a-f]{12}$'
-                $st = & $script:Raw $script:PortB "/api/scan/$runId/status"
-                $st.Status | Should -Be 200
-                $sj = $st.Body | ConvertFrom-Json
-                $sj.domain | Should -BeExactly 'Client-One.example.com'
-                $sj.status | Should -BeIn @('queued', 'running', 'failed', 'completed')
-                @($sj.PSObject.Properties.Name) | Should -Not -Contain 'error'
-                # The route creates nothing itself: the folder is the entry script's to make.
-                Test-Path -LiteralPath (Join-Path $script:FxB.Out 'Client-One.example.com') | Should -BeFalse
-            }
-
-            It 'answers an unknown scan id with 404 UnknownRunId' {
-                $r = & $script:Raw $script:Port '/api/scan/does-not-exist/status'
-                $r.Status | Should -Be 404
-                $r.Headers['content-type'] | Should -Match '^application/json'
-                $j = $r.Body | ConvertFrom-Json
-                $j.error   | Should -BeExactly 'UnknownRunId'
-                $j.message | Should -BeExactly 'No scan with that run id.'
-            }
-
             It 'answers the report route''s refusals in the same contract: <Path>' -ForEach @(
                 @{ Path = '/api/runs/_flat/NOSUCH-20261002-000000/report'; Status = 404; Code = 'NotFound' }
                 @{ Path = '/api/runs/nosuchfolder/NOSUCH-20261002-000000/report'; Status = 404; Code = 'NotFound' }
@@ -2186,28 +2096,9 @@ Start-TPWebServer $($parts -join ' ') -NoBrowser
             }
         }
 
-        Context '-AllowedHost (a tunnel or port forward)' {
-            It 'answers the extra names, on the port they were given, and still refuses everything else' {
-                $pc = $script:PortC
-                (& $script:Raw $pc '/api/runs' 'GET' @{ Host = 'tunnel.test:9000' }).Status | Should -Be 200
-                (& $script:Raw $pc '/api/runs' 'GET' @{ Host = "alias.test:$pc" }).Status | Should -Be 200
-                (& $script:Raw $pc '/api/runs' 'GET' @{ Host = "127.0.0.1:$pc" }).Status | Should -Be 200
-                (& $script:Raw $pc '/api/runs' 'GET' @{ Host = 'tunnel.test:9001' }).Status | Should -Be 403
-                (& $script:Raw $pc '/api/runs' 'GET' @{ Host = 'tunnel.test' }).Status | Should -Be 403
-                (& $script:Raw $pc '/api/runs' 'GET' @{ Host = "evil.example.com:$pc" }).Status | Should -Be 403
-            }
-
-            It 'an extra name is also an acceptable origin for the GUI''s own request, and a stranger still is not' {
-                $pc = $script:PortC
-                $ok  = @{ Host = 'tunnel.test:9000'; 'Content-Type' = 'application/json'; Origin = 'http://tunnel.test:9000' }
-                $bad = @{ Host = 'tunnel.test:9000'; 'Content-Type' = 'application/json'; Origin = 'http://evil.example.com' }
-                (& $script:Raw $pc '/api/scan' 'POST' $ok '{"domain":"bad domain!"}').Status | Should -Be 400
-                (& $script:Raw $pc '/api/scan' 'POST' $bad '{"domain":"bad domain!"}').Status | Should -Be 403
-            }
-
-            It 'the default server (no -AllowedHost) does not answer those names' {
-                (& $script:Raw $script:Port '/api/runs' 'GET' @{ Host = 'tunnel.test:9000' }).Status | Should -Be 403
-            }
+        It 'answers to no name but its own: a tunnel or alias name is refused' {
+            (& $script:Raw $script:Port '/api/runs' 'GET' @{ Host = 'tunnel.test:9000' }).Status | Should -Be 403
+            (& $script:Raw $script:Port '/api/runs' 'GET' @{ Host = "alias.test:$($script:Port)" }).Status | Should -Be 403
         }
 
         It 'emits the strict CSP header on a real response' {

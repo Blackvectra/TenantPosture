@@ -8,7 +8,7 @@
 # pure table so it is tested without a server. Every refusal under /api/ is a
 # JSON object with a stable machine-readable code and a fixed sentence:
 #
-#   { "error": "InvalidDomain", "message": "The domain is not a valid domain name." }
+#   { "error": "InvalidPath", "message": "Invalid path segment." }
 #
 # A caller (the GUI, a test, later an integration) branches on `error`, never on
 # the wording. The message is fixed text and never echoes the request, so a
@@ -27,14 +27,11 @@ function Get-TPWebApiError {
     [OutputType([pscustomobject])]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('DomainRequired', 'InvalidDomain', 'UnknownRunId', 'InvalidPath', 'NotFound', 'Forbidden')]
+        [ValidateSet('InvalidPath', 'NotFound', 'Forbidden')]
         [string] $Code
     )
 
     $table = @{
-        DomainRequired = @{ HttpStatus = 400; Message = 'A domain is required.' }
-        InvalidDomain  = @{ HttpStatus = 400; Message = 'The domain is not a valid domain name.' }
-        UnknownRunId   = @{ HttpStatus = 404; Message = 'No scan with that run id.' }
         InvalidPath    = @{ HttpStatus = 400; Message = 'Invalid path segment.' }
         NotFound       = @{ HttpStatus = 404; Message = 'Not found.' }
         Forbidden      = @{ HttpStatus = 403; Message = 'Forbidden.' }

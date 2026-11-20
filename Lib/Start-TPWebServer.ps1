@@ -6,21 +6,23 @@
 #
 # Local web GUI for the TenantPosture tool. Pode-backed loopback server on
 # 127.0.0.1 (never exposed to the network) that lets the operator:
-#   - Pick a tenant from clients.json or enter one ad-hoc
-#   - Trigger a scan as a background job, with live progress
 #   - Browse prior runs from ./output/ (both layouts: output\<domain>\ from the
-#     GUI and the batch runner, and the flat output\ a command-line run writes)
+#     batch runner, and the flat output\ a command-line run writes)
 #   - Open the HTML report inline in the same browser window
 #   - Open the multi-page report site (<base>-report\) in a new tab
 #
-# Tenant data never leaves the workstation. The scan itself runs in a
-# child pwsh job that does its own Microsoft Graph / EXO authentication via
-# the same interactive browser flow the CLI uses. The server is the UI shell;
-# scan logic is the existing module, unchanged.
+# A viewer and nothing else. It starts no scan, signs in to nothing, starts no
+# process on a request and accepts no request that changes anything: every
+# route is a GET. An assessment is run from the command line
+# (Invoke-TPAssessment.ps1, Invoke-TPBatchAssessment.ps1). The GUI used to
+# launch one from a POST route; that was removed so that nothing a web page can
+# reach on this socket can start a tenant sign-in.
+#
+# Tenant data never leaves the workstation.
 #
 # Consumed:
 #   - Pode 2.10+ (PSGallery)  — soft import; user-installed
-#   - Config/clients.json     — tenant list
+#   - Config/clients.json     — names for the run list (read only)
 #   - <ScriptDir>/output/     — prior scan results, the same folder the command
 #                               line writes to (read only; the server never
 #                               writes here and makes no tenant call itself)
@@ -30,8 +32,7 @@
 #     Lib/Get-TPObjectField.ps1
 #     loaded into Pode's runspaces with Use-PodeScript
 #
-# Graph scopes / cmdlets used: none directly. The child scan job uses what
-# Invoke-TPAssessment.ps1 requests.
+# Graph scopes / cmdlets used: none.
 
 # The repository root: this file is Lib\Start-TPWebServer.ps1 and Web\ sits
 # beside Lib\. A default of Split-Path -Parent $PSCommandPath resolves to Lib\
@@ -92,15 +93,6 @@ function Start-TPWebServer {
         # location.
         [Parameter()]
         [string] $OutputRoot = (Join-Path $ScriptDir 'output'),
-
-        # Further names the GUI may be reached as, only for a port forward or
-        # tunnel (for example localhost:9000 when 8765 is forwarded to it). The
-        # server answers only to 127.0.0.1 and localhost on its own port and
-        # refuses any other Host header, which is what stops DNS rebinding; this
-        # widens that list, so leave it empty unless you need it.
-        [Parameter()]
-        [ValidatePattern('\A[A-Za-z0-9]([A-Za-z0-9.\-]*[A-Za-z0-9])?(:\d{1,5})?\z')]
-        [string[]] $AllowedHost = @(),
 
         # Skip the auto-open browser step. Useful for headless testing.
         [switch] $NoBrowser
@@ -174,7 +166,6 @@ function Start-TPWebServer {
     # the assessment report embeds the brand logo only from the LogoUrl the active
     # profile sets, so that one origin is allowed, never every https host; a served
     # report adds the origin its own run recorded (Get-TPWebRunImageSources).
-    $activeProfileName = if ((Get-Variable -Name TPProfileName -Scope Script -ErrorAction SilentlyContinue) -and [string]$script:TPProfileName -ne 'branding') { [string]$script:TPProfileName } elseif ($env:TP_PROFILE) { [string]$env:TP_PROFILE } else { '' }
     $imgSrc = "'self' data:"
     $logoOrigin = Get-TPWebLogoOrigin -ScriptDir $ScriptDir
     if ($logoOrigin) { $imgSrc += " $logoOrigin" }
@@ -218,8 +209,7 @@ function Start-TPWebServer {
         Add-PodeEndpoint -Address '127.0.0.1' -Port $Port -Protocol Http
 
         # Config for the route bodies. Pode's state machinery is synchronized
-        # across the worker runspaces, so a route body reads this the same way
-        # the status handler reads what the scan handler writes.
+        # across the worker runspaces.
         Set-PodeState -Name 'cfg' -Value @{
             WebRoot     = $webRoot
             ClientsFile = $clientsFile
@@ -227,10 +217,7 @@ function Start-TPWebServer {
             ScriptDir   = $ScriptDir
             Port        = $Port
             Scheme      = 'http'
-            AllowedHost = @($AllowedHost)
             ImgSrc      = $imgSrc
-            # The active profile's name for the scan child ('' = Config/branding.psd1).
-            ProfileName = $activeProfileName
             # The one policy string; {0} is the img-src value, {1} the
             # frame-ancestors value and {2} the style-src value. The middleware
             # fills them with the server's sources, 'none' and 'self'; the report
@@ -255,11 +242,6 @@ function Start-TPWebServer {
                 "frame-ancestors {1}; " +
                 "object-src 'none'")
         } | Out-Null
-
-        # Shared in-memory state — same machinery, so the status-poll handler
-        # can read what the scan handler writes without locking ceremony in the
-        # route bodies.
-        Set-PodeState -Name 'scans' -Value @{} | Out-Null
 
         # What was read from each results file (keyed by file, valid until its
         # length or write time changes), so polling /api/runs does not re-read
@@ -294,9 +276,9 @@ function Start-TPWebServer {
 
         # Who may talk to this server at all. Binding to 127.0.0.1 keeps the
         # network out, not the operator's own browser: DNS rebinding lets a web
-        # page read the GUI, and a cross-site form can post to it. The policy
-        # (Host allow-list; JSON, same-origin requests only for anything that
-        # changes state) is Test-TPWebRequestAllowed. It runs AFTER the headers
+        # page read the GUI. The policy (the Host allow-list; and, although no
+        # route accepts one today, JSON same-origin requests only for anything
+        # but GET and HEAD) is Test-TPWebRequestAllowed. It runs AFTER the headers
         # above so a refusal carries them too, and refuses before any route.
         Add-PodeMiddleware -Name 'RequestGuard' -ScriptBlock {
             $cfg = Get-PodeState -Name 'cfg'
@@ -307,8 +289,7 @@ function Start-TPWebServer {
                 -ContentType (Get-PodeHeader -Name 'Content-Type') `
                 -SecFetchSite (Get-PodeHeader -Name 'Sec-Fetch-Site') `
                 -Port $cfg.Port `
-                -Scheme $cfg.Scheme `
-                -AllowedHost $cfg.AllowedHost
+                -Scheme $cfg.Scheme
             if (-not $verdict.Allowed) {
                 # An API caller gets the same JSON contract as every other
                 # refusal under /api/; a browser asking for a page gets text.
@@ -347,43 +328,9 @@ function Start-TPWebServer {
             Write-PodeHtmlResponse -Value $html
         }
 
-        # GET /api/clients — list of clients from clients.json. Returns [] if
-        # the file doesn't exist (operator can still trigger ad-hoc scans).
-        Add-PodeRoute -Method Get -Path '/api/clients' -ScriptBlock {
-            $cf = (Get-PodeState -Name 'cfg').ClientsFile
-            if (-not (Test-Path -LiteralPath $cf)) {
-                Write-PodeJsonResponse -Value @()
-                return
-            }
-            try {
-                $raw = Get-Content -LiteralPath $cf -Raw -Encoding utf8 | ConvertFrom-Json
-            } catch {
-                Write-PodeJsonResponse -Value @() -StatusCode 200
-                return
-            }
-            # clients.json is { "clients": [ ... ] }, not a bare array — the
-            # same shape Invoke-TPBatchAssessment reads as $registry.clients.
-            # Enumerating $raw itself yielded ONE row built from the wrapper
-            # object, whose ClientName/TenantDomain do not exist, so the picker
-            # showed a single blank client and never the real list.
-            $clients = @($raw.clients) | Where-Object { $_.Active -ne $false } | ForEach-Object {
-                [ordered]@{
-                    name          = [string]$_.ClientName
-                    domain        = [string]$_.TenantDomain
-                    delegated     = [string]$_.DelegatedOrg
-                    upn           = [string]$_.UserPrincipalName
-                    clientType    = [string]$_.ClientType
-                }
-            }
-            # @(...) or a pipeline that yields nothing assigns $null, which
-            # serializes as JSON null, and app.js calls .forEach on it outside
-            # its try — so a tenant list with no active rows killed the picker.
-            Write-PodeJsonResponse -Value @($clients)
-        }
-
         # GET /api/runs — every prior assessment run under ./output/, newest
-        # first. Both layouts: output\<domain>\*-results.json (a GUI or batch
-        # run) and output\*-results.json (a command-line run). The listing and
+        # first. Both layouts: output\<domain>\*-results.json (a batch run, or
+        # one an earlier GUI started) and output\*-results.json (a command-line run). The listing and
         # its exclusions (incident-response mailbox runs, sign-in triage) live
         # in Get-TPWebRunIndex.ps1. Each row carries `folder`, the address
         # segment the report and site routes take; `tenant` is only a label.
@@ -464,203 +411,6 @@ function Start-TPWebServer {
                     -ImgSrc $cfg.ImgSrc -Cache (Get-PodeState -Name 'runMetadata')
                 Set-PodeHeader -Name 'Content-Security-Policy' -Value ($cfg.CspTemplate -f $sources, "'none'", "'self' 'unsafe-inline'")
                 Write-PodeTextResponse -Bytes $bytes -ContentType 'text/html'
-            }
-        }
-
-        # POST /api/scan — kick off a scan. Body: { clientId or domain }.
-        # The scan runs in a child pwsh job so it has its own clean environment
-        # for Microsoft Graph / EXO auth (Connect-MgGraph opens the browser
-        # auth window in the child, which the operator authorizes once).
-        Add-PodeRoute -Method Post -Path '/api/scan' -ScriptBlock {
-            $body = $WebEvent.Data
-            $domain = [string]$body.domain
-            # Status and body in one call (see the report route). The domain
-            # rule is Test-TPDomainName, the same one the run listing and the
-            # entry script's -TenantDomain use: the name becomes a folder under
-            # the output root, so a name the path guard would refuse to serve
-            # must not be accepted here either.
-            if ([string]::IsNullOrWhiteSpace($domain)) {
-                $apiError = Get-TPWebApiError -Code DomainRequired
-                Write-PodeJsonResponse -Value $apiError.Body -StatusCode $apiError.HttpStatus
-                return
-            }
-            if (-not (Test-TPDomainName -Value $domain)) {
-                $apiError = Get-TPWebApiError -Code InvalidDomain
-                Write-PodeJsonResponse -Value $apiError.Body -StatusCode $apiError.HttpStatus
-                return
-            }
-
-            $runId = ([Guid]::NewGuid().ToString('N')).Substring(0, 12)
-            $stateRow = [hashtable]::Synchronized(@{
-                runId      = $runId
-                domain     = $domain
-                status     = 'queued'      # queued | running | completed | failed
-                startedAt  = (Get-Date).ToString('o')
-                lines      = New-Object System.Collections.ArrayList
-                percent    = 0
-                resultPath = $null
-                # Read unconditionally by the status response below but only
-                # assigned on completion. Pode's route runspaces do not inherit
-                # this function's StrictMode, so the missing key read as $null
-                # rather than throwing — declared here so the row's shape does
-                # not depend on that staying true.
-                runIdOnDisk = $null
-                # Entry-script exit code, captured off the pipeline marker
-                # object described below. $null until the marker arrives.
-                exitCode    = $null
-            })
-
-            # Stash on shared state so the status endpoint can find it.
-            $scans = (Get-PodeState -Name 'scans')
-            $scans[$runId] = $stateRow
-            Set-PodeState -Name 'scans' -Value $scans | Out-Null
-
-            # Per-domain output directory, matching the batch runner's layout
-            # (Invoke-TPBatchAssessment writes to $clientOut = Join-Path
-            # $resolvedOutput $safeDir with safeDir = TenantDomain). Without
-            # -OutputPath the entry script defaults to a flat
-            # <ScriptDir>/output/, which /api/runs and the status lookup
-            # below never scan — a GUI scan's own report could never be
-            # found by the GUI that ran it.
-            $cfg = Get-PodeState -Name 'cfg'
-            $scanOutputPath = Join-Path $cfg.OutputRoot $domain
-
-            # Launch the scan in a child job. The job re-imports the module
-            # and runs the entry script in -NonInteractive mode is NOT used —
-            # the operator must be able to complete interactive auth in the
-            # child's auth-popup browser window.
-            $jobScript = {
-                param($scriptDir, $domain, $outputPath, $profileName)
-                Set-Location $scriptDir
-                $entryScript = Join-Path $scriptDir 'Invoke-TPAssessment.ps1'
-                # Run the entry script as its own CHILD PROCESS rather than
-                # in-process via the call operator on the .ps1 file. Every
-                # exit path in Invoke-TPAssessment.ps1 ends in an explicit
-                # `exit <code>` (0 success, 1 auth failure, 2 no findings, 3
-                # partial collection, 4 fatal), and `exit` inside a script
-                # invoked in THIS runspace terminates the whole job process
-                # before any code below it can run — Start-Job { exit 1 }
-                # lands on State=Completed with nothing after the exit ever
-                # executing, so a failed auth was reported to the frontend as
-                # a clean 100% run. Invoking the current pwsh executable
-                # ((Get-Process -Id $PID).Path — portable across OSes) with
-                # -File confines that exit to the nested process, so
-                # $LASTEXITCODE survives here to report on the pipeline.
-                $pwshPath = (Get-Process -Id $PID).Path
-                # -TenantDomain, not a made-up "scan@<domain>" UPN: it pins the
-                # scan to the chosen tenant (clients.json TenantId/DelegatedOrg,
-                # else the domain's OpenID metadata) and aborts if the sign-in
-                # lands anywhere else. The fake UPN only pre-filled the sign-in
-                # prompt with an account that does not exist.
-                # The profile travels as an argument: the entry point no longer leaves TP_PROFILE
-                # set in the process, so the child cannot inherit it from the environment.
-                $profileArgs = if ($profileName) { @('-Profile', $profileName) } else { @() }
-                & $pwshPath -NoLogo -File $entryScript -TenantDomain $domain -OutputPath $outputPath @profileArgs *>&1
-                # *>&1 above (not 2>&1) merges the information stream too —
-                # Write-Host output goes to the job's Information stream, not
-                # the output stream the status handler iterates, so 2>&1
-                # alone left the log always empty until the job ended.
-                [pscustomobject]@{ TPScanExitCode = $LASTEXITCODE }
-            }
-            $job = Start-Job -ScriptBlock $jobScript -ArgumentList $cfg.ScriptDir, $domain, $scanOutputPath, $cfg.ProfileName
-            $stateRow.jobId  = $job.Id
-            $stateRow.status = 'running'
-
-            Write-PodeJsonResponse -Value @{ runId = $runId }
-        }
-
-        # GET /api/scan/:id/status — poll for current scan state. Returns
-        # status, percent, last N stdout lines. Frontend polls every 1 s.
-        Add-PodeRoute -Method Get -Path '/api/scan/:id/status' -ScriptBlock {
-            $id = $WebEvent.Parameters['id']
-            $scans = (Get-PodeState -Name 'scans')
-            if (-not $scans.ContainsKey($id)) {
-                $apiError = Get-TPWebApiError -Code UnknownRunId
-                Write-PodeJsonResponse -Value $apiError.Body -StatusCode $apiError.HttpStatus
-                return
-            }
-            $row = $scans[$id]
-
-            # If we have a job that's still running, harvest fresh stdout.
-            if ($row.ContainsKey('jobId') -and $row.status -eq 'running') {
-                $job = Get-Job -Id $row.jobId -ErrorAction SilentlyContinue
-                if ($job) {
-                    foreach ($chunk in Receive-Job -Job $job -Keep -ErrorAction SilentlyContinue) {
-                        # The job's last pipeline object is a marker carrying
-                        # the entry script's real exit code (see jobScript in
-                        # the /api/scan handler) — capture it, don't log it as
-                        # a scan line. Property access on a plain string here
-                        # is safe: this runspace does not inherit StrictMode.
-                        if ($chunk -is [pscustomobject] -and $null -ne $chunk.TPScanExitCode) {
-                            $row.exitCode = $chunk.TPScanExitCode
-                            continue
-                        }
-                        $line = [string]$chunk
-                        if ($line) {
-                            $null = $row.lines.Add($line)
-                            # Simple progress heuristic: count "[+]" success
-                            # markers vs total controls. Caps at 95% so the
-                            # bar moves but never falsely claims done.
-                            if ($line -match '^\s*\[\+\]') {
-                                $row.percent = [Math]::Min(95, $row.percent + 1)
-                            }
-                        }
-                    }
-                    if ($job.State -in @('Completed', 'Failed', 'Stopped')) {
-                        # Drain any remaining output.
-                        foreach ($chunk in Receive-Job -Job $job -ErrorAction SilentlyContinue) {
-                            if ($chunk -is [pscustomobject] -and $null -ne $chunk.TPScanExitCode) {
-                                $row.exitCode = $chunk.TPScanExitCode
-                                continue
-                            }
-                            $line = [string]$chunk
-                            if ($line) { $null = $row.lines.Add($line) }
-                        }
-                        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-                        # State=Completed alone does not mean success — a
-                        # non-zero exit (auth failure, module-load failure)
-                        # also lands the job on Completed, so the exit-code
-                        # marker is authoritative when it arrived; its
-                        # absence (e.g. the child process was killed before
-                        # emitting it) is treated as failure, not success.
-                        $row.status  = if ($job.State -eq 'Completed' -and $row.exitCode -eq 0) { 'completed' } else { 'failed' }
-                        $row.percent = if ($row.status -eq 'completed') { 100 } else { $row.percent }
-                        # Look for the resulting -results.json the entry
-                        # script wrote so the UI can link straight to it. Only
-                        # a file written AFTER this scan started qualifies —
-                        # otherwise a domain with a prior batch run hands the
-                        # frontend that OLD report as "just now" even when
-                        # this scan failed before writing anything.
-                        $tenantDir = Join-Path (Get-PodeState -Name 'cfg').OutputRoot ($row.domain)
-                        if ($row.status -eq 'completed' -and (Test-Path -LiteralPath $tenantDir)) {
-                            $startedAt = [datetime]::MinValue
-                            [void][datetime]::TryParse(
-                                $row.startedAt, [cultureinfo]::InvariantCulture,
-                                [System.Globalization.DateTimeStyles]::RoundtripKind, [ref]$startedAt)
-                            $latest = Get-ChildItem -LiteralPath $tenantDir -Filter '*-results.json' -ErrorAction SilentlyContinue |
-                                      Where-Object { $_.LastWriteTime -gt $startedAt } |
-                                      Sort-Object LastWriteTime -Descending | Select-Object -First 1
-                            if ($latest) {
-                                $row.resultPath = $latest.Name
-                                $row.runIdOnDisk = ($latest.BaseName -replace '-results$', '')
-                            }
-                        }
-                    }
-                }
-            }
-
-            # Trim the lines array to the most recent 200 to keep responses small.
-            $tail = if ($row.lines.Count -le 200) { $row.lines } else {
-                $row.lines.GetRange($row.lines.Count - 200, 200)
-            }
-
-            Write-PodeJsonResponse -Value @{
-                runId       = $row.runId
-                domain      = $row.domain
-                status      = $row.status
-                percent     = $row.percent
-                lines       = @($tail)
-                resultId    = $row.runIdOnDisk
             }
         }
 

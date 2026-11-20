@@ -35,11 +35,12 @@ security test summary laid out after the facts an OSSTMM STAR asks for.
 - **Not a test of a tenant.** The tool assesses Microsoft 365 configuration
   and never probes a client's systems; the scans above target the repository
   and a loopback server over fixture data.
-- **Not an attack on `/api/scan`.** The active scan excludes `POST
-  /api/scan`, because an accepted request starts a real assessment against the
-  domain in its body; its validation is tested by `TP.WebServer.Tests.ps1`
-  instead. The active job also fails if the output folder gains an entry
-  during the scan, which is how a request reaching that route would show.
+- **No route is left out of the active scan.** The web GUI is a viewer: every
+  route is a GET and none starts a process. It used to start an assessment from
+  `POST /api/scan`, which the active scan had to exclude; that route was
+  removed, and with it the exclusion. The active job still fails if the output
+  folder gains an entry during the scan, which is how a request that started
+  something would show.
 
 ## Reviewing an exception
 
