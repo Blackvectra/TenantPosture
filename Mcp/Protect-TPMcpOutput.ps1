@@ -84,7 +84,8 @@ function Add-TPMcpIdentityName {
         [Parameter()] [AllowNull()] [AllowEmptyString()] [string] $Value
     )
     if ([string]::IsNullOrWhiteSpace($Value)) { return }
-    $v = ($Value -replace '\p{Cf}', '').Trim()
+    # The same removal the returned text gets, or a name would stop matching it.
+    $v = (Remove-TPMcpFormatCharacters -Text $Value).Trim()
     if ($v.Length -lt 3 -or $v.Length -gt 256) { return }
     if ($v -match '\A[\d\s.:/-]+\z') { return }
     if ($v -match '\A[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\z') { return }
@@ -129,6 +130,32 @@ function Import-TPMcpIdentities {
     }
 }
 
+# One string without its invisible format characters, judged by Unicode code
+# point. A .NET regular expression reads UTF-16 code units, so \p{Cf} reaches
+# the Basic Multilingual Plane only: a format character above it is stored as a
+# surrogate pair, each half is category Cs, and \p{Cf} never matches it. That
+# let the tag characters (U+E0020-U+E007F: one per ASCII character, drawn by
+# nothing) through to the client. The pairs are therefore named: the whole tag
+# block, and the other format characters above the plane.
+# A surrogate half with no partner is not a character and goes in the SAME
+# pass: left in, the two halves on either side of a removed character would
+# close up into a pair this function had refused.
+function Remove-TPMcpFormatCharacters {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter()] [AllowNull()] [AllowEmptyString()] [string] $Text)
+    if ([string]::IsNullOrEmpty($Text)) { return $Text }
+    $pattern = '\p{Cf}' +                           # every format character in the Basic Multilingual Plane
+        '|\uDB40[\uDC00-\uDC7F]' +                  # U+E0000-U+E007F  tag characters, the whole block
+        '|\uD804[\uDCBD\uDCCD]' +                   # U+110BD, U+110CD Kaithi number signs
+        '|\uD80D[\uDC30-\uDC3F]' +                  # U+13430-U+1343F  Egyptian hieroglyph format controls
+        '|\uD82F[\uDCA0-\uDCA3]' +                  # U+1BCA0-U+1BCA3  shorthand format controls
+        '|\uD834[\uDD73-\uDD7A]' +                  # U+1D173-U+1D17A  musical symbol format controls
+        '|[\uD800-\uDBFF](?![\uDC00-\uDFFF])' +     # a high surrogate with no low surrogate after it
+        '|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]'      # a low surrogate with no high surrogate before it
+    return ($Text -creplace $pattern, '')
+}
+
 # One string as it may leave the process.
 function Protect-TPMcpText {
     [CmdletBinding()]
@@ -141,7 +168,7 @@ function Protect-TPMcpText {
     if ([string]::IsNullOrEmpty($Text)) { return $Text }
     # Invisible format characters (bidirectional overrides, zero-width, BOM,
     # tag characters) could hide text from the person reading the answer.
-    $t = $Text -replace '\p{Cf}', ''
+    $t = Remove-TPMcpFormatCharacters -Text $Text
     if ($null -ne $State) {
         if ($null -eq $State.Pattern) {
             # ONE pass over the text with one pattern (addresses first, then the
@@ -166,7 +193,9 @@ function Protect-TPMcpText {
 # A whole value as it may leave the process: every string through
 # Protect-TPMcpText, dates as ISO 8601 text, lists cut at -MaxItems with a
 # marker string, nesting cut at -MaxDepth. Dictionaries and objects become
-# ordered hashtables; the key names are the tool's own and are kept.
+# ordered hashtables; the key names are the tool's own and are kept, less any
+# invisible format character: a key reaches the client like any other string,
+# and a results file is input.
 function Protect-TPMcpValue {
     [CmdletBinding()]
     param(
@@ -188,14 +217,14 @@ function Protect-TPMcpValue {
     if ($Value -is [System.Collections.IDictionary]) {
         $out = [ordered]@{}
         foreach ($k in @($Value.Keys)) {
-            $out[[string]$k] = Protect-TPMcpValue -Value $Value[$k] -State $State -MaxLength $MaxLength -MaxItems $MaxItems -MaxDepth $MaxDepth -Depth $next
+            $out[(Remove-TPMcpFormatCharacters -Text ([string]$k))] = Protect-TPMcpValue -Value $Value[$k] -State $State -MaxLength $MaxLength -MaxItems $MaxItems -MaxDepth $MaxDepth -Depth $next
         }
         return $out
     }
     if ($Value -is [System.Management.Automation.PSCustomObject]) {
         $out = [ordered]@{}
         foreach ($p in $Value.PSObject.Properties) {
-            $out[[string]$p.Name] = Protect-TPMcpValue -Value $p.Value -State $State -MaxLength $MaxLength -MaxItems $MaxItems -MaxDepth $MaxDepth -Depth $next
+            $out[(Remove-TPMcpFormatCharacters -Text ([string]$p.Name))] = Protect-TPMcpValue -Value $p.Value -State $State -MaxLength $MaxLength -MaxItems $MaxItems -MaxDepth $MaxDepth -Depth $next
         }
         return $out
     }

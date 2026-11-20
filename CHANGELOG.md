@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **[Security] MCP server: invisible tag characters no longer reach the AI client (`Mcp/Protect-TPMcpOutput.ps1`).**
+  The output filter removed format characters with `\p{Cf}`, which a .NET regex applies to UTF-16 code units, so a
+  format character above the Basic Multilingual Plane passed through: the Unicode tag block (U+E0000 to U+E007F) can
+  spell text a person does not see and a model reads, and a tenant-chosen name (an app, group, policy or inbox rule)
+  could carry it into an answer. Dictionary keys were not filtered at all. `Remove-TPMcpFormatCharacters` now strips
+  by code point (`\p{Cf}`, the tag block, the other format characters above the plane and any unpaired surrogate
+  half) from returned text, keys and learned identity names. Variation selectors are not format characters and still
+  pass. Two keys that differ only by an invisible character now merge, the later value kept. Found by a code scan;
+  the suite ran on PowerShell 7.5.4 on Linux, not on 7.6 or Windows.
+
 - **[Docs] Stale figures corrected.** The operational-impact catalog covers 253 controls, not 230 (`README.md`,
   `CLAUDE.md`); `controls.json` holds 253 tenant controls, not 202 (`CLAUDE.md`, `docs/WHAT-CAN-I-RUN.md`);
   `CLAUDE.md` no longer gives an entry-point count, a per-file evaluator count or "7 publishers" that the code

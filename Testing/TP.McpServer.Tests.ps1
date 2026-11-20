@@ -42,6 +42,9 @@ BeforeAll {
     $script:RawUpn     = 'raw.only.person@contoso.example'
     $script:ExcMarker  = 'EXCEPTION-TEXT-MARKER-91c2'
     $script:Rlo        = [string][char]0x202E
+    # "ignore" spelled in tag characters (U+E0020-U+E007F): text no reader sees,
+    # each character a surrogate pair. Built from code points, never typed.
+    $script:Tag        = -join ('ignore'.ToCharArray() | ForEach-Object { [char]::ConvertFromUtf32(0xE0000 + [int]$_) })
 
     $write = {
         param([string] $Path, $Object)
@@ -72,8 +75,8 @@ BeforeAll {
     # ── A current flat run (a command-line run) ──
     $script:FlatId = 'CONTOSO-20261016-100000'
     $flatFindings = @(
-        (& $finding 'AAD-1.2' 'Partial' 'Critical' "MFA policy excludes $($script:Display) ($($script:Upn)).$($script:Rlo)" '' @(
-            [ordered]@{ Principal = 'user:aaaaaaaa-0000-0000-0000-000000000001'; Exclusion = 'SharedByEveryQualifyingPolicy'; DisplayName = $script:Display; UserPrincipalName = $script:Upn }))
+        (& $finding 'AAD-1.2' 'Partial' 'Critical' "MFA policy excludes $($script:Display) ($($script:Upn)).$($script:Rlo)$($script:Tag)" '' @(
+            [ordered]@{ Principal = 'user:aaaaaaaa-0000-0000-0000-000000000001'; Exclusion = 'SharedByEveryQualifyingPolicy'; DisplayName = $script:Display; UserPrincipalName = $script:Upn; "Note$($script:Tag)" = 'A key is returned too.' }))
         (& $finding 'AAD-1.1' 'Satisfied' 'Critical' 'Legacy authentication is blocked.')
         (& $finding 'DNS-1.1' 'Gap' 'High' 'No SPF record.' 'contoso.example')
         (& $finding 'DNS-1.1' 'Satisfied' 'High' 'SPF present.' 'fabrikam.example')
@@ -521,6 +524,44 @@ Describe 'MCP server: privacy' {
     It 'strips invisible format characters from returned text' {
         $a = & $script:Answer $script:Default.ById[13]
         $a['instances'][0]['Detail'] | Should -Not -Match '\p{Cf}'
+        # A format character above the Basic Multilingual Plane is a surrogate pair,
+        # which \p{Cf} never matches. The fixture carries tag characters in a value
+        # and in a key; the writer escapes every non-ASCII code unit, so one that
+        # got through is a \udb40 in the line.
+        $a['instances'][0]['Detail'] | Should -Not -Match '[\uD800-\uDFFF]'
+        foreach ($run in $script:Default, $script:WithIds) {
+            ($run.Raw -join "`n") | Should -Not -Match '(?i)\\udb40'
+        }
+    }
+
+    It 'format characters are judged by code point: tag characters and stray surrogate halves go, from values, keys and learned names' {
+        . (Join-Path $script:RepoRoot 'Mcp' 'Protect-TPMcpOutput.ps1')
+        # Regular expressions and lengths throughout: -eq and -ceq compare
+        # linguistically and ignore the very characters under test.
+        $smile = [char]::ConvertFromUtf32(0x1F600)
+        Protect-TPMcpText -Text "Contoso App$($script:Tag) $smile" | Should -MatchExactly ('\AContoso App ' + $smile + '\z')
+
+        # Every format character above the plane that this runtime knows, so a
+        # Unicode update that adds one fails here instead of passing through.
+        $kept = @(for ($cp = 0x10000; $cp -le 0x10FFFF; $cp++) {
+                if ([System.Globalization.CharUnicodeInfo]::GetUnicodeCategory($cp) -ne [System.Globalization.UnicodeCategory]::Format) { continue }
+                if ((Protect-TPMcpText -Text ('a' + [char]::ConvertFromUtf32($cp) + 'b')).Length -ne 2) { 'U+{0:X}' -f $cp }
+            })
+        $kept | Should -BeNullOrEmpty
+
+        # Two halves on either side of a removed character must not close up
+        # into the pair that was refused.
+        $hi = [string][char]0xDB40; $lo = [string][char]0xDC49; $zw = [string][char]0x200B
+        foreach ($text in "a$hi$zw${lo}b", "a$hi$hi$lo${lo}b") {
+            Protect-TPMcpText -Text $text | Should -MatchExactly '\Aab\z'
+        }
+
+        $v = Protect-TPMcpValue -Value ([ordered]@{ "Name$($script:Tag)" = [pscustomobject]@{ "Kind$($script:Tag)" = "App$($script:Tag)" } })
+        (ConvertTo-Json -InputObject $v -Compress) | Should -MatchExactly '\A\{"Name":\{"Kind":"App"\}\}\z'
+
+        $st = New-TPMcpPseudonymMap
+        Import-TPMcpIdentities -State $st -Value @(@{ DisplayName = "Ann$($script:Tag) Lee" })
+        Protect-TPMcpText -Text "Owner: Ann$($script:Tag) Lee." -State $st | Should -MatchExactly '\AOwner: user-\d+\.\z'
     }
 
     It '-IncludeIdentities returns identities as recorded, and still never the tenant ID, raw data, exceptions or paths' {
