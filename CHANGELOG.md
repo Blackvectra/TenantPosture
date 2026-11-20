@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+- **[Security] The certificate probe's TLS handshake has a deadline (`Collectors/DNS/Invoke-TPCollectDNSEmailRecords.ps1`).**
+  The DNS collector connects to port 443 on `autodiscover.<domain>` and on the first MX host to read the certificate
+  for DNS-2.3. Only the connect was bounded (5 s); the handshake was the synchronous `SslStream.AuthenticateAsClient`,
+  which has no timeout, so a host named by the assessed tenant's DNS that accepted the connection and then sent
+  nothing held the collector for as long as it liked, and in a batch run every client after it. The handshake now
+  goes through `Get-TPBoundedTlsStream`: one 5-second deadline over the whole handshake, not a per-read socket
+  timeout, which a server sending one byte at a time never reaches. At the deadline the socket is closed and the host
+  is recorded as `TLS handshake timed out after 5 s`, which DNS-2.3 reports as a probe error (not assessed), as it
+  does a connect timeout. A host that takes longer than 5 seconds to complete the handshake is therefore no longer
+  read. Other handshake errors now name `EndAuthenticateAsClient` where they named `AuthenticateAsClient`; the
+  certificate fields are unchanged. The per-domain time budget is still checked between steps, not inside one; the
+  TLS step now takes at most 20 seconds per domain (two hosts, 5 s to connect and 5 s for the handshake each).
+  `TP.NetworkParsers.Tests.ps1` drives the helper against a silent server, a trickling server and a TLS server with
+  a certificate nobody would trust, all on loopback, and fails any TLS client handshake started outside the helper.
+  Found by a code scan; run on PowerShell 7.5.4 on Linux, not on 7.6 or Windows.
+- **[Security] A refused probe target is reported by range, never by the address it resolved to
+  (`Lib/Test-TPPublicAddress.ps1`, `Collectors/DNS/Invoke-TPCollectDNSEmailRecords.ps1`).** When the probe guard
+  refused the MTA-STS policy host, `autodiscover.<domain>` or the MX host because its name resolved to an address
+  that is not globally routable, the reason read "address 10.1.2.3 is RFC 1918 10/8". The collector stored it in the
+  per-domain `Errors`, `MTASTS.PolicyFetchError` and `TLSCerts.<role>.Error`, and DNS-1.4 and DNS-2.3 printed it, so
+  the results JSON and the reports of the assessed tenant carried an address from the operator's own network
+  whenever the workstation's resolver answered a tenant-chosen name with one (split-horizon DNS, a hosts entry).
+  `Test-TPGloballyRoutableAddress` now returns the name of the range as its `Reason` ("RFC 1918 10/8",
+  "NAT64 (64:ff9b::/96) carrying RFC 1918 10/8"), and the guard's refusal reads "resolves to an address that is not
+  publicly routable: RFC 1918 10/8"; the address itself is written to the verbose stream only (`-Verbose`). Which
+  targets are refused is unchanged. Two range labels no longer hold a literal address ("the IPv6 unspecified
+  address"; the 192.88.99/24 label). A script that parsed the old `Reason` text needs the new wording. A results
+  file written before this change keeps what it recorded, and `-FromResults` reprints it: run the assessment again
+  where that matters. Tests drive the real guard and the real collector with the workstation resolver stood in for
+  and search the raw data, exceptions, coverage and every DNS finding for the addresses. Found by a code scan; the
+  suite ran on PowerShell 7.5.4 on Linux, not on 7.6 or Windows.
 - **[Security] The web GUI is a viewer only, and answers to no name but its own (`Lib/Start-TPWebServer.ps1`,
   `Lib/Test-TPWebRequestAllowed.ps1`, `Lib/Get-TPWebApiError.ps1`, `Web/`).** Two features were removed to cut what
   the loopback socket exposes. **Scan launch:** `POST /api/scan` started an assessment (a child process and a tenant

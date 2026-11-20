@@ -301,4 +301,135 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
             (Verdict 'Test-TPControlDNSMTASTS' 'DNS-1.4').State | Should -Be 'NotApplicable'
         }
     }
+
+    Context 'a refused probe target is reported by range, never by the address it resolved to (2026-11-20 scan)' {
+        # The REAL probe guard, with the workstation's resolver answering every tenant-chosen
+        # probe name with an address inside the operator's network, as split-horizon DNS or a
+        # hosts entry does. The refusal used to read "address 10.11.12.13 is RFC 1918 10/8":
+        # the collector stored it in Errors, MTASTS.PolicyFetchError and TLSCerts.<role>.Error,
+        # and DNS-1.4 and DNS-2.3 printed it in the findings of the tenant that chose the name.
+        BeforeAll {
+            & $script:Mod { param($o)
+                Set-Item -Path 'function:script:Test-TPSafeProbeTarget' -Value $o.Probe
+                $script:T_WsMap = @{}
+                Set-Item -Path 'function:script:Resolve-TPWorkstationHostAddresses' -Value {
+                    param([string] $HostName)
+                    $key = $HostName.ToLowerInvariant()
+                    if (-not $script:T_WsMap.ContainsKey($key)) { throw 'No such host is known.' }
+                    return [System.Net.IPAddress[]]@(@($script:T_WsMap[$key]) | ForEach-Object { [System.Net.IPAddress]::Parse([string]$_) }) }
+            } $script:Orig
+            function script:WorkstationAnswers([hashtable] $Map) { & $script:Mod { param($m) $script:T_WsMap = $m } $Map }
+            function script:Probe([string] $HostName) { & $script:Mod { param($h) Test-TPSafeProbeTarget -HostName $h } $HostName }
+            # Fails when any of the addresses appears anywhere in the serialized object.
+            function script:ShouldCarryNoAddress($Object, [string[]] $Addresses, [string] $What) {
+                $json = [string](ConvertTo-Json -InputObject $Object -Depth 20 -Compress)
+                $json | Should -Not -BeNullOrEmpty -Because "$What must serialize to be searched"
+                foreach ($address in $Addresses) {
+                    $json | Should -Not -Match ([regex]::Escape($address)) -Because "$What must not carry the address $address the name resolved to"
+                }
+            }
+        }
+        AfterAll {
+            & $script:Mod { param($o)
+                Set-Item -Path 'function:script:Test-TPSafeProbeTarget' -Value { param([string] $HostName) @{ Refused = $true; Reason = 'no network in tests' } }
+                Set-Item -Path 'function:script:Resolve-TPWorkstationHostAddresses' -Value $o.Workstation
+                $script:T_WsMap = $null
+            } $script:Orig
+        }
+
+        It 'Test-TPGloballyRoutableAddress names the range of every refused form and never the address' {
+            foreach ($s in '::ffff:10.0.0.1', '::ffff:169.254.169.254', '64:ff9b::a00:1', '2002:c0a8:101::', '2001:0:1::1', '::', '::1', '0.0.0.0', '100.64.0.1', '127.0.0.1', '10.1.2.3', '172.20.0.1', '192.168.1.1', '169.254.1.1', '224.0.0.1', '255.255.255.255', 'fe80::1', 'fec0::1', 'fd00::1', 'ff02::1', '2001:db8::1', '2001:2::1', '2001:10::1', '2001:20::1', '2001:100::1', '2001:1::3', '3fff::1', '5f00::1', '4000::1', '192.0.0.1', '192.0.2.1', '192.88.99.2', '198.18.0.1', '198.51.100.7', '203.0.113.9') {
+                $ip = [ipaddress]$s
+                $r = Test-TPGloballyRoutableAddress -Address $ip
+                $r.Allowed | Should -BeFalse -Because "$s must be refused"
+                $r.Reason  | Should -Not -BeNullOrEmpty -Because "$s is refused by the name of its range"
+                foreach ($form in @($s, $ip.ToString(), $r.Address.ToString()) | Select-Object -Unique) {
+                    $r.Reason | Should -Not -Match ([regex]::Escape($form)) -Because "the reason for $s names the range, not the address"
+                }
+            }
+            # An address carried inside an IPv6 one is not named either.
+            (Test-TPGloballyRoutableAddress -Address ([ipaddress]'64:ff9b::a00:1')).Reason  | Should -Not -Match '10\.0\.0\.1'
+            (Test-TPGloballyRoutableAddress -Address ([ipaddress]'2002:c0a8:101::')).Reason | Should -Not -Match '192\.168\.1\.1'
+            # The reason is the range's name: every address in one range reads the same.
+            (Test-TPGloballyRoutableAddress -Address ([ipaddress]'10.1.2.3')).Reason | Should -Be (Test-TPGloballyRoutableAddress -Address ([ipaddress]'10.200.7.9')).Reason
+            (Test-TPGloballyRoutableAddress -Address ([ipaddress]'fd00::1')).Reason  | Should -Be (Test-TPGloballyRoutableAddress -Address ([ipaddress]'fdff:1:2:3::9')).Reason
+        }
+
+        It 'the guard refuses a name the workstation resolver answers with a private address, naming the range only' {
+            foreach ($case in @(
+                    @{ Answer = @('10.11.12.13');                    Range = 'RFC 1918 10/8';                   Hidden = @('10.11.12.13') }
+                    @{ Answer = @('127.0.0.1');                      Range = 'loopback 127/8';                  Hidden = @('127.0.0.1') }
+                    @{ Answer = @('169.254.169.254');                Range = 'link-local 169\.254/16';          Hidden = @('169.254.169.254') }
+                    @{ Answer = @('::ffff:192.168.44.55');           Range = 'RFC 1918 192\.168/16';            Hidden = @('::ffff:192.168.44.55', '192.168.44.55') }
+                    @{ Answer = @('64:ff9b::a0b:c0d');               Range = 'NAT64.*RFC 1918 10/8';            Hidden = @('64:ff9b::a0b:c0d', '10.11.12.13') }
+                    @{ Answer = @('fd12:3456:789a::beef');           Range = 'IPv6 unique local';               Hidden = @('fd12:3456:789a::beef') }
+                    @{ Answer = @('fe80::1234');                     Range = 'IPv6 link-local';                 Hidden = @('fe80::1234') }
+                    @{ Answer = @('185.199.108.153', '172.16.31.7'); Range = 'RFC 1918 172\.16/12';             Hidden = @('172.16.31.7', '185.199.108.153') }
+                )) {
+                WorkstationAnswers @{ 'probe.shape.test' = $case.Answer }
+                $r = Probe 'probe.shape.test'
+                $r.Refused | Should -BeTrue -Because "$($case.Answer -join ', ') is not a target to connect to"
+                ShouldCarryNoAddress $r $case.Hidden 'the guard''s refusal'
+                (@($r.Keys) | Sort-Object) -join ',' | Should -Be 'Reason,Refused' -Because 'a refusal returns no address field'
+                $r.Reason  | Should -Match 'resolves to an address that is not publicly routable'
+                $r.Reason  | Should -Match $case.Range
+            }
+        }
+
+        It 'a private answer from public DNS is refused the same way, with no address in the refusal' {
+            WorkstationAnswers @{}
+            & $script:Mod { param($t) $script:T_Dns = $t } @{ 'probe.shape.test|A' = & $A @('10.9.8.7'); 'probe.shape.test|AAAA' = & $A @('fd00:aa:bb::7') }
+            $r = Probe 'probe.shape.test'
+            $r.Refused | Should -BeTrue
+            ShouldCarryNoAddress $r @('10.9.8.7', 'fd00:aa:bb::7') 'the guard''s refusal'
+            $r.Reason  | Should -Match 'not publicly routable: RFC 1918 10/8'
+        }
+
+        It 'the collector''s raw data and every DNS finding carry the range and none of the addresses' {
+            # mta-sts, autodiscover and the MX host each resolve to a different private form.
+            $hidden = @('10.11.12.13', '::ffff:192.168.44.55', '192.168.44.55', 'fd12:3456:789a::beef')
+            WorkstationAnswers @{
+                'mta-sts.shape.test'      = @('10.11.12.13')
+                'autodiscover.shape.test' = @('::ffff:192.168.44.55')
+                'mx.shape.test'           = @('fd12:3456:789a::beef')
+            }
+            $d = Collect @{ '_mta-sts.shape.test|TXT' = & $A @('v=STSv1; id=20261120'); 'shape.test|MX' = & $A @('10 mx.shape.test.') }
+            # All three names were refused, so the searches below are searching something.
+            @($d.Errors | Where-Object { $_ -match "refused (MX target )?'(mta-sts|autodiscover|mx)\.shape\.test' — " }).Count | Should -Be 3
+
+            # Nothing the results file is written from holds an address.
+            ShouldCarryNoAddress (Get-TPRawData -Key 'DNS-EmailRecords') $hidden 'the DNS raw data'
+            ShouldCarryNoAddress @(Get-TPExceptions)                     $hidden 'the Exceptions array'
+            ShouldCarryNoAddress (Get-TPCoverage)                        $hidden 'the coverage table'
+
+            # Every DNS evaluator runs over that raw data; no finding field holds one either.
+            $evaluators = @(Get-Command -Module 'TenantPosture' -Name 'Test-TPControlDNS*' -CommandType Function)
+            $evaluators.Count | Should -BeGreaterOrEqual 10
+            Clear-TPFindings
+            foreach ($fn in $evaluators) { & $fn 3>$null | Out-Null }
+            $findings = @(Get-TPFindings)
+            $mtaSts = @($findings | Where-Object ControlId -eq 'DNS-1.4')[0]
+            $tls    = @($findings | Where-Object ControlId -eq 'DNS-2.3')[0]
+            $mtaSts.State | Should -Be 'NotApplicable'
+            $tls.State    | Should -Be 'NotApplicable'
+            ShouldCarryNoAddress $findings $hidden 'the DNS findings'
+
+            # What the raw data and the two findings that print it say instead: the range.
+            $d.MTASTS.PolicyFetchError        | Should -Match "^refused 'mta-sts\.shape\.test' — resolves to an address that is not publicly routable: RFC 1918 10/8$"
+            $d.TLSCerts['Autodiscover'].Error | Should -Match '^Refused: resolves to an address that is not publicly routable: RFC 1918 192\.168/16$'
+            $d.TLSCerts['MailHost'].Error     | Should -Match '^Refused: resolves to an address that is not publicly routable: IPv6 unique local'
+            $mtaSts.Detail | Should -Match "could not be fetched \(refused 'mta-sts\.shape\.test' — resolves to an address that is not publicly routable: RFC 1918 10/8\), so the mode was not assessed"
+            $tls.Detail    | Should -Match 'Probe errors: .*Refused: resolves to an address that is not publicly routable'
+        }
+
+        It 'the address stays available to the operator on the verbose stream only' {
+            WorkstationAnswers @{ 'probe.shape.test' = @('10.11.12.13') }
+            $out = & $script:Mod { Test-TPSafeProbeTarget -HostName 'probe.shape.test' -Verbose 4>&1 }
+            $verbose = @($out | Where-Object { $_ -is [System.Management.Automation.VerboseRecord] })
+            @($verbose | Where-Object { $_.Message -match "'probe\.shape\.test' refused: resolved by workstation resolver to 10\.11\.12\.13 \(RFC 1918 10/8\)" }).Count | Should -Be 1
+            $returned = @($out | Where-Object { $_ -is [hashtable] })
+            $returned.Count | Should -Be 1
+            ShouldCarryNoAddress $returned[0] @('10.11.12.13') 'the guard''s refusal'
+        }
+    }
 }
