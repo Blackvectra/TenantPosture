@@ -32,6 +32,54 @@
 # Validated FQDN pattern — reused for all domain validation in this file
 $script:DomainPattern = '^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
 
+# The TLS client handshake of the certificate probe, under one deadline for the WHOLE
+# handshake. The peer is a host the assessed tenant's DNS names (autodiscover.<domain>,
+# the first MX host), and SslStream's synchronous AuthenticateAsClient has no timeout: a
+# server that accepted the connection and then sent nothing held the collector, and
+# every client after it in a batch, for as long as it liked. A socket read timeout alone
+# would not close that, because it starts again with every byte and a server sending
+# one byte at a time never reaches it. The handshake therefore runs asynchronously and
+# is waited for once, as the connect before it is; at the deadline the stream is
+# disposed, which closes the socket under the abandoned handshake.
+#
+# Returns the authenticated SslStream, which the caller disposes. Throws at the deadline
+# and on a handshake that fails, with the stream already disposed.
+#
+# Every certificate is accepted: the probe reads the certificate and trusts nothing it
+# carries. The callback is a compiled delegate, never a script block, because an
+# asynchronous handshake calls it on a thread-pool thread, where PowerShell has no
+# runspace to run a script block in and every handshake would fail.
+function Get-TPBoundedTlsStream {
+    [CmdletBinding()]
+    [OutputType([System.Net.Security.SslStream])]
+    param(
+        [Parameter(Mandatory)] [System.IO.Stream] $InnerStream,
+        [Parameter(Mandatory)] [string] $TargetHost,
+        [ValidateRange(1, 300)] [int] $TimeoutSeconds = 5
+    )
+    $acceptAny = [System.Linq.Expressions.Expression]::Lambda(
+        [System.Net.Security.RemoteCertificateValidationCallback],
+        [System.Linq.Expressions.Expression]::Constant($true),
+        [System.Linq.Expressions.ParameterExpression[]]@(
+            [System.Linq.Expressions.Expression]::Parameter([object]),
+            [System.Linq.Expressions.Expression]::Parameter([System.Security.Cryptography.X509Certificates.X509Certificate]),
+            [System.Linq.Expressions.Expression]::Parameter([System.Security.Cryptography.X509Certificates.X509Chain]),
+            [System.Linq.Expressions.Expression]::Parameter([System.Net.Security.SslPolicyErrors]))).Compile()
+    $ssl = [System.Net.Security.SslStream]::new($InnerStream, $false, $acceptAny)
+    $authenticated = $false
+    try {
+        $iar = $ssl.BeginAuthenticateAsClient($TargetHost, $null, $null)
+        if (-not $iar.AsyncWaitHandle.WaitOne($TimeoutSeconds * 1000, $false)) {
+            throw "TLS handshake timed out after $TimeoutSeconds s"
+        }
+        $ssl.EndAuthenticateAsClient($iar)
+        $authenticated = $true
+        return $ssl
+    } finally {
+        if (-not $authenticated) { $ssl.Dispose() }
+    }
+}
+
 # The workstation's resolver, in a function of its own so a test can stand in for the
 # operating system's answer (nothing can stand in for [System.Net.Dns] itself).
 function Resolve-TPWorkstationHostAddresses {
@@ -157,7 +205,17 @@ function Test-TPSafeProbeTarget {
     $unwrapped = [System.Collections.Generic.List[object]]::new()
     foreach ($addr in $addresses) {
         $verdict = Test-TPGloballyRoutableAddress -Address $addr
-        if (-not $verdict.Allowed) { return @{ Refused = $true; Reason = $verdict.Reason } }
+        if (-not $verdict.Allowed) {
+            # The refusal names neither the address nor its range. The caller stores this
+            # reason in the raw data (Errors, MTASTS.PolicyFetchError, TLSCerts.<role>.Error)
+            # and DNS-1.4 and DNS-2.3 print it in findings the assessed tenant reads, while
+            # the workstation's resolver can answer a tenant-chosen name with an address
+            # inside the operator's network (split-horizon DNS, a hosts entry): the address
+            # is the operator's, and the range says which of the operator's networks a
+            # guessed name sits in. Both go to the operator's verbose stream and nowhere else.
+            Write-Verbose "Probe target '$HostName' refused: resolved by $resolvedBy to $addr ($($verdict.Reason))"
+            return @{ Refused = $true; Reason = 'resolves to an address that is not publicly routable' }
+        }
         $unwrapped.Add($verdict.Address)
     }
 
@@ -271,7 +329,8 @@ function Invoke-TPCollectDNSEmailRecords {
                 continue
             }
 
-            # Per-domain time budget — a hung TLS probe (5s), 30s crt.sh fetch,
+            # Per-domain time budget — a hung TLS probe (5s to connect and 5s for
+            # the handshake, for each of two hosts), 30s crt.sh fetch,
             # plus multiple DNS lookups can compound into the minute range. With
             # many tenants this adds up, so we cap the total at $TimeoutSec and
             # skip the long-tail sub-steps (TLS probe, crt.sh) once exceeded.
@@ -860,8 +919,8 @@ function Invoke-TPCollectDNSEmailRecords {
 
                 # Resource-leak fix: wrap the entire TLS-inspection block in
                 # try/finally and dispose tcpClient + sslStream in the finally
-                # block. Previously, an exception in AuthenticateAsClient left
-                # the sockets dangling until GC.
+                # block. Previously, an exception during the handshake left the
+                # sockets dangling until GC.
                 $tcpClient = $null
                 $sslStream = $null
                 try {
@@ -873,15 +932,18 @@ function Invoke-TPCollectDNSEmailRecords {
                     $iar = $tcpClient.BeginConnect($ipAddr, 443, $null, $null)
                     if (-not $iar.AsyncWaitHandle.WaitOne(5000, $false)) {
                         $d.TLSCerts[$role] = @{ Hostname = $hostname; Address = $ipAddr.ToString(); Error = 'Connect timeout' }
+                        $d.Errors += "TLSCerts.${role}: probe of '$hostname' failed — Connect timeout"
                         continue
                     }
                     $tcpClient.EndConnect($iar)
                     # Don't validate the chain — we're inspecting, not consuming.
                     # SNI = original hostname (so the server returns the right cert),
                     # but the TCP destination is the validated IP.
-                    $sslStream = [System.Net.Security.SslStream]::new(
-                        $tcpClient.GetStream(), $false, { param($s,$c,$ch,$e) $true })
-                    $sslStream.AuthenticateAsClient($hostname)
+                    # 5-second deadline over the whole handshake, as the connect has:
+                    # a host that accepts the connection and then says nothing, or
+                    # sends a byte at a time, is recorded as an error here (the catch
+                    # below) instead of holding the run.
+                    $sslStream = Get-TPBoundedTlsStream -InnerStream $tcpClient.GetStream() -TargetHost $hostname -TimeoutSeconds 5
                     $cert  = $sslStream.RemoteCertificate
                     $x509  = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($cert)
                     $now   = [datetime]::UtcNow
@@ -901,7 +963,12 @@ function Invoke-TPCollectDNSEmailRecords {
                                           else { 'OK' }
                     }
                 } catch {
+                    # Recorded in the per-domain Errors as the refusals above are. Not
+                    # registered as a run exception: a mail host that does not answer on
+                    # 443 is ordinary, and one registered exception makes the whole run
+                    # exit as a partial collection.
                     $d.TLSCerts[$role] = @{ Hostname = $hostname; Address = $ipAddr.ToString(); Error = $_.Exception.Message }
+                    $d.Errors += "TLSCerts.${role}: probe of '$hostname' failed — $($_.Exception.Message)"
                 } finally {
                     if ($sslStream) { try { $sslStream.Dispose() } catch {} }
                     if ($tcpClient) { try { $tcpClient.Dispose() } catch {} }

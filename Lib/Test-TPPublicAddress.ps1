@@ -19,13 +19,16 @@ function Test-TPGloballyRoutableAddress {
         unwrapped form the caller must connect to (an IPv4-mapped or translated
         IPv6 address becomes its IPv4). Allowed only for a globally routable
         unicast address; every special-purpose range in the IANA registries is
-        refused by name.
+        refused by name. Reason names the range and never the address: callers
+        store it in raw data that findings and reports print for the assessed
+        tenant, and the address a tenant-chosen name resolved to on the
+        operator's workstation (split-horizon DNS, a hosts entry) is the
+        operator's, not the tenant's to read.
     #>
     [CmdletBinding()]
     [OutputType([hashtable])]
     param([Parameter(Mandatory)] [System.Net.IPAddress] $Address)
     $a = $Address
-    $ip = $a.ToString()
     if ($a.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
         $b = $a.GetAddressBytes()
         if ($a.IsIPv4MappedToIPv6) { $a = $a.MapToIPv4() }   # a representation of an IPv4 address: connect to the IPv4
@@ -38,23 +41,23 @@ function Test-TPGloballyRoutableAddress {
             $embedded = $null; $form = ''
             if ($b[0] -eq 0 -and $b[1] -eq 0x64 -and $b[2] -eq 0xff -and $b[3] -eq 0x9b -and (($b[4..11] | Measure-Object -Sum).Sum -eq 0)) { $embedded = [System.Net.IPAddress]::new($b[12..15]); $form = 'NAT64 (64:ff9b::/96)' }
             elseif ($b[0] -eq 0x20 -and $b[1] -eq 0x02) { $embedded = [System.Net.IPAddress]::new($b[2..5]); $form = '6to4 (2002::/16)' }
-            elseif ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0 -and $b[3] -eq 0) { return @{ Allowed = $false; Reason = "address $ip is Teredo (2001::/32)"; Address = $Address } }
+            elseif ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0 -and $b[3] -eq 0) { return @{ Allowed = $false; Reason = 'Teredo (2001::/32)'; Address = $Address } }
             if ($null -ne $embedded) {
                 $inner = Test-TPGloballyRoutableAddress -Address $embedded
-                if (-not $inner.Allowed) { return @{ Allowed = $false; Reason = "address $ip is $form carrying $($inner.Reason)"; Address = $Address } }
+                if (-not $inner.Allowed) { return @{ Allowed = $false; Reason = "$form carrying $($inner.Reason)"; Address = $Address } }
                 return @{ Allowed = $true; Reason = ''; Address = $Address }
             }
         }
     }
     if ($a.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
         $b = $a.GetAddressBytes()
-        if ([System.Net.IPAddress]::IsLoopback($a))         { return @{ Allowed = $false; Reason = "address $ip is IPv6 loopback"; Address = $a } }
-        if ($a.Equals([System.Net.IPAddress]::IPv6Any))     { return @{ Allowed = $false; Reason = "address $ip is unspecified (::)"; Address = $a } }
-        if ($a.IsIPv6LinkLocal)                             { return @{ Allowed = $false; Reason = "address $ip is IPv6 link-local (fe80::/10)"; Address = $a } }
-        if ($a.IsIPv6SiteLocal)                             { return @{ Allowed = $false; Reason = "address $ip is IPv6 site-local (fec0::/10)"; Address = $a } }
-        if ($a.IsIPv6Multicast -or $b[0] -eq 0xff)          { return @{ Allowed = $false; Reason = "address $ip is IPv6 multicast (ff00::/8)"; Address = $a } }
-        if (($b[0] -band 0xFE) -eq 0xFC)                    { return @{ Allowed = $false; Reason = "address $ip is IPv6 unique local (fc00::/7)"; Address = $a } }
-        if ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0x0d -and $b[3] -eq 0xb8) { return @{ Allowed = $false; Reason = "address $ip is documentation (2001:db8::/32)"; Address = $a } }
+        if ([System.Net.IPAddress]::IsLoopback($a))         { return @{ Allowed = $false; Reason = 'IPv6 loopback'; Address = $a } }
+        if ($a.Equals([System.Net.IPAddress]::IPv6Any))     { return @{ Allowed = $false; Reason = 'the IPv6 unspecified address'; Address = $a } }
+        if ($a.IsIPv6LinkLocal)                             { return @{ Allowed = $false; Reason = 'IPv6 link-local (fe80::/10)'; Address = $a } }
+        if ($a.IsIPv6SiteLocal)                             { return @{ Allowed = $false; Reason = 'IPv6 site-local (fec0::/10)'; Address = $a } }
+        if ($a.IsIPv6Multicast -or $b[0] -eq 0xff)          { return @{ Allowed = $false; Reason = 'IPv6 multicast (ff00::/8)'; Address = $a } }
+        if (($b[0] -band 0xFE) -eq 0xFC)                    { return @{ Allowed = $false; Reason = 'IPv6 unique local (fc00::/7)'; Address = $a } }
+        if ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and $b[2] -eq 0x0d -and $b[3] -eq 0xb8) { return @{ Allowed = $false; Reason = 'documentation (2001:db8::/32)'; Address = $a } }
         if ($b[0] -eq 0x20 -and $b[1] -eq 0x01 -and ($b[2] -band 0xFE) -eq 0) {
             # IANA marks the whole of 2001::/23 not globally reachable except named
             # carve-outs; the rest (Teredo, benchmarking, ORCHID, unallocated) is refused.
@@ -63,11 +66,11 @@ function Test-TPGloballyRoutableAddress {
                   ($w -eq 3) -or                                                                               # 2001:3::/32 AMT
                   ($w -eq 4 -and $b[4] -eq 1 -and $b[5] -eq 0x12) -or                                          # 2001:4:112::/48 AS112
                   (($w -band 0xFFF0) -eq 0x30)                                                                 # 2001:30::/28 Drone Remote ID
-            if (-not $ok) { return @{ Allowed = $false; Reason = "address $ip is inside 2001::/23 and not a globally reachable carve-out"; Address = $a } }
+            if (-not $ok) { return @{ Allowed = $false; Reason = 'inside 2001::/23 and not a globally reachable carve-out'; Address = $a } }
         }
-        if ($b[0] -eq 0x3f -and $b[1] -eq 0xff -and ($b[2] -band 0xF0) -eq 0) { return @{ Allowed = $false; Reason = "address $ip is documentation (3fff::/20)"; Address = $a } }
-        if ($b[0] -eq 0x5f -and $b[1] -eq 0)                   { return @{ Allowed = $false; Reason = "address $ip is SRv6 SIDs (5f00::/16)"; Address = $a } }
-        if (($b[0] -band 0xE0) -ne 0x20)                    { return @{ Allowed = $false; Reason = "address $ip is outside global unicast (2000::/3)"; Address = $a } }
+        if ($b[0] -eq 0x3f -and $b[1] -eq 0xff -and ($b[2] -band 0xF0) -eq 0) { return @{ Allowed = $false; Reason = 'documentation (3fff::/20)'; Address = $a } }
+        if ($b[0] -eq 0x5f -and $b[1] -eq 0)                   { return @{ Allowed = $false; Reason = 'SRv6 SIDs (5f00::/16)'; Address = $a } }
+        if (($b[0] -band 0xE0) -ne 0x20)                    { return @{ Allowed = $false; Reason = 'outside global unicast (2000::/3)'; Address = $a } }
         return @{ Allowed = $true; Reason = ''; Address = $a }
     }
     $b = $a.GetAddressBytes(); $b0 = $b[0]; $b1 = $b[1]; $b2 = $b[2]
@@ -80,13 +83,13 @@ function Test-TPGloballyRoutableAddress {
     elseif ($b0 -eq 172 -and $b1 -ge 16 -and $b1 -le 31)        { $why = 'RFC 1918 172.16/12' }
     elseif ($b0 -eq 192 -and $b1 -eq 0 -and $b2 -eq 0)          { $why = 'IETF protocol assignments 192.0.0/24' }
     elseif ($b0 -eq 192 -and $b1 -eq 0 -and $b2 -eq 2)          { $why = 'documentation 192.0.2/24' }
-    elseif ($b0 -eq 192 -and $b1 -eq 88 -and $b2 -eq 99)         { $why = '6to4 relay anycast 192.88.99/24 (deprecated; 192.88.99.2 is the 6a44 relay)' }
+    elseif ($b0 -eq 192 -and $b1 -eq 88 -and $b2 -eq 99)         { $why = '6to4 relay anycast 192.88.99/24 (deprecated; it holds the 6a44 relay)' }
     elseif ($b0 -eq 192 -and $b1 -eq 168)                       { $why = 'RFC 1918 192.168/16' }
     elseif ($b0 -eq 198 -and ($b1 -eq 18 -or $b1 -eq 19))       { $why = 'benchmarking 198.18/15' }
     elseif ($b0 -eq 198 -and $b1 -eq 51 -and $b2 -eq 100)       { $why = 'documentation 198.51.100/24' }
     elseif ($b0 -eq 203 -and $b1 -eq 0 -and $b2 -eq 113)        { $why = 'documentation 203.0.113/24' }
     elseif ($b0 -ge 224)                                        { $why = 'multicast or reserved (224/4, 240/4)' }
-    if ($why) { return @{ Allowed = $false; Reason = "address $ip is $why"; Address = $a } }
+    if ($why) { return @{ Allowed = $false; Reason = $why; Address = $a } }
     return @{ Allowed = $true; Reason = ''; Address = $a }
 }
 
