@@ -206,14 +206,15 @@ function Test-TPSafeProbeTarget {
     foreach ($addr in $addresses) {
         $verdict = Test-TPGloballyRoutableAddress -Address $addr
         if (-not $verdict.Allowed) {
-            # The refusal names the range, never the address. The caller stores this reason
-            # in the raw data (Errors, MTASTS.PolicyFetchError, TLSCerts.<role>.Error) and
-            # DNS-1.4 and DNS-2.3 print it in findings the assessed tenant reads, while the
-            # workstation's resolver can answer a tenant-chosen name with an address inside
-            # the operator's network (split-horizon DNS, a hosts entry). The address goes to
-            # the operator's verbose stream and nowhere else.
+            # The refusal names neither the address nor its range. The caller stores this
+            # reason in the raw data (Errors, MTASTS.PolicyFetchError, TLSCerts.<role>.Error)
+            # and DNS-1.4 and DNS-2.3 print it in findings the assessed tenant reads, while
+            # the workstation's resolver can answer a tenant-chosen name with an address
+            # inside the operator's network (split-horizon DNS, a hosts entry): the address
+            # is the operator's, and the range says which of the operator's networks a
+            # guessed name sits in. Both go to the operator's verbose stream and nowhere else.
             Write-Verbose "Probe target '$HostName' refused: resolved by $resolvedBy to $addr ($($verdict.Reason))"
-            return @{ Refused = $true; Reason = "resolves to an address that is not publicly routable: $($verdict.Reason)" }
+            return @{ Refused = $true; Reason = 'resolves to an address that is not publicly routable' }
         }
         $unwrapped.Add($verdict.Address)
     }
@@ -918,8 +919,8 @@ function Invoke-TPCollectDNSEmailRecords {
 
                 # Resource-leak fix: wrap the entire TLS-inspection block in
                 # try/finally and dispose tcpClient + sslStream in the finally
-                # block. Previously, an exception in AuthenticateAsClient left
-                # the sockets dangling until GC.
+                # block. Previously, an exception during the handshake left the
+                # sockets dangling until GC.
                 $tcpClient = $null
                 $sslStream = $null
                 try {
@@ -931,6 +932,7 @@ function Invoke-TPCollectDNSEmailRecords {
                     $iar = $tcpClient.BeginConnect($ipAddr, 443, $null, $null)
                     if (-not $iar.AsyncWaitHandle.WaitOne(5000, $false)) {
                         $d.TLSCerts[$role] = @{ Hostname = $hostname; Address = $ipAddr.ToString(); Error = 'Connect timeout' }
+                        $d.Errors += "TLSCerts.${role}: probe of '$hostname' failed — Connect timeout"
                         continue
                     }
                     $tcpClient.EndConnect($iar)
@@ -961,7 +963,12 @@ function Invoke-TPCollectDNSEmailRecords {
                                           else { 'OK' }
                     }
                 } catch {
+                    # Recorded in the per-domain Errors as the refusals above are. Not
+                    # registered as a run exception: a mail host that does not answer on
+                    # 443 is ordinary, and one registered exception makes the whole run
+                    # exit as a partial collection.
                     $d.TLSCerts[$role] = @{ Hostname = $hostname; Address = $ipAddr.ToString(); Error = $_.Exception.Message }
+                    $d.Errors += "TLSCerts.${role}: probe of '$hostname' failed — $($_.Exception.Message)"
                 } finally {
                     if ($sslStream) { try { $sslStream.Dispose() } catch {} }
                     if ($tcpClient) { try { $tcpClient.Dispose() } catch {} }

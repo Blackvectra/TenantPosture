@@ -250,7 +250,8 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
             $t = $script:StsTxt.Clone(); $t['mta-sts.shape.test|A'] = & $A @('10.1.2.3')
             $d = Collect $t
             $d.MTASTS.PolicyFetchError | Should -Match 'refused'
-            $d.MTASTS.PolicyFetchError | Should -Match 'RFC 1918'
+            $d.MTASTS.PolicyFetchError | Should -Match 'not publicly routable'
+            $d.MTASTS.PolicyFetchError | Should -Not -Match 'RFC 1918' -Because 'the range is the operator''s to know, not the assessed tenant''s'
             @(Fetched).Count           | Should -Be 0
             (Verdict 'Test-TPControlDNSMTASTS' 'DNS-1.4').State | Should -Be 'NotApplicable'
         }
@@ -355,7 +356,7 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
             (Test-TPGloballyRoutableAddress -Address ([ipaddress]'fd00::1')).Reason  | Should -Be (Test-TPGloballyRoutableAddress -Address ([ipaddress]'fdff:1:2:3::9')).Reason
         }
 
-        It 'the guard refuses a name the workstation resolver answers with a private address, naming the range only' {
+        It 'the guard refuses a name the workstation resolver answers with a private address, naming neither the address nor its range' {
             foreach ($case in @(
                     @{ Answer = @('10.11.12.13');                    Range = 'RFC 1918 10/8';                   Hidden = @('10.11.12.13') }
                     @{ Answer = @('127.0.0.1');                      Range = 'loopback 127/8';                  Hidden = @('127.0.0.1') }
@@ -371,8 +372,8 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
                 $r.Refused | Should -BeTrue -Because "$($case.Answer -join ', ') is not a target to connect to"
                 ShouldCarryNoAddress $r $case.Hidden 'the guard''s refusal'
                 (@($r.Keys) | Sort-Object) -join ',' | Should -Be 'Reason,Refused' -Because 'a refusal returns no address field'
-                $r.Reason  | Should -Match 'resolves to an address that is not publicly routable'
-                $r.Reason  | Should -Match $case.Range
+                $r.Reason  | Should -BeExactly 'resolves to an address that is not publicly routable'
+                $r.Reason  | Should -Not -Match $case.Range -Because 'the range says which of the operator''s networks a guessed name sits in'
             }
         }
 
@@ -382,10 +383,10 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
             $r = Probe 'probe.shape.test'
             $r.Refused | Should -BeTrue
             ShouldCarryNoAddress $r @('10.9.8.7', 'fd00:aa:bb::7') 'the guard''s refusal'
-            $r.Reason  | Should -Match 'not publicly routable: RFC 1918 10/8'
+            $r.Reason  | Should -BeExactly 'resolves to an address that is not publicly routable'
         }
 
-        It 'the collector''s raw data and every DNS finding carry the range and none of the addresses' {
+        It 'the collector''s raw data and every DNS finding carry neither an address nor a range' {
             # mta-sts, autodiscover and the MX host each resolve to a different private form.
             $hidden = @('10.11.12.13', '::ffff:192.168.44.55', '192.168.44.55', 'fd12:3456:789a::beef')
             WorkstationAnswers @{
@@ -414,12 +415,16 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
             $tls.State    | Should -Be 'NotApplicable'
             ShouldCarryNoAddress $findings $hidden 'the DNS findings'
 
-            # What the raw data and the two findings that print it say instead: the range.
-            $d.MTASTS.PolicyFetchError        | Should -Match "^refused 'mta-sts\.shape\.test' — resolves to an address that is not publicly routable: RFC 1918 10/8$"
-            $d.TLSCerts['Autodiscover'].Error | Should -Match '^Refused: resolves to an address that is not publicly routable: RFC 1918 192\.168/16$'
-            $d.TLSCerts['MailHost'].Error     | Should -Match '^Refused: resolves to an address that is not publicly routable: IPv6 unique local'
-            $mtaSts.Detail | Should -Match "could not be fetched \(refused 'mta-sts\.shape\.test' — resolves to an address that is not publicly routable: RFC 1918 10/8\), so the mode was not assessed"
+            # What the raw data and the two findings that print it say instead: one fixed
+            # sentence, the same for every range, so it does not say which network it was.
+            $d.MTASTS.PolicyFetchError        | Should -BeExactly "refused 'mta-sts.shape.test' — resolves to an address that is not publicly routable"
+            $d.TLSCerts['Autodiscover'].Error | Should -BeExactly 'Refused: resolves to an address that is not publicly routable'
+            $d.TLSCerts['MailHost'].Error     | Should -BeExactly 'Refused: resolves to an address that is not publicly routable'
+            $mtaSts.Detail | Should -Match "could not be fetched \(refused 'mta-sts\.shape\.test' — resolves to an address that is not publicly routable\), so the mode was not assessed"
             $tls.Detail    | Should -Match 'Probe errors: .*Refused: resolves to an address that is not publicly routable'
+            $rangeNames = 'RFC 1918|unique local|link-local|loopback|NAT64|6to4'
+            (ConvertTo-Json (Get-TPRawData -Key 'DNS-EmailRecords') -Depth 12) | Should -Not -Match $rangeNames
+            (ConvertTo-Json $findings -Depth 8)                              | Should -Not -Match $rangeNames
         }
 
         It 'the address stays available to the operator on the verbose stream only' {
@@ -430,6 +435,34 @@ Describe 'DNS-2.x evaluators read what the DNS collector actually writes' {
             $returned = @($out | Where-Object { $_ -is [hashtable] })
             $returned.Count | Should -Be 1
             ShouldCarryNoAddress $returned[0] @('10.11.12.13') 'the guard''s refusal'
+        }
+
+        It 'a certificate probe that fails is listed in the domain''s Errors and is not a run exception' {
+            # The guard is stood in for so the probe loop runs against this machine's own
+            # port 443, where nothing is expected to answer: the connect fails at once.
+            & $script:Mod {
+                Set-Item -Path 'function:script:Test-TPSafeProbeTarget' -Value { param([string] $HostName)
+                    if ($HostName -eq 'autodiscover.shape.test') {
+                        return @{ Refused = $false; Address = [System.Net.IPAddress]::Loopback; HostName = $HostName; ResolvedBy = 'workstation resolver' }
+                    }
+                    @{ Refused = $true; Reason = 'no network in tests' }
+                }
+            }
+            try {
+                $before = @(Get-TPExceptions).Count
+                $d = Collect @{}
+                $probe = $d.TLSCerts['Autodiscover']
+                if (-not $probe.ContainsKey('Error')) {
+                    Set-ItResult -Skipped -Because 'something answered TLS on this machine''s port 443, so the probe did not fail'
+                    return
+                }
+                $line = @($d.Errors | Where-Object { $_ -like "TLSCerts.Autodiscover: probe of 'autodiscover.shape.test' failed — *" })
+                $line.Count | Should -Be 1 -Because 'a failed probe is recorded where the refused targets are'
+                $line[0]    | Should -BeLike "*$($probe.Error)"
+                @(Get-TPExceptions | Where-Object { "$($_.Message)" -match 'TLSCerts|autodiscover\.shape\.test' }).Count | Should -Be 0 -Because 'a host that does not answer on 443 must not make the run a partial collection'
+            } finally {
+                & $script:Mod { param($o) Set-Item -Path 'function:script:Test-TPSafeProbeTarget' -Value $o.Probe } $script:Orig
+            }
         }
     }
 }
